@@ -1,0 +1,51 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.4.15/schema.json",
+  "vcs": {
+    "enabled": false,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "ignoreUnknown": false,
+    "includes": [
+      "package.json",
+      "tsconfig.json",
+      "tsconfig.base.json",
+      "biome.json",
+      "apps/server/**/*.ts",
+      "apps/server/**/*.json",
+      "apps/web/*.ts",
+      "apps/web/*.json",
+      "apps/web/*.html",
+      "apps/web/src/**/*.ts",
+      "apps/web/src/**/*.tsx",
+      "apps/web/src/**/*.css",
+      "packages/*/*.json",
+      "packages/*/src/**/*.ts"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "all"
+    }
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  }
+}

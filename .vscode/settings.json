@@ -1,0 +1,128 @@
+{
+  // ---------- General ----------
+  "workbench.settings.showAISearchToggle": true,
+  "workbench.commandPalette.experimental.askChatLocation": "chatView",
+  "search.searchView.semanticSearchBehavior": "manual",
+  "search.searchView.keywordSuggestions": false,
+
+  // ---------- Code editing (Copilot completions / NES) ----------
+  "github.copilot.editor.enableCodeActions": true,
+  "github.copilot.renameSuggestions.triggerAutomatically": true,
+  "github.copilot.enable": {
+    "*": true,
+    "plaintext": false,
+    "markdown": false,
+    "scminput": false
+  },
+  "github.copilot.nextEditSuggestions.enabled": true,
+  "editor.inlineSuggest.edits.allowCodeShifting": "always",
+  "editor.inlineSuggest.edits.renderSideBySide": "auto",
+  "github.copilot.nextEditSuggestions.fixes": true,
+  "editor.inlineSuggest.minShowDelay": 0,
+
+  // ---------- Chat ----------
+  "github.copilot.chat.localeOverride": "auto",
+  "github.copilot.chat.useProjectTemplates": true,
+  "github.copilot.chat.scopeSelection": false,
+  "github.copilot.chat.terminalChatLocation": "chatView",
+  "chat.detectParticipant.enabled": true,
+  "chat.checkpoints.enabled": true,
+  "chat.checkpoints.showFileChanges": false,
+  "chat.editRequests": "inline",
+  "chat.editor.fontFamily": "default",
+  "chat.editor.fontSize": 14,
+  "chat.editor.fontWeight": "default",
+  "chat.editor.lineHeight": 0,
+  "chat.editor.wordWrap": "off",
+  "chat.editing.autoAcceptDelay": 0,
+  "chat.fontFamily": "default",
+  "chat.fontSize": 13,
+  "chat.notifyWindowOnConfirmation": "always",
+  "chat.notifyWindowOnResponseReceived": "always",
+  "chat.tools.terminal.terminalProfile.windows": null,
+  "chat.tools.terminal.terminalProfile.linux": null,
+  "chat.tools.terminal.terminalProfile.osx": null,
+  "chat.useAgentsMdFile": true,
+  "chat.math.enabled": false,
+  "github.copilot.chat.codesearch.enabled": false,
+  "chat.useNestedAgentsMdFiles": false,
+
+  // ---------- Agent mode (incl. MCP) ----------
+  "chat.agent.enabled": true,  
+  "github.copilot.chat.agent.autoFix": true,
+  "chat.mcp.access": "all",
+  "chat.mcp.discovery.enabled": {},
+  "chat.mcp.gallery.enabled": false,
+  "chat.tools.terminal.autoApprove": {
+    "rm": false,
+    "rmdir": false,
+    "del": false,
+    "kill": false,
+    "curl": false,
+    "wget": false,
+    "eval": false,
+    "chmod": false,
+    "chown": false,
+    "/^Remove-Item\\b/i": false
+  },
+  "chat.agent.thinkingStyle": "fixedScrolling",
+  "github.copilot.chat.newWorkspaceCreation.enabled": true,
+  "github.copilot.chat.virtualTools.threshold": 128,
+
+  // ---------- Agent sessions ----------
+
+  // ---------- Inline chat ----------
+  "editor.inlineSuggest.syntaxHighlightingEnabled": true,
+
+  // ---------- Code review ----------
+  "github.copilot.chat.reviewSelection.enabled": true,
+  "github.copilot.chat.reviewSelection.instructions": [],
+
+  // ---------- Custom instructions / prompt files / chat modes ----------
+  "github.copilot.chat.codeGeneration.useInstructionFiles": true,
+  "chat.instructionsFilesLocations": { ".github/instructions": true },
+  "github.copilot.chat.commitMessageGeneration.instructions": [],
+  "github.copilot.chat.pullRequestDescriptionGeneration.instructions": [],
+  "chat.promptFilesLocations": { ".github/prompts": true },
+
+  // ---------- Debugging ----------
+  "github.copilot.chat.copilotDebugCommand.enabled": true,
+
+  // ---------- Testing ----------
+  "github.copilot.chat.setupTests.enabled": true,
+
+  // ---------- Notebooks ----------
+  "notebook.experimental.generate": true,
+  "github.copilot.chat.notebook.followCellExecution.enabled": false,
+
+  // ---------- Accessibility (chat-related) ----------
+  "accessibility.signals.chatRequestSent": {
+    "sound": "auto",
+    "announcement": "auto"
+  },
+  "accessibility.signals.chatResponseReceived": { "sound": "auto" },
+  "accessibility.signals.chatEditModifiedFile": { "sound": "auto" },
+  "accessibility.signals.chatUserActionRequired": {
+    "sound": "auto",
+    "announcement": "auto"
+  },
+  // ---------- Pre-existing workspace settings ----------
+  "chat.agentFilesLocations": {
+    ".github/agents": true
+  },
+  "chat.agentSkillsLocations": {
+    ".github/skills": true
+  },
+  "chat.hookFilesLocations": {
+    ".github/hooks": true
+  },
+  "chat.useCustomizationsInParentRepositories": true,
+  "github.copilot.chat.skillTool.enabled": false,  
+  "chat.experimental.useSkillAdherencePrompt": true,
+  "github.copilot.chat.installExtensionSkill.enabled": true,
+  "chat.subagents.allowInvocationsFromSubagents": true,
+  "github.copilot.chat.exploreAgent.enabled": false,
+  "github.copilot.chat.claudeAgent.enabled": false,
+  "github.copilot.chat.cloudAgent.enabled": false,
+  "github.copilot.chat.reviewAgent.enabled": false
+}

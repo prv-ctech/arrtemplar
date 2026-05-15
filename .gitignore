@@ -1,0 +1,19 @@
+node_modules/
+dist/
+.turbo/
+.vite/
+coverage/
+*.tsbuildinfo
+*.log
+.DS_Store
+.contextstream/
+.vscode/mcp.json
+
+# Local environment and database files
+.env
+.env.local
+.env.*.local
+data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal

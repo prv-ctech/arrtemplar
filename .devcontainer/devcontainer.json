@@ -1,0 +1,66 @@
+{
+  "name": "Arrweeb Anime",
+  "image": "oven/bun:1-debian",
+  "init": true,
+  "remoteUser": "bun",
+  "updateRemoteUserUID": true,
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "username": "bun",
+      "installZsh": true,
+      "installOhMyZsh": false,
+      "upgradePackages": false
+    },
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.13"
+    },
+    "ghcr.io/devcontainers-extra/features/uv:1": {},
+    "ghcr.io/devcontainers-extra/features/ruff:2": {}
+  },
+
+  "remoteEnv": {
+    "PATH": "${containerEnv:PATH}:/home/bun/.local/bin"
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "oven.bun-vscode",
+        "biomejs.biome",
+        "bradlc.vscode-tailwindcss",
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff"
+      ],
+      "settings": {
+        "python.analysis.typeCheckingMode": "basic",
+        "python.testing.pytestEnabled": true,
+        "python.testing.unittestEnabled": false,
+        "ruff.nativeServer": "on"
+      }
+    }
+  },
+
+  "forwardPorts": [3000, 5173],
+  "portsAttributes": {
+    "3000": {
+      "label": "Bun API",
+      "onAutoForward": "notify"
+    },
+    "5173": {
+      "label": "Vite web app",
+      "onAutoForward": "openBrowser",
+      "protocol": "http"
+    }
+  },
+  "otherPortsAttributes": {
+    "onAutoForward": "notify"
+  },
+
+  "postCreateCommand": "bun --version && python3 --version && uv --version && ruff --version && if [ -f bun.lock ] || [ -f bun.lockb ]; then bun install --frozen-lockfile; elif [ -f package.json ]; then bun install; fi",
+  "waitFor": "postCreateCommand"
+}
