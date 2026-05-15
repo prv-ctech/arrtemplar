@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { hashPassword } from "../auth/password";
 import { env } from "../config/env";
 import { createDatabase, type DatabaseClient } from "./client";
 import { auditLogs, users } from "./schema";
@@ -73,7 +74,7 @@ export async function seedAdminUserWithDatabase(
 
   const userId = crypto.randomUUID();
   const now = new Date().toISOString();
-  const passwordHash = await Bun.password.hash(input.password, { algorithm: "argon2id" });
+  const passwordHash = await hashPassword(input.password);
 
   database.db
     .insert(users)

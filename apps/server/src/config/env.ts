@@ -15,8 +15,25 @@ function readPort(value: string | undefined): number {
   return port;
 }
 
+function readBoolean(value: string | undefined, defaultValue: boolean): boolean {
+  if (!value) {
+    return defaultValue;
+  }
+
+  if (value === "true") {
+    return true;
+  }
+
+  if (value === "false") {
+    return false;
+  }
+
+  throw new Error(`Expected boolean environment value to be true or false, received: ${value}`);
+}
+
 export const env = {
   serverPort: readPort(Bun.env.SERVER_PORT),
   webOrigin: Bun.env.WEB_ORIGIN ?? DEFAULT_WEB_ORIGIN,
   databaseUrl: Bun.env.DATABASE_URL ?? "data/arrweeb-anime.sqlite",
+  sessionCookieSecure: readBoolean(Bun.env.SESSION_COOKIE_SECURE, true),
 } as const;

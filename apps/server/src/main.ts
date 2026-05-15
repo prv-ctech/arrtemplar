@@ -1,6 +1,8 @@
 import { APP_NAME } from "@arrweeb-anime/shared";
-import { app } from "./app";
+import { createApp } from "./app";
 import { env } from "./config/env";
+
+const app = createApp();
 
 app.listen(env.serverPort);
 
