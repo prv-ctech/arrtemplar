@@ -43,6 +43,7 @@ Development runs two hot-reloading servers together:
 - Backend: Bun runs Elysia with `bun --hot` on `http://localhost:3000`.
 - Frontend: Vite is launched through Bun with `bunx --bun vite` on `http://localhost:5173`.
 - Frontend API calls use the browser's current origin by default, and Vite proxies `/health` and `/api` to the backend.
+- TypeScript runs in watch mode alongside both servers, so backend/frontend contract changes are reported even though Vite intentionally only transpiles during development.
 
 Useful checks:
 

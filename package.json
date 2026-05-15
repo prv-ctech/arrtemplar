@@ -9,9 +9,10 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "bun run dev:server & bun run dev:web",
+    "dev": "bun run --parallel dev:server dev:web dev:typecheck",
     "dev:server": "bun run --cwd apps/server dev",
     "dev:web": "bun run --cwd apps/web dev",
+    "dev:typecheck": "tsc -b --noEmit --watch --preserveWatchOutput",
     "build": "bun run --cwd packages/shared build && bun run --cwd packages/anime-parser build && bun run --cwd apps/server build && bun run --cwd apps/web build",
     "typecheck": "bun run --cwd packages/shared typecheck && bun run --cwd packages/anime-parser typecheck && bun run --cwd apps/server typecheck && bun run --cwd apps/web typecheck",
     "test": "bun test",
