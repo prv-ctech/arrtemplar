@@ -8,15 +8,20 @@
     "start": "bun src/main.ts",
     "build": "bun build src/main.ts --target=bun --outdir=dist",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "bun test src"
+    "test": "bun test src",
+    "db:generate": "drizzle-kit generate --config drizzle.config.ts",
+    "db:migrate": "bun src/db/migrate.ts",
+    "db:seed": "bun src/db/seed.ts"
   },
   "dependencies": {
     "@animehub/shared": "workspace:*",
     "@elysia/cors": "latest",
     "@elysia/openapi": "latest",
+    "drizzle-orm": "^0.45.2",
     "elysia": "latest"
   },
   "devDependencies": {
+    "drizzle-kit": "^0.31.10",
     "typescript": "latest"
   },
   "exports": {

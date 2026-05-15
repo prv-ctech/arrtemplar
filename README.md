@@ -2,11 +2,15 @@
 
 AnimeHub is a self-hosted anime-native media request, automation, and watching app.
 
-This repository currently implements **Phase 0** from `docs/plan/arrweeb-anime.md`:
+This repository currently implements **Phase 1** from `docs/plan/arrweeb-anime.md`:
 
 - Bun monorepo workspace
 - Elysia backend with `GET /health`
 - OpenAPI docs at `/openapi`
+- Drizzle ORM schema for the Phase 1 SQLite tables
+- Drizzle Kit generated SQL migrations
+- Bun-native `bun:sqlite` migration runner
+- Idempotent first-admin seed script using Argon2id password hashing
 - React + Vite + TypeScript frontend
 - Tailwind CSS v4 and shadcn/ui-compatible structure
 - TanStack Query and TanStack Router frontend foundation
@@ -14,7 +18,7 @@ This repository currently implements **Phase 0** from `docs/plan/arrweeb-anime.m
 - Shared TypeScript contracts
 - Anime parser package skeleton
 
-Later phases will add Drizzle + Bun SQLite migrations, auth, sessions, metadata imports, request workflows, search providers, download clients, jobs, and playback.
+Later phases will add auth routes, sessions, metadata imports, request workflows, search providers, download clients, jobs, and playback.
 
 ## Development
 
@@ -39,6 +43,16 @@ bun run build
 bun run check
 ```
 
+Database commands:
+
+```sh
+bun run db:generate
+bun run db:migrate
+bun run db:seed
+```
+
+`db:generate` uses Drizzle Kit to generate SQL migrations. `db:migrate` applies those generated migrations with Drizzle's Bun SQLite migrator so the app keeps using native `bun:sqlite`.
+
 ## Services
 
 - Backend: `http://localhost:3000`
@@ -48,4 +62,8 @@ bun run check
 
 ## Environment
 
-Copy `.env.example` to `.env` for local development. Phase 0 only needs non-secret local port/origin values.
+Copy `.env.example` to `.env` for local development.
+
+- `DATABASE_URL` defaults to `data/animehub.sqlite`.
+- `ADMIN_USERNAME`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD` are required for `bun run db:seed`.
+- Replace the placeholder admin password before running the seed command; the seed script rejects placeholder or short passwords.
