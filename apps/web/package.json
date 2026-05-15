@@ -14,13 +14,15 @@
     "@arrweeb-anime/server": "workspace:*",
     "@arrweeb-anime/shared": "workspace:*",
     "@elysia/eden": "latest",
+    "@phosphor-icons/react": "^2.1.10",
     "@tanstack/react-query": "latest",
     "@tanstack/react-router": "latest",
     "class-variance-authority": "latest",
     "clsx": "latest",
-    "lucide-react": "latest",
+    "radix-ui": "^1.4.3",
     "react": "latest",
     "react-dom": "latest",
+    "sonner": "^2.0.7",
     "tailwind-merge": "latest"
   },
   "devDependencies": {

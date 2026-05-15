@@ -1,5 +1,5 @@
+import { ActivityIcon, CheckCircleIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
-import { Activity, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getHealth } from "@/lib/api";
@@ -16,7 +16,7 @@ export function HealthPanel() {
       <CardHeader>
         <div className="flex items-center gap-3">
           <div className="rounded-lg border border-primary/30 bg-primary/10 p-2 text-primary">
-            <Activity aria-hidden="true" className="h-5 w-5" />
+            <ActivityIcon aria-hidden="true" className="h-5 w-5" weight="duotone" />
           </div>
           <div>
             <CardTitle>Backend health</CardTitle>
@@ -47,7 +47,11 @@ function HealthError({ message, onRetry }: { message: string; onRetry: () => voi
   return (
     <div className="space-y-4 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
       <div className="flex items-start gap-3">
-        <AlertTriangle aria-hidden="true" className="mt-0.5 h-5 w-5 text-destructive" />
+        <WarningCircleIcon
+          aria-hidden="true"
+          className="mt-0.5 h-5 w-5 text-destructive"
+          weight="duotone"
+        />
         <div>
           <p className="font-medium">API is not reachable yet.</p>
           <p className="mt-1 text-sm text-muted-foreground">{message}</p>
@@ -68,7 +72,7 @@ function HealthReady({
   return (
     <div className="grid gap-4 rounded-lg border border-primary/30 bg-primary/10 p-4 sm:grid-cols-2">
       <div className="flex items-center gap-3 sm:col-span-2">
-        <CheckCircle2 aria-hidden="true" className="h-5 w-5 text-primary" />
+        <CheckCircleIcon aria-hidden="true" className="h-5 w-5 text-primary" weight="duotone" />
         <p className="font-medium">
           {health.name} API is {health.status}
         </p>
