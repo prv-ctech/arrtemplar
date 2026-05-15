@@ -1,5 +1,5 @@
 {
-  "name": "@animehub/anime-parser",
+  "name": "@arrweeb-anime/anime-parser",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,7 +9,7 @@
     "test": "bun test src"
   },
   "dependencies": {
-    "@animehub/shared": "workspace:*"
+    "@arrweeb-anime/shared": "workspace:*"
   },
   "exports": {
     ".": {

@@ -72,8 +72,8 @@ describe("seedAdminUser", () => {
 });
 
 function createTempDatabaseUrl(): string {
-  const directory = mkdtempSync(join(tmpdir(), "animehub-seed-"));
+  const directory = mkdtempSync(join(tmpdir(), "arrweeb-anime-seed-"));
   tempDirectories.push(directory);
 
-  return join(directory, "animehub.sqlite");
+  return join(directory, "arrweeb-anime.sqlite");
 }

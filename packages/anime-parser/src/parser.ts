@@ -1,4 +1,4 @@
-import type { ParsedAnimeRelease } from "@animehub/shared";
+import type { ParsedAnimeRelease } from "@arrweeb-anime/shared";
 import { normalizeAnimeTitle } from "./normalizer";
 
 const RELEASE_GROUP_PATTERN = /^\[([^\]]+)]\s*/;

@@ -1,5 +1,5 @@
 {
-  "name": "@animehub/web",
+  "name": "@arrweeb-anime/web",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,8 +11,8 @@
     "test": "bun test src"
   },
   "dependencies": {
-    "@animehub/server": "workspace:*",
-    "@animehub/shared": "workspace:*",
+    "@arrweeb-anime/server": "workspace:*",
+    "@arrweeb-anime/shared": "workspace:*",
     "@elysia/eden": "latest",
     "@tanstack/react-query": "latest",
     "@tanstack/react-router": "latest",

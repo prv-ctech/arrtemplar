@@ -14,7 +14,7 @@ export type DatabaseClient = {
 export function createDatabase(databaseUrl = env.databaseUrl): DatabaseClient {
   ensureDatabaseDirectory(databaseUrl);
 
-  const sqlite = new Database(databaseUrl, { create: true });
+  const sqlite = new Database(databaseUrl, { create: true, strict: true });
   sqlite.run("PRAGMA foreign_keys = ON");
 
   if (databaseUrl !== ":memory:") {
@@ -22,7 +22,7 @@ export function createDatabase(databaseUrl = env.databaseUrl): DatabaseClient {
   }
 
   return {
-    db: drizzle({ client: sqlite, schema }),
+    db: drizzle(sqlite, { schema }),
     sqlite,
     close: () => sqlite.close(),
   };

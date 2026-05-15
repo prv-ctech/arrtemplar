@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "animehub",
+      "name": "arrweeb-anime",
       "devDependencies": {
         "@biomejs/biome": "latest",
         "bun-types": "^1.3.14",
@@ -11,10 +11,10 @@
       },
     },
     "apps/server": {
-      "name": "@animehub/server",
+      "name": "@arrweeb-anime/server",
       "version": "0.1.0",
       "dependencies": {
-        "@animehub/shared": "workspace:*",
+        "@arrweeb-anime/shared": "workspace:*",
         "@elysia/cors": "latest",
         "@elysia/openapi": "latest",
         "drizzle-orm": "^0.45.2",
@@ -26,11 +26,11 @@
       },
     },
     "apps/web": {
-      "name": "@animehub/web",
+      "name": "@arrweeb-anime/web",
       "version": "0.1.0",
       "dependencies": {
-        "@animehub/server": "workspace:*",
-        "@animehub/shared": "workspace:*",
+        "@arrweeb-anime/server": "workspace:*",
+        "@arrweeb-anime/shared": "workspace:*",
         "@elysia/eden": "latest",
         "@tanstack/react-query": "latest",
         "@tanstack/react-router": "latest",
@@ -52,25 +52,25 @@
       },
     },
     "packages/anime-parser": {
-      "name": "@animehub/anime-parser",
+      "name": "@arrweeb-anime/anime-parser",
       "version": "0.1.0",
       "dependencies": {
-        "@animehub/shared": "workspace:*",
+        "@arrweeb-anime/shared": "workspace:*",
       },
     },
     "packages/shared": {
-      "name": "@animehub/shared",
+      "name": "@arrweeb-anime/shared",
       "version": "0.1.0",
     },
   },
   "packages": {
-    "@animehub/anime-parser": ["@animehub/anime-parser@workspace:packages/anime-parser"],
+    "@arrweeb-anime/anime-parser": ["@arrweeb-anime/anime-parser@workspace:packages/anime-parser"],
 
-    "@animehub/server": ["@animehub/server@workspace:apps/server"],
+    "@arrweeb-anime/server": ["@arrweeb-anime/server@workspace:apps/server"],
 
-    "@animehub/shared": ["@animehub/shared@workspace:packages/shared"],
+    "@arrweeb-anime/shared": ["@arrweeb-anime/shared@workspace:packages/shared"],
 
-    "@animehub/web": ["@animehub/web@workspace:apps/web"],
+    "@arrweeb-anime/web": ["@arrweeb-anime/web@workspace:apps/web"],
 
     "@biomejs/biome": ["@biomejs/biome@2.4.15", "", { "optionalDependencies": { "@biomejs/cli-darwin-arm64": "2.4.15", "@biomejs/cli-darwin-x64": "2.4.15", "@biomejs/cli-linux-arm64": "2.4.15", "@biomejs/cli-linux-arm64-musl": "2.4.15", "@biomejs/cli-linux-x64": "2.4.15", "@biomejs/cli-linux-x64-musl": "2.4.15", "@biomejs/cli-win32-arm64": "2.4.15", "@biomejs/cli-win32-x64": "2.4.15" }, "bin": { "biome": "bin/biome" } }, "sha512-j5VH3a/h/HXTKBM50MDMxRCzkeLv9S2XJcW2WgnZT1+xyisi+0bISrXR82gCX+8S9lvK0skEvHJRN+3Ktr2hlw=="],
 

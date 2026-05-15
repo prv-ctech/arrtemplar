@@ -46,8 +46,8 @@ describe("migrateDatabase", () => {
 });
 
 function createTempDatabaseUrl(): string {
-  const directory = mkdtempSync(join(tmpdir(), "animehub-db-"));
+  const directory = mkdtempSync(join(tmpdir(), "arrweeb-anime-db-"));
   tempDirectories.push(directory);
 
-  return join(directory, "animehub.sqlite");
+  return join(directory, "arrweeb-anime.sqlite");
 }

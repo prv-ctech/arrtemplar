@@ -1,5 +1,5 @@
-import type { App } from "@animehub/server";
-import type { HealthResponse } from "@animehub/shared";
+import type { App } from "@arrweeb-anime/server";
+import type { HealthResponse } from "@arrweeb-anime/shared";
 import { treaty } from "@elysia/eden";
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";

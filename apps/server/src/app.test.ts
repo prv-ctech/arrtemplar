@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { APP_NAME, APP_VERSION } from "@animehub/shared";
+import { APP_NAME, APP_VERSION } from "@arrweeb-anime/shared";
 import { app } from "./app";
 
 describe("GET /health", () => {

@@ -1,6 +1,6 @@
-# AnimeHub
+# Arrweeb-anime
 
-AnimeHub is a self-hosted anime-native media request, automation, and watching app.
+Arrweeb-anime is a self-hosted anime-native media request, automation, and watching app.
 
 This repository currently implements **Phase 1** from `docs/plan/arrweeb-anime.md`:
 
@@ -51,7 +51,7 @@ bun run db:migrate
 bun run db:seed
 ```
 
-`db:generate` uses Drizzle Kit to generate SQL migrations. `db:migrate` applies those generated migrations with Drizzle's Bun SQLite migrator so the app keeps using native `bun:sqlite`.
+`db:generate` uses Drizzle Kit to generate SQL migrations. `db:migrate` follows Bun's Drizzle guide by applying those generated migrations from a Bun script with Drizzle's Bun SQLite migrator, so the app keeps using native `bun:sqlite`.
 
 ## Services
 
@@ -64,6 +64,6 @@ bun run db:seed
 
 Copy `.env.example` to `.env` for local development.
 
-- `DATABASE_URL` defaults to `data/animehub.sqlite`.
+- `DATABASE_URL` defaults to `data/arrweeb-anime.sqlite`.
 - `ADMIN_USERNAME`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD` are required for `bun run db:seed`.
 - Replace the placeholder admin password before running the seed command; the seed script rejects placeholder or short passwords.

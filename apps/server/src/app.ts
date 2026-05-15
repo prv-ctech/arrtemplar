@@ -1,4 +1,4 @@
-import { APP_NAME, APP_VERSION, type HealthResponse } from "@animehub/shared";
+import { APP_NAME, APP_VERSION, type HealthResponse } from "@arrweeb-anime/shared";
 import { cors } from "@elysia/cors";
 import { openapi } from "@elysia/openapi";
 import { Elysia, t } from "elysia";

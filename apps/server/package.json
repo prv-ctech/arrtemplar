@@ -1,5 +1,5 @@
 {
-  "name": "@animehub/server",
+  "name": "@arrweeb-anime/server",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -14,7 +14,7 @@
     "db:seed": "bun src/db/seed.ts"
   },
   "dependencies": {
-    "@animehub/shared": "workspace:*",
+    "@arrweeb-anime/shared": "workspace:*",
     "@elysia/cors": "latest",
     "@elysia/openapi": "latest",
     "drizzle-orm": "^0.45.2",

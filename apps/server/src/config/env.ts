@@ -18,5 +18,5 @@ function readPort(value: string | undefined): number {
 export const env = {
   serverPort: readPort(Bun.env.SERVER_PORT),
   webOrigin: Bun.env.WEB_ORIGIN ?? DEFAULT_WEB_ORIGIN,
-  databaseUrl: Bun.env.DATABASE_URL ?? "data/animehub.sqlite",
+  databaseUrl: Bun.env.DATABASE_URL ?? "data/arrweeb-anime.sqlite",
 } as const;

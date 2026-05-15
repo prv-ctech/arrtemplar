@@ -6,7 +6,9 @@ function RootLayout() {
     <main className="min-h-screen px-6 py-8 sm:px-10 lg:px-16">
       <div className="mx-auto flex max-w-5xl flex-col gap-8">
         <header className="space-y-4">
-          <p className="text-sm font-medium uppercase tracking-[0.28em] text-primary">AnimeHub</p>
+          <p className="text-sm font-medium uppercase tracking-[0.28em] text-primary">
+            Arrweeb-anime
+          </p>
           <div className="max-w-3xl space-y-3">
             <h1 className="text-4xl font-semibold tracking-tight text-foreground sm:text-6xl">
               Anime-native media requests, automation, and watching.
