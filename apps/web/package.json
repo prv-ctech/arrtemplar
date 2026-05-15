@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0",
-    "build": "tsc -p tsconfig.json --noEmit && vite build",
-    "preview": "vite preview --host 0.0.0.0",
+    "dev": "bunx --bun vite",
+    "build": "tsc -p tsconfig.json --noEmit && bunx --bun vite build",
+    "preview": "bunx --bun vite preview --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "bun test src"
   },

@@ -38,6 +38,12 @@ Start backend and frontend together:
 bun run dev
 ```
 
+Development runs two hot-reloading servers together:
+
+- Backend: Bun runs Elysia with `bun --hot` on `http://localhost:3000`.
+- Frontend: Vite is launched through Bun with `bunx --bun vite` on `http://localhost:5173`.
+- Frontend API calls use the browser's current origin by default, and Vite proxies `/health` and `/api` to the backend.
+
 Useful checks:
 
 ```sh
@@ -78,6 +84,9 @@ GET  /api/admin/auth/check
 Copy `.env.example` to `.env` for local development.
 
 - `DATABASE_URL` defaults to `data/arrweeb-anime.sqlite`.
+- `BACKEND_ORIGIN` is the backend target Vite proxies to during development.
+- `VITE_API_BASE_URL` is blank by default so the frontend uses the Vite dev proxy; set it only when serving the frontend separately from the API.
+- `USE_POLLING=true` enables polling file watchers for environments where native file watching is unreliable.
 - `SESSION_COOKIE_SECURE` is `false` in local HTTP development; set it to `true` behind HTTPS in production.
 - `ADMIN_USERNAME`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD` are required for `bun run db:seed`.
 - Replace the placeholder admin password before running the seed command; the seed script rejects placeholder or short passwords.
