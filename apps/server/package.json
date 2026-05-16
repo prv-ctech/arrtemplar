@@ -10,8 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "cd ../.. && DATABASE_URL=data/db/arrweeb-test.sqlite bun test test/apps/server",
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",
-    "db:migrate": "bun src/db/migrate.ts",
-    "db:seed": "bun src/db/seed.ts"
+    "db:migrate": "bun src/db/migrate.ts"
   },
   "dependencies": {
     "@arrweeb-anime/shared": "workspace:*",

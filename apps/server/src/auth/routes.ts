@@ -1,5 +1,12 @@
-import type { AuthUserResponse, LoginResponse, LogoutResponse } from "@arrweeb-anime/shared";
+import type {
+  AuthSetupStatusResponse,
+  AuthUserResponse,
+  CreateAdminResponse,
+  LoginResponse,
+  LogoutResponse,
+} from "@arrweeb-anime/shared";
 import { Elysia, t } from "elysia";
+import { MIN_PASSWORD_LENGTH } from "./password";
 import type { DatabaseClient } from "../db/client";
 import { AuthService } from "./auth.service";
 import type { LoginRateLimiter } from "./rate-limit";
@@ -21,7 +28,15 @@ const loginRequestSchema = t.Object({
   password: t.String({ minLength: 1, maxLength: 1024 }),
 });
 
+const createAdminRequestSchema = t.Object({
+  username: t.String({ minLength: 1, maxLength: 80, pattern: ".*\\S.*" }),
+  email: t.String({ format: "email" }),
+  password: t.String({ minLength: MIN_PASSWORD_LENGTH, maxLength: 1024 }),
+});
+
 const loginResponseSchema = t.Object({ user: publicUserSchema });
+const createAdminResponseSchema = t.Object({ user: publicUserSchema });
+const authSetupStatusResponseSchema = t.Object({ required: t.Boolean() });
 const authUserResponseSchema = t.Object({ user: t.Union([publicUserSchema, t.Null()]) });
 const logoutResponseSchema = t.Object({ status: t.Literal("ok") });
 const sessionCookieSchema = t.Cookie({
@@ -44,6 +59,57 @@ export function createAuthRoutes(options: AuthRoutesOptions) {
   const authService = new AuthService(options.database, options.rateLimiter);
 
   return new Elysia({ prefix: "/api" })
+    .use(createSetupRoutes(authService, options))
+    .use(createSessionRoutes(authService, options))
+    .use(createAdminRoutes(authService));
+}
+
+function createSetupRoutes(authService: AuthService, options: AuthRoutesOptions) {
+  return new Elysia()
+    .get(
+      "/auth/setup",
+      (): AuthSetupStatusResponse => ({ required: authService.isSetupRequired() }),
+      {
+        response: authSetupStatusResponseSchema,
+        detail: {
+          summary: "Check first-run admin setup",
+          description: "Returns whether the app needs the first admin account to be created.",
+          tags: ["Auth"],
+        },
+      },
+    )
+    .post(
+      "/auth/setup",
+      async ({ body, cookie, request, status }) => {
+        const result = await authService.createInitialAdmin(body, createRequestContext(request));
+
+        if (!result.ok) {
+          return status(result.status, result.body);
+        }
+
+        writeSessionCookie(cookie[SESSION_COOKIE_NAME], result.sessionToken, result.expiresAt, options);
+
+        return { user: result.user } satisfies CreateAdminResponse;
+      },
+      {
+        body: createAdminRequestSchema,
+        cookie: sessionCookieSchema,
+        response: {
+          200: createAdminResponseSchema,
+          409: apiErrorResponseSchema,
+        },
+        detail: {
+          summary: "Create first admin account",
+          description:
+            "Creates the first user as an admin account and signs them in. Disabled after any user exists.",
+          tags: ["Auth"],
+        },
+      },
+    );
+}
+
+function createSessionRoutes(authService: AuthService, options: AuthRoutesOptions) {
+  return new Elysia()
     .post(
       "/auth/login",
       async ({ body, cookie, request, status }) => {
@@ -57,14 +123,7 @@ export function createAuthRoutes(options: AuthRoutesOptions) {
           return status(401, result.body);
         }
 
-        const sessionCookie = cookie[SESSION_COOKIE_NAME];
-        sessionCookie.value = result.sessionToken;
-        sessionCookie.httpOnly = true;
-        sessionCookie.secure = options.sessionCookieSecure;
-        sessionCookie.sameSite = "lax";
-        sessionCookie.path = "/";
-        sessionCookie.maxAge = SESSION_DURATION_SECONDS;
-        sessionCookie.expires = result.expiresAt;
+        writeSessionCookie(cookie[SESSION_COOKIE_NAME], result.sessionToken, result.expiresAt, options);
 
         return { user: result.user } satisfies LoginResponse;
       },
@@ -120,7 +179,11 @@ export function createAuthRoutes(options: AuthRoutesOptions) {
           tags: ["Auth"],
         },
       },
-    )
+    );
+}
+
+function createAdminRoutes(authService: AuthService) {
+  return new Elysia()
     .get(
       "/admin/auth/check",
       ({ cookie, request, status }) => {
@@ -160,6 +223,29 @@ export function createAuthRoutes(options: AuthRoutesOptions) {
 
 function readSessionToken(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function writeSessionCookie(
+  sessionCookie: {
+    value: string | undefined;
+    httpOnly?: boolean | undefined;
+    secure?: boolean | undefined;
+    sameSite?: boolean | "none" | "lax" | "strict" | undefined;
+    path?: string | undefined;
+    maxAge?: number | undefined;
+    expires?: Date | undefined;
+  },
+  sessionToken: string,
+  expiresAt: Date,
+  options: AuthRoutesOptions,
+): void {
+  sessionCookie.value = sessionToken;
+  sessionCookie.httpOnly = true;
+  sessionCookie.secure = options.sessionCookieSecure;
+  sessionCookie.sameSite = "lax";
+  sessionCookie.path = "/";
+  sessionCookie.maxAge = SESSION_DURATION_SECONDS;
+  sessionCookie.expires = expiresAt;
 }
 
 function createRequestContext(request: Request): {

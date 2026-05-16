@@ -8,7 +8,7 @@ Arrweeb-anime is a self-hosted anime-native media request, automation, and watch
 - Drizzle ORM schema for the Phase 1 SQLite tables
 - Drizzle Kit generated SQL migrations
 - Bun-native `bun:sqlite` migration runner
-- Idempotent first-admin seed script using Argon2id password hashing
+- First-boot admin account setup using Argon2id password hashing
 - Auth API routes for login, logout, current user, and admin role checks
 - Server-side sessions with hashed session tokens stored in SQLite
 - HttpOnly SameSite session cookies with a production-secure cookie setting
@@ -77,7 +77,6 @@ Database commands:
 ```sh
 bun run db:generate
 bun run db:migrate
-bun run db:seed
 ```
 
 `db:generate` uses Drizzle Kit to generate SQL migrations. `db:migrate` follows Bun's Drizzle guide by applying those generated migrations from a Bun script with Drizzle's Bun SQLite migrator, so the app keeps using native `bun:sqlite`.
@@ -93,11 +92,15 @@ SQLite does not start a separate database listener, so test isolation is enforce
 Auth endpoints:
 
 ```txt
+GET  /api/auth/setup
+POST /api/auth/setup
 POST /api/auth/login
 POST /api/auth/logout
 GET  /api/auth/me
 GET  /api/admin/auth/check
 ```
+
+On a fresh database, open the app and create the first account from the login page. That first account is created as the admin account and signed in automatically. After any user exists, the setup endpoint is disabled.
 
 ## Services
 
@@ -116,5 +119,3 @@ Copy `.env.example` to `.env` for local development.
 - `VITE_API_BASE_URL` is blank by default so the frontend uses the Vite dev proxy; set it only when serving the frontend separately from the API.
 - `USE_POLLING=true` enables polling file watchers for environments where native file watching is unreliable.
 - `SESSION_COOKIE_SECURE` is `false` in local HTTP development; set it to `true` behind HTTPS in production.
-- `ADMIN_USERNAME`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD` are required for `bun run db:seed`.
-- Replace the placeholder admin password before running the seed command; the seed script rejects placeholder or short passwords.

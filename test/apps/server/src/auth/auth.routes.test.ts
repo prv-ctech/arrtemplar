@@ -8,7 +8,6 @@ import {
 } from "../../../../../apps/server/src/auth/session-token";
 import type { DatabaseClient } from "../../../../../apps/server/src/db/client";
 import { auditLogs, sessions, users } from "../../../../../apps/server/src/db/schema";
-import { seedAdminUserWithDatabase } from "../../../../../apps/server/src/db/seed";
 import { resetAndOpenTestDatabase } from "../../../../helpers/database";
 
 const openDatabases: DatabaseClient[] = [];
@@ -20,6 +19,96 @@ afterEach(() => {
 });
 
 describe("auth routes", () => {
+  it("reports setup required before the first user exists", async () => {
+    const { app } = await createEmptyAuthTestApp();
+
+    const response = await app.handle(new Request("http://localhost/api/auth/setup"));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({ required: true });
+  });
+
+  it("creates the first account as admin, signs it in, and never returns the password hash", async () => {
+    const { app, database } = await createEmptyAuthTestApp();
+
+    const response = await app.handle(
+      jsonRequest("/api/auth/setup", {
+        username: "owner",
+        email: "owner@example.local",
+        password: "correct-horse-battery-staple",
+      }),
+    );
+    const body = await response.json();
+    const setCookie = response.headers.get("set-cookie") ?? "";
+    const cookieHeader = toCookieHeader(setCookie);
+    const sessionToken = readCookieValue(cookieHeader);
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({
+      user: {
+        id: expect.any(String),
+        username: "owner",
+        email: "owner@example.local",
+        role: "admin",
+        createdAt: expect.any(String),
+        lastLoginAt: null,
+      },
+    });
+    expect(JSON.stringify(body)).not.toContain("passwordHash");
+    expectSecureSessionCookie(setCookie);
+
+    const [storedUser] = database.db.select().from(users).all();
+    const [storedSession] = database.db.select().from(sessions).all();
+    const auditActions = database.db
+      .select()
+      .from(auditLogs)
+      .all()
+      .map((entry) => entry.action);
+
+    expect(storedUser?.role).toBe("admin");
+    expect(storedUser?.passwordHash).toStartWith("$argon2id$");
+    expect(storedUser?.passwordHash).not.toBe("correct-horse-battery-staple");
+    expect(await Bun.password.verify("correct-horse-battery-staple", storedUser?.passwordHash ?? "")).toBe(
+      true,
+    );
+    expect(storedSession?.userId).toBe(storedUser?.id);
+    expect(storedSession?.tokenHash).toBe(hashSessionToken(sessionToken));
+    expect(auditActions).toContain("auth.setup.admin_created");
+
+    const adminResponse = await app.handle(
+      new Request("http://localhost/api/admin/auth/check", { headers: { cookie: cookieHeader } }),
+    );
+
+    expect(adminResponse.status).toBe(200);
+  });
+
+  it("blocks setup after any user exists", async () => {
+    const { app, database } = await createAuthTestApp();
+
+    const statusResponse = await app.handle(new Request("http://localhost/api/auth/setup"));
+    const statusBody = await statusResponse.json();
+    const createResponse = await app.handle(
+      jsonRequest("/api/auth/setup", {
+        username: "second-admin",
+        email: "second-admin@example.local",
+        password: "correct-horse-battery-staple",
+      }),
+    );
+    const createBody = await createResponse.json();
+
+    expect(statusResponse.status).toBe(200);
+    expect(statusBody).toEqual({ required: false });
+    expect(createResponse.status).toBe(409);
+    expect(createBody).toEqual({
+      error: {
+        code: "SETUP_ALREADY_COMPLETE",
+        message: "Admin setup is already complete.",
+      },
+    });
+    expect(database.db.select().from(users).all()).toHaveLength(2);
+  });
+
   it("logs in an admin, sets a secure HttpOnly cookie, exposes /me, and logs out", async () => {
     const { app, database } = await createAuthTestApp();
 
@@ -46,10 +135,7 @@ describe("auth routes", () => {
       },
     });
     expect(JSON.stringify(loginBody)).not.toContain("passwordHash");
-    expect(setCookie).toContain(`${SESSION_COOKIE_NAME}=`);
-    expect(setCookie).toContain("HttpOnly");
-    expect(setCookie).toContain("Secure");
-    expect(setCookie).toContain("SameSite=Lax");
+    expectSecureSessionCookie(setCookie);
     expect(setCookie).toContain("Max-Age=2592000");
 
     const [storedSession] = database.db.select().from(sessions).all();
@@ -186,36 +272,57 @@ async function createAuthTestApp(rateLimiter = new LoginRateLimiter()): Promise<
   app: ReturnType<typeof createApp>;
   database: DatabaseClient;
 }> {
-  const database = await resetAndOpenTestDatabase();
-  openDatabases.push(database);
+  const { database } = await createEmptyAuthTestApp(rateLimiter);
 
-  await seedAdminUserWithDatabase(
-    {
-      username: "admin",
-      email: "admin@example.local",
-      password: "correct-horse-battery-staple",
-    },
-    database,
-  );
-
-  const now = new Date().toISOString();
-  database.db
-    .insert(users)
-    .values({
-      id: crypto.randomUUID(),
-      username: "viewer",
-      email: "viewer@example.local",
-      passwordHash: await hashPassword("correct-horse-battery-staple"),
-      role: "user",
-      createdAt: now,
-      updatedAt: now,
-    })
-    .run();
+  await insertTestUser(database, {
+    username: "admin",
+    email: "admin@example.local",
+    password: "correct-horse-battery-staple",
+    role: "admin",
+  });
+  await insertTestUser(database, {
+    username: "viewer",
+    email: "viewer@example.local",
+    password: "correct-horse-battery-staple",
+    role: "user",
+  });
 
   return {
     app: createApp({ database, sessionCookieSecure: true, loginRateLimiter: rateLimiter }),
     database,
   };
+}
+
+async function createEmptyAuthTestApp(rateLimiter = new LoginRateLimiter()): Promise<{
+  app: ReturnType<typeof createApp>;
+  database: DatabaseClient;
+}> {
+  const database = await resetAndOpenTestDatabase();
+  openDatabases.push(database);
+
+  return {
+    app: createApp({ database, sessionCookieSecure: true, loginRateLimiter: rateLimiter }),
+    database,
+  };
+}
+
+async function insertTestUser(
+  database: DatabaseClient,
+  input: { username: string; email: string; password: string; role: "admin" | "user" },
+): Promise<void> {
+  const now = new Date().toISOString();
+  database.db
+    .insert(users)
+    .values({
+      id: crypto.randomUUID(),
+      username: input.username,
+      email: input.email,
+      passwordHash: await hashPassword(input.password),
+      role: input.role,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .run();
 }
 
 function jsonRequest(path: string, body: unknown): Request {
@@ -228,6 +335,13 @@ function jsonRequest(path: string, body: unknown): Request {
 
 function toCookieHeader(setCookie: string): string {
   return setCookie.split(";")[0] ?? "";
+}
+
+function expectSecureSessionCookie(setCookie: string): void {
+  expect(setCookie).toContain(`${SESSION_COOKIE_NAME}=`);
+  expect(setCookie).toContain("HttpOnly");
+  expect(setCookie).toContain("Secure");
+  expect(setCookie).toContain("SameSite=Lax");
 }
 
 function readCookieValue(cookieHeader: string): string {

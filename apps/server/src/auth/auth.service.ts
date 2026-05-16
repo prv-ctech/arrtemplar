@@ -1,8 +1,14 @@
-import type { ApiErrorResponse, LoginRequest, PublicUser, UserRole } from "@arrweeb-anime/shared";
-import { eq } from "drizzle-orm";
+import type {
+  ApiErrorResponse,
+  CreateAdminRequest,
+  LoginRequest,
+  PublicUser,
+  UserRole,
+} from "@arrweeb-anime/shared";
+import { eq, sql } from "drizzle-orm";
 import type { DatabaseClient } from "../db/client";
 import { auditLogs, sessions, type User, users } from "../db/schema";
-import { verifyPassword } from "./password";
+import { hashPassword, verifyPassword } from "./password";
 import { LoginRateLimiter } from "./rate-limit";
 import { createSessionExpiresAt, generateSessionToken, hashSessionToken } from "./session-token";
 
@@ -25,6 +31,21 @@ export type LoginFailure = {
 };
 
 export type LoginResult = LoginSuccess | LoginFailure;
+
+export type CreateAdminSuccess = {
+  ok: true;
+  user: PublicUser;
+  sessionToken: string;
+  expiresAt: Date;
+};
+
+export type CreateAdminFailure = {
+  ok: false;
+  status: 409;
+  body: ApiErrorResponse;
+};
+
+export type CreateAdminResult = CreateAdminSuccess | CreateAdminFailure;
 
 const invalidCredentialsError: ApiErrorResponse = {
   error: {
@@ -54,11 +75,48 @@ const forbiddenError: ApiErrorResponse = {
   },
 };
 
+const setupAlreadyCompleteError: ApiErrorResponse = {
+  error: {
+    code: "SETUP_ALREADY_COMPLETE",
+    message: "Admin setup is already complete.",
+  },
+};
+
 export class AuthService {
   constructor(
     private readonly database: DatabaseClient,
     private readonly rateLimiter = new LoginRateLimiter(),
   ) {}
+
+  isSetupRequired(): boolean {
+    return this.countUsers() === 0;
+  }
+
+  async createInitialAdmin(
+    input: CreateAdminRequest,
+    context: AuthRequestContext,
+  ): Promise<CreateAdminResult> {
+    if (!this.isSetupRequired()) {
+      return { ok: false, status: 409, body: setupAlreadyCompleteError };
+    }
+
+    const now = new Date();
+    const user = await createInitialAdminUser(input, now);
+    const created = this.insertInitialAdmin(user, context, now);
+
+    if (!created) {
+      return { ok: false, status: 409, body: setupAlreadyCompleteError };
+    }
+
+    const session = this.createSession(user, context, now);
+
+    return {
+      ok: true,
+      user: toPublicUser(user),
+      sessionToken: session.sessionToken,
+      expiresAt: session.expiresAt,
+    };
+  }
 
   async login(input: LoginRequest, context: AuthRequestContext): Promise<LoginResult> {
     const email = normalizeEmail(input.email);
@@ -94,22 +152,7 @@ export class AuthService {
     this.rateLimiter.clear(rateLimitKey);
 
     const now = new Date();
-    const expiresAt = createSessionExpiresAt(now);
-    const sessionToken = generateSessionToken();
-    const sessionId = crypto.randomUUID();
-
-    this.database.db
-      .insert(sessions)
-      .values({
-        id: sessionId,
-        userId: user.id,
-        tokenHash: hashSessionToken(sessionToken),
-        expiresAt: expiresAt.toISOString(),
-        ipAddress: context.ipAddress,
-        userAgent: context.userAgent,
-        createdAt: now.toISOString(),
-      })
-      .run();
+    const session = this.createSession(user, context, now);
 
     this.database.db
       .update(users)
@@ -123,7 +166,7 @@ export class AuthService {
       action: "auth.login.success",
       actorUserId: user.id,
       targetType: "session",
-      targetId: sessionId,
+      targetId: session.sessionId,
       metadata: { email },
       ipAddress: context.ipAddress,
     });
@@ -131,8 +174,8 @@ export class AuthService {
     return {
       ok: true,
       user: toPublicUser(updatedUser),
-      sessionToken,
-      expiresAt,
+      sessionToken: session.sessionToken,
+      expiresAt: session.expiresAt,
     };
   }
 
@@ -238,6 +281,69 @@ export class AuthService {
     return { session, user };
   }
 
+  private countUsers(): number {
+    const { count } = this.database.db
+      .select({ count: sql<number>`count(*)`.mapWith(Number) })
+      .from(users)
+      .get() ?? { count: 0 };
+
+    return count;
+  }
+
+  private insertInitialAdmin(user: User, context: AuthRequestContext, now: Date): boolean {
+    return this.database.db.transaction((tx) => {
+      const { count } = tx
+        .select({ count: sql<number>`count(*)`.mapWith(Number) })
+        .from(users)
+        .get() ?? { count: 0 };
+
+      if (count !== 0) {
+        return false;
+      }
+
+      tx.insert(users).values(user).run();
+      tx.insert(auditLogs)
+        .values({
+          id: crypto.randomUUID(),
+          actorUserId: user.id,
+          action: "auth.setup.admin_created",
+          targetType: "user",
+          targetId: user.id,
+          metadataJson: JSON.stringify({ username: user.username, email: user.email }),
+          ipAddress: context.ipAddress,
+          createdAt: now.toISOString(),
+        })
+        .run();
+
+      return true;
+    });
+  }
+
+  private createSession(
+    user: User,
+    context: AuthRequestContext,
+    now = new Date(),
+  ): { sessionId: string; sessionToken: string; expiresAt: Date } {
+    const expiresAt = createSessionExpiresAt(now);
+    const sessionToken = generateSessionToken();
+    const sessionId = crypto.randomUUID();
+
+    this.database.db
+      .insert(sessions)
+      .values({
+        id: sessionId,
+        userId: user.id,
+        tokenHash: hashSessionToken(sessionToken),
+        expiresAt: expiresAt.toISOString(),
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        createdAt: now.toISOString(),
+      })
+      .run();
+
+    return { sessionId, sessionToken, expiresAt };
+  }
+
   private writeAuditLog(input: {
     action: string;
     actorUserId?: string | null;
@@ -270,6 +376,20 @@ function toPublicUser(user: User): PublicUser {
     role: user.role,
     createdAt: user.createdAt,
     lastLoginAt: user.lastLoginAt,
+  };
+}
+
+async function createInitialAdminUser(input: CreateAdminRequest, now: Date): Promise<User> {
+  return {
+    id: crypto.randomUUID(),
+    username: input.username.trim(),
+    email: normalizeEmail(input.email),
+    passwordHash: await hashPassword(input.password),
+    role: "admin",
+    disabledAt: null,
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+    lastLoginAt: null,
   };
 }
 

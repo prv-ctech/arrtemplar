@@ -14,8 +14,22 @@ export type LoginRequest = {
   password: string;
 };
 
+export type CreateAdminRequest = {
+  username: string;
+  email: string;
+  password: string;
+};
+
 export type LoginResponse = {
   user: PublicUser;
+};
+
+export type CreateAdminResponse = {
+  user: PublicUser;
+};
+
+export type AuthSetupStatusResponse = {
+  required: boolean;
 };
 
 export type AuthUserResponse = {

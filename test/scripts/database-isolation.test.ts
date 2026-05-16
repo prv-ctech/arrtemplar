@@ -4,7 +4,6 @@ const serverDatabaseTestFiles = [
   "test/apps/server/src/app.test.ts",
   "test/apps/server/src/auth/auth.routes.test.ts",
   "test/apps/server/src/db/migrate.test.ts",
-  "test/apps/server/src/db/seed.test.ts",
 ] as const;
 
 describe("test file layout", () => {
