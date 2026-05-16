@@ -2,6 +2,7 @@ import { ActivityIcon, CheckCircleIcon, WarningCircleIcon } from "@phosphor-icon
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { getHealth } from "@/lib/api";
 
 export function HealthPanel() {
@@ -12,10 +13,10 @@ export function HealthPanel() {
   });
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="h-full overflow-hidden bg-card/78">
       <CardHeader>
         <div className="flex items-center gap-3">
-          <div className="rounded-lg border border-primary/30 bg-primary/10 p-2 text-primary">
+          <div className="rounded-2xl border border-primary/25 bg-primary/10 p-2 text-primary">
             <ActivityIcon aria-hidden="true" className="h-5 w-5" weight="duotone" />
           </div>
           <div>
@@ -37,15 +38,22 @@ export function HealthPanel() {
 
 function HealthLoading() {
   return (
-    <div aria-busy="true" className="rounded-lg border border-border bg-muted/40 p-4 text-sm">
-      Checking API status…
+    <div
+      aria-busy="true"
+      aria-label="Checking API status"
+      className="space-y-3 rounded-3xl border border-border bg-background/48 p-4"
+      role="status"
+    >
+      <Skeleton className="h-4 w-2/3" />
+      <Skeleton className="h-4 w-1/2" />
+      <Skeleton className="h-12 w-full" />
     </div>
   );
 }
 
 function HealthError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <div className="space-y-4 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+    <div className="space-y-4 rounded-3xl border border-destructive/35 bg-destructive/10 p-4">
       <div className="flex items-start gap-3">
         <WarningCircleIcon
           aria-hidden="true"
@@ -70,15 +78,17 @@ function HealthReady({
   health: { name: string; version: string; status: string; timestamp: string };
 }) {
   return (
-    <div className="grid gap-4 rounded-lg border border-primary/30 bg-primary/10 p-4 sm:grid-cols-2">
+    <div className="grid gap-4 rounded-3xl border border-primary/25 bg-primary/10 p-4 sm:grid-cols-2">
       <div className="flex items-center gap-3 sm:col-span-2">
         <CheckCircleIcon aria-hidden="true" className="h-5 w-5 text-primary" weight="duotone" />
         <p className="font-medium">
           {health.name} API is {health.status}
         </p>
       </div>
-      <StatusField label="Version" value={health.version} />
-      <StatusField label="Updated" value={new Date(health.timestamp).toLocaleString()} />
+      <dl className="grid gap-4 sm:col-span-2 sm:grid-cols-2">
+        <StatusField label="Version" value={health.version} />
+        <StatusField label="Updated" value={new Date(health.timestamp).toLocaleString()} />
+      </dl>
     </div>
   );
 }

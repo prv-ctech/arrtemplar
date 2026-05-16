@@ -1,5 +1,7 @@
 {
   // ---------- General ----------
+  "workbench.browser.openLocalhostLinks": true,
+  "workbench.browser.enableChatTools": true,
   "workbench.settings.showAISearchToggle": true,
   "workbench.commandPalette.experimental.askChatLocation": "chatView",
   "search.searchView.semanticSearchBehavior": "manual",

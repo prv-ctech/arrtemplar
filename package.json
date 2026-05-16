@@ -16,8 +16,16 @@
     "build": "bun run --cwd packages/shared build && bun run --cwd packages/anime-parser build && bun run --cwd apps/server build && bun run --cwd apps/web build",
     "typecheck": "bun run --cwd packages/shared typecheck && bun run --cwd packages/anime-parser typecheck && bun run --cwd apps/server typecheck && bun run --cwd apps/web typecheck",
     "test": "bun test",
-    "check": "biome check . && bun run typecheck && bun test",
+    "check": "bun run check:quality:code",
+    "check:code:biome": "biome check .",
+    "check:code:typecheck": "bun run typecheck",
+    "check:code:test": "bun test",
+    "check:code:fallow": "fallow --summary --fail-on-issues",
+    "check:code:react-doctor": "react-doctor apps/web --full --offline --fail-on error",
+    "check:quality:code": "bun run check:code:biome && bun run check:code:typecheck && bun run check:code:test",
+    "check:quality:code:full": "bun run check:code:biome && bun run check:code:typecheck && bun run check:code:react-doctor && bun run check:code:test && bun run check:code:fallow",
     "format": "biome check --write .",
+    "write:quality:code": "biome check --write . && fallow fix",
     "db:generate": "bun run --cwd apps/server db:generate",
     "db:migrate": "bun run --cwd apps/server db:migrate",
     "db:seed": "bun run --cwd apps/server db:seed"
@@ -25,6 +33,8 @@
   "devDependencies": {
     "@biomejs/biome": "latest",
     "bun-types": "^1.3.14",
+    "fallow": "^2.74.0",
+    "react-doctor": "^0.1.6",
     "typescript": "latest"
   }
 }

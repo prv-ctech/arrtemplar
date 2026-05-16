@@ -1,4 +1,4 @@
-# AnimeHub AI Build Plan
+# Arrweeb-anime AI Build Plan
 
 ## Purpose
 
@@ -244,7 +244,7 @@ Implement from the beginning:
 # 5. Suggested Monorepo Structure
 
 ```txt
-animehub/
+arrweeb-anime/
   apps/
     server/
       src/
@@ -2330,7 +2330,7 @@ Use this exact order unless there is a strong reason to change it:
 Use this as the first instruction to begin implementation:
 
 ```txt
-You are building AnimeHub, a self-hosted anime-native media request, automation, and watching app.
+You are building Arrweeb-anime, a self-hosted anime-native media request, automation, and watching app.
 
 Use Bun 1.3.14+ for the backend and React + Vite + TypeScript + Tailwind + shadcn/ui for the frontend.
 
@@ -2363,7 +2363,7 @@ After completing Phase 0, report:
 Use this after Phase 0 is complete:
 
 ```txt
-Continue AnimeHub by implementing Phase 1: Database Foundation.
+Continue Arrweeb-anime by implementing Phase 1: Database Foundation.
 
 Add SQLite database support, migrations, and typed schema definitions.
 Create tables for:
@@ -2397,7 +2397,7 @@ After completing Phase 1, report:
 Use this after Phase 1 is complete:
 
 ```txt
-Continue AnimeHub by implementing Phase 2: Auth, Sessions, Roles, and Permissions.
+Continue Arrweeb-anime by implementing Phase 2: Auth, Sessions, Roles, and Permissions.
 
 Implement:
 - password hashing

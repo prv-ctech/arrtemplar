@@ -16,7 +16,8 @@
     "ghcr.io/devcontainers/features/git:1": {},
     "ghcr.io/devcontainers/features/github-cli:1": {},
     "ghcr.io/devcontainers/features/python:1": {
-      "version": "3.13"
+      "version": "os-provided",
+      "installTools": false
     },
     "ghcr.io/devcontainers-extra/features/uv:1": {},
     "ghcr.io/devcontainers-extra/features/ruff:2": {}
@@ -30,13 +31,18 @@
     "vscode": {
       "extensions": [
         "oven.bun-vscode",
-        "biomejs.biome",
         "bradlc.vscode-tailwindcss",
         "ms-python.python",
         "ms-python.vscode-pylance",
-        "charliermarsh.ruff"
+        "charliermarsh.ruff",
+        "SmallMain.vscode-unify-chat-provider",
+        "Catppuccin.catppuccin-vsc",
+        "thang-nm.flow-icons",
+        "tonybaloney.vscode-pets"
       ],
       "settings": {
+        "workbench.browser.openLocalhostLinks": true,
+        "workbench.browser.enableChatTools": true,
         "python.analysis.typeCheckingMode": "basic",
         "python.testing.pytestEnabled": true,
         "python.testing.unittestEnabled": false,

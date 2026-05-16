@@ -36,8 +36,8 @@ export function AuthGate({
 
 function AuthLoading() {
   return (
-    <main className="grid min-h-[100dvh] place-items-center px-4 py-10">
-      <Card className="w-full max-w-md border-white/10 bg-card/80">
+    <main className="grid min-h-dvh place-items-center px-4 py-10">
+      <Card className="w-full max-w-md bg-card/82 shadow-(--shadow-panel)">
         <CardHeader>
           <CardTitle>Restoring session</CardTitle>
         </CardHeader>
@@ -53,8 +53,8 @@ function AuthLoading() {
 
 function AuthError({ onRetry }: { onRetry: () => void }) {
   return (
-    <main className="grid min-h-[100dvh] place-items-center px-4 py-10">
-      <Card className="w-full max-w-md border-destructive/30 bg-destructive/10">
+    <main className="grid min-h-dvh place-items-center px-4 py-10">
+      <Card className="w-full max-w-md border-destructive/35 bg-destructive/10 shadow-(--shadow-panel)">
         <CardHeader>
           <CardTitle>Session check failed</CardTitle>
         </CardHeader>

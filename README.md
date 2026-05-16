@@ -2,8 +2,6 @@
 
 Arrweeb-anime is a self-hosted anime-native media request, automation, and watching app.
 
-This repository currently implements **Phase 2** from `docs/plan/arrweeb-anime.md`:
-
 - Bun monorepo workspace
 - Elysia backend with `GET /health`
 - OpenAPI docs at `/openapi`

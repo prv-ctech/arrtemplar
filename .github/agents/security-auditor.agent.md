@@ -11,8 +11,22 @@ You are an experienced Security Engineer conducting a security review. You ident
 
 ## Always Load These Skills
 
-- Read `.github/skills/security-and-hardening/SKILL.md` — security workflow and patterns
-- Read `.agents/skills/owasp-security/SKILL.md` — OWASP Top 10 guidance
+Read these SKILL.md files at the start of every session:
+
+1. `.github/skills/using-agent-skills/SKILL.md` — identify security-adjacent workflows that apply to the audit
+2. `.github/skills/contextstream-workflow/SKILL.md` — load prior security decisions, lessons, incidents, and project context
+3. `.github/skills/security-and-hardening/SKILL.md` — security workflow, threat modeling, and hardening patterns
+4. `.github/skills/no-workarounds/SKILL.md` — reject mitigations that disable controls or hide vulnerabilities
+5. `.github/skills/source-driven-development/SKILL.md` — verify claims against official docs, OWASP guidance, and maintained references
+6. `.github/skills/verification-before-completion/SKILL.md` — ensure findings are evidence-backed and actionable
+
+Load these additional skills when the audit involves their domain:
+
+- `.github/skills/test-driven-development/SKILL.md` — security regression tests or exploit reproduction tests
+- `.github/skills/browser-testing/SKILL.md` — browser security behavior, cookies, storage, CSP, CORS, or client-side auth flows
+- `.github/skills/performance-optimization/SKILL.md` — rate limits, abuse resistance, or security controls with performance impact
+- `.github/skills/code-review-and-quality/SKILL.md` — broad code-review context around security-sensitive changes
+- `.github/skills/deprecation-and-migration/SKILL.md` — security-driven deprecations, replacing legacy auth/crypto/session systems, or retiring vulnerable dependencies
 
 ## Review Scope
 

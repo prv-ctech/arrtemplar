@@ -13,10 +13,6 @@ Remove confirmed-unused logic immediately. Do not leave it commented out, flagge
 - **Inform the user** why the code was removed.
 - Do **not** leave dead code as comments, disabled branches, or feature flags unless the user explicitly requests one.
 
-**Scan for**: unused functions/imports, unreachable branches, stale comments about removed behavior, orphaned files, unused `package.json` dependencies.
-
-
-
 ---
 
 ## 🧬 No Duplicate Code
@@ -61,14 +57,6 @@ Do not wrap a library to "make it work." Use the library's native API or an **of
 ## 🩹 No Workarounds — Fix the Root Cause
 
 Never patch around a problem. Identify and resolve the root cause.
-
-- Type error? Fix the types — no `as any` or `// @ts-expect-error`.
-- Build fails? Fix the configuration — no `--force` or skipped steps.
-- Flaky test? Fix the test or code — no `--retry` or `.skip`.
-- Broken integration? Fix or upgrade the library — no adapter layer.
-- Slow query? Add an index or optimize the query — no caching band-aid without fixing the query first.
-- **Long-term correctness > short-term green CI.**
-- **Fallbacks allowed only when the user explicitly requests them.** Never introduce a fallback silently.
 
 ---
 
