@@ -1,7 +1,7 @@
 ---
 name: debugger
 description: Debugging and verification agent. Systematically triages test failures, build breaks, and unexpected behavior. Uses browser DevTools when needed for UI issues. Replaces the /test workflow.
-model: GPT-5.5 (unify-chat-provider)
+model: route/kimi-k2.6-full (unify-chat-provider)
 agents: ["implementer", "reviewer"]
 handoffs:
    - label: "Review Debug Fix"

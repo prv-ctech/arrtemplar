@@ -2,13 +2,14 @@
   "name": "Arrweeb Anime",
   "image": "oven/bun:1-debian",
   "init": true,
-  "remoteUser": "bun",
-  "updateRemoteUserUID": true,
+  "containerUser": "root",
+  "remoteUser": "root",
+  "updateRemoteUserUID": false,
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
 
   "features": {
     "ghcr.io/devcontainers/features/common-utils:2": {
-      "username": "bun",
+      "username": "root",
       "installZsh": true,
       "installOhMyZsh": false,
       "upgradePackages": false
@@ -24,7 +25,7 @@
   },
 
   "remoteEnv": {
-    "PATH": "${containerEnv:PATH}:/home/bun/.local/bin"
+    "PATH": "${containerEnv:PATH}:/root/.local/bin"
   },
 
   "customizations": {

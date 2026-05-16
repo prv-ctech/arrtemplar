@@ -4,10 +4,28 @@ import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv } from "vite";
 
 const workspaceRoot = path.resolve(__dirname, "../..");
+const pollingContainerKeys = ["REMOTE_CONTAINERS", "CODESPACES", "DEVCONTAINER"] as const;
+
+type ViteEnvironment = Record<string, string | undefined>;
+
+function shouldUsePolling(environment: ViteEnvironment): boolean {
+  const pollingOverride = environment.USE_POLLING?.toLowerCase();
+
+  if (pollingOverride === "true") {
+    return true;
+  }
+
+  if (pollingOverride === "false") {
+    return false;
+  }
+
+  return pollingContainerKeys.some((key) => environment[key]?.toLowerCase() === "true");
+}
 
 export default defineConfig(({ mode }) => {
   const environment = loadEnv(mode, workspaceRoot, "");
   const backendOrigin = environment.BACKEND_ORIGIN || "http://localhost:3000";
+  const usePolling = shouldUsePolling(environment);
 
   return {
     envDir: workspaceRoot,
@@ -19,8 +37,6 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       host: "0.0.0.0",
-      port: 5173,
-      strictPort: true,
       proxy: {
         "/health": {
           target: backendOrigin,
@@ -31,7 +47,7 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
         },
       },
-      ...(environment.USE_POLLING === "true" ? { watch: { usePolling: true } } : {}),
+      ...(usePolling ? { watch: { usePolling: true } } : {}),
     },
   };
 });

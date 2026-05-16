@@ -30,30 +30,38 @@ Install dependencies:
 bun install
 ```
 
-Start backend and frontend together:
+### Start the app
+
+Start the backend and frontend dev servers together:
 
 ```sh
 bun run dev
 ```
 
-Development starts through a Bun-native lifecycle supervisor:
+This uses Bun's native workspace script runner to run the app dev scripts in parallel:
 
-- Backend: Bun runs Elysia with `bun --hot` on `http://localhost:3000`.
-- Frontend: Vite is launched through Bun with `bunx --bun vite` on `http://localhost:5173`.
-- Tests that need a server port default to `3001`, separate from development port `3000`.
-- Frontend API calls use the browser's current origin by default, and Vite proxies `/health` and `/api` to the backend.
-- TypeScript runs in watch mode alongside both servers, so backend/frontend contract changes are reported even though Vite intentionally only transpiles during development.
-- Before startup, the supervisor checks ports `3000` and `5173` and stops only stale repo-owned backend/frontend dev listeners from this workspace.
-- If another process owns either port, startup fails with a diagnostic instead of killing it.
-- Dev startup never deletes, resets, or migrates SQLite databases.
+| App      | URL                              | Runtime                | Hot reload            |
+| -------- | -------------------------------- | ---------------------- | --------------------- |
+| Backend  | `http://localhost:3000`          | `bun --hot apps/server` | Bun `--hot` (file watcher) |
+| Frontend | `http://localhost:5173`          | `bunx --bun vite`      | Vite HMR / React Fast Refresh |
+| Typecheck | `bun run dev:typecheck` (manual) | `tsc --noEmit --watch` | TypeScript watch mode |
 
-The previous raw parallel command remains available for debugging the supervisor itself:
+- **Backend changes** — Bun's `--hot` reloads Elysia automatically. No app restart needed.
+- **Frontend changes** — Vite HMR updates the browser instantly. No page reload needed.
+- **TypeScript contract changes** — Run `bun run dev:typecheck` in a separate terminal for live type-checking across the workspace.
+- **API calls** — The frontend client uses the browser's current origin. Vite proxies `/health` and `/api` to the backend via `http://localhost:3000`.
+
+### Run services separately
+
+Run each dev server manually:
 
 ```sh
-bun run dev:raw
+bun run dev:server     # Backend on http://localhost:3000
+bun run dev:web        # Frontend on http://localhost:5173
+bun run dev:typecheck  # TypeScript watch
 ```
 
-`portless` is intentionally not part of this dev workflow: there is no proxy, TLS/local CA setup, `portless.json`, or `portless prune` dependency.
+Tests that need a server port default to `3001`, separate from development port `3000`.
 
 Useful checks:
 
@@ -93,10 +101,10 @@ GET  /api/admin/auth/check
 
 ## Services
 
-- Backend: `http://localhost:3000`
-- Health: `http://localhost:3000/health`
-- OpenAPI UI: `http://localhost:3000/openapi`
 - Frontend: `http://localhost:5173`
+- Backend: `http://localhost:3000`
+- Health: `http://localhost:5173/health` via Vite proxy, or `http://localhost:3000/health` directly
+- OpenAPI UI: `http://localhost:3000/openapi`
 
 ## Environment
 
