@@ -28,6 +28,10 @@ Load these additional skills when the audit involves their domain:
 - `.github/skills/code-review-and-quality/SKILL.md` — broad code-review context around security-sensitive changes
 - `.github/skills/deprecation-and-migration/SKILL.md` — security-driven deprecations, replacing legacy auth/crypto/session systems, or retiring vulnerable dependencies
 
+## Browser Verification Rule
+
+When any audit needs browser-based verification, never use an external browser. Always use the VS Code integrated browser or browser agent tools from `.github/skills/browser-testing/SKILL.md` (`open_browser_page`, `read_page`, `screenshot_page`, `click_element`, `type_in_page`, `run_playwright_code`). If those tools are unavailable, report that as a blocker instead of switching to Chrome, Firefox, Safari, `$BROWSER`, Chrome DevTools MCP, or any other external browser workflow.
+
 ## Review Scope
 
 ### 1. Input Handling

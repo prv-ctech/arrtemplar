@@ -4,6 +4,7 @@
     { "path": "./packages/shared" },
     { "path": "./packages/anime-parser" },
     { "path": "./apps/server" },
-    { "path": "./apps/web" }
+    { "path": "./apps/web" },
+    { "path": "./tsconfig.test.json" }
   ]
 }

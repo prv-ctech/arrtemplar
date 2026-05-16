@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import type { PublicUser } from "@arrweeb-anime/shared";
-import { getLandingPathForUser } from "./auth-navigation";
+import { getLandingPathForUser } from "../../../../../../apps/web/src/features/auth/auth-navigation";
+import type { PublicUser } from "../../../../../../packages/shared/src";
 
 const baseUser = {
   id: "user-1",

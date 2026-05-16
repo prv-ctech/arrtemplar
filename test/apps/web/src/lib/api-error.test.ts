@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { getApiErrorCode, getApiErrorMessage } from "./api-error";
+import { getApiErrorCode, getApiErrorMessage } from "../../../../../apps/web/src/lib/api-error";
 
 describe("api error helpers", () => {
   it("reads Elysia error payloads wrapped by Eden", () => {

@@ -262,7 +262,7 @@ export class AuthService {
   }
 }
 
-export function toPublicUser(user: User): PublicUser {
+function toPublicUser(user: User): PublicUser {
   return {
     id: user.id,
     username: user.username,

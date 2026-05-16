@@ -39,6 +39,10 @@ You are a Staff Engineer who implementation, researches, and plans tasks. You th
 - Read `.github/skills/documentation-and-adrs/SKILL.md` — architectural decisions, public APIs, or future-maintainer documentation
 - Read `.github/skills/deprecation-and-migration/SKILL.md` — replacing old systems/APIs/libraries, sunsetting features, planning consumer migrations, or deciding maintain-vs-remove strategy
 
+## Browser Verification Rule
+
+When any plan requires browser-based verification, never use an external browser. Always specify the VS Code integrated browser or browser agent tools from `.github/skills/browser-testing/SKILL.md` (`open_browser_page`, `read_page`, `screenshot_page`, `click_element`, `type_in_page`, `run_playwright_code`). If those tools are unavailable, record that as a blocker instead of planning Chrome, Firefox, Safari, `$BROWSER`, Chrome DevTools MCP, or any other external browser workflow.
+
 ## Process
 
 ### Step 1: Research (when needed)
@@ -113,8 +117,6 @@ docs/plans/<feature-name>-<date>-plan.md
 ## Handoffs
 
 The handoff prompt, target agent, and button label are defined in the YAML frontmatter `handoffs:` array.
-
-`send: true` means the handoff prompt auto-submits after the user selects the handoff button. It does not run without the button click. For this planner, only show or use the implementation handoff after explicit user approval of the plan.
 
 Before presenting the handoff:
 1. Confirm the user has explicitly approved the plan.

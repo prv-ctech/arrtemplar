@@ -4,7 +4,7 @@ import {
   DEFAULT_CATPPUCCIN_THEME,
   isCatppuccinTheme,
   resolveCatppuccinTheme,
-} from "./theme-options";
+} from "../../../../../../apps/web/src/features/theme/theme-options";
 
 describe("Catppuccin theme options", () => {
   it("exposes all requested Catppuccin flavors", () => {

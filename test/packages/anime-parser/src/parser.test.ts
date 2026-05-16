@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { normalizeAnimeTitle, parseAnimeRelease } from ".";
+import { normalizeAnimeTitle, parseAnimeRelease } from "../../../../packages/anime-parser/src";
 
 describe("normalizeAnimeTitle", () => {
   it("normalizes spacing, punctuation, case, and unicode width", () => {

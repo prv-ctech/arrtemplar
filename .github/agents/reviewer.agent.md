@@ -41,6 +41,10 @@ Load these additional skills when the change involves their domain:
 - `.github/skills/documentation-and-adrs/SKILL.md` — ADRs, specs, public APIs, release notes, or future-maintainer context
 - `.github/skills/deprecation-and-migration/SKILL.md` — deprecated APIs, legacy removals, migration completeness, consumer compatibility, or old/new system overlap
 
+## Browser Verification Rule
+
+When any review needs browser-based verification, never use an external browser. Always use the VS Code integrated browser or browser agent tools from `.github/skills/browser-testing/SKILL.md` (`open_browser_page`, `read_page`, `screenshot_page`, `click_element`, `type_in_page`, `run_playwright_code`). If those tools are unavailable, report that as a blocker instead of switching to Chrome, Firefox, Safari, `$BROWSER`, Chrome DevTools MCP, or any other external browser workflow.
+
 ## Process
 
 ### Step 1: Run Automated Quality Gate
@@ -222,8 +226,6 @@ Do not auto-fix broad implementation issues as reviewer. Review, safely autofix 
 ## Handoffs
 
 The handoff prompt, target agent, and button label are defined in the YAML frontmatter `handoffs:` array.
-
-`send: true` means the handoff prompt auto-submits after the user selects the handoff button. It does not run without the button click; automatic agent-to-agent work uses direct subagent invocation and routing verdicts from the instructions above.
 
 Before presenting the handoff:
 

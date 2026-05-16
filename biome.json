@@ -20,6 +20,8 @@
       "apps/web/src/**/*.ts",
       "apps/web/src/**/*.tsx",
       "apps/web/src/**/*.css",
+      "scripts/**/*.ts",
+      "test/**/*.ts",
       "packages/*/*.json",
       "packages/*/src/**/*.ts"
     ]

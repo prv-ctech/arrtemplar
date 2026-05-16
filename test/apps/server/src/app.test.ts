@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { APP_NAME, APP_VERSION } from "@arrweeb-anime/shared";
-import { createApp } from "./app";
-import { createDatabase } from "./db/client";
+import { createApp } from "../../../../apps/server/src/app";
+import { APP_NAME, APP_VERSION } from "../../../../packages/shared/src";
+import { resetAndOpenTestDatabase } from "../../../helpers/database";
 
 describe("GET /health", () => {
   it("returns service status", async () => {
-    const database = createDatabase(":memory:");
+    const database = await resetAndOpenTestDatabase();
     const app = createApp({ database });
 
     const response = await app.handle(new Request("http://localhost/health"));

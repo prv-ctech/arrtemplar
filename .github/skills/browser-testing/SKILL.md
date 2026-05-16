@@ -1,5 +1,5 @@
 ---
-name: browser-testing-with-devtools
+name: browser-testing
 description: Tests in the VS Code integrated browser. Use when building or debugging anything that runs in a browser. Use when you need to open pages, inspect the DOM, capture console errors, analyze network requests, verify visual output, or interact with web pages via VS Code's built-in browser agent tools.
 compatibility:
   - github-copilot
@@ -18,6 +18,8 @@ metadata:
 VS Code has a **built-in integrated browser** (Playwright-based, runs inside VS Code, no external browser or MCP server needed). When enabled, GitHub Copilot agents gain tools to open pages, read content, click elements, type text, take screenshots, and run custom Playwright code — all inside the editor.
 
 **You do NOT need Chrome DevTools, a separate MCP server, or an external browser.** Everything runs through VS Code's native browser agent tools.
+
+**Non-negotiable browser verification rule:** Never use external browsers for verification. Do not open Chrome, Firefox, Safari, the host default browser via `$BROWSER`, Playwright-launched external browser windows, Chrome DevTools MCP, or any other outside-browser workflow. Always use the VS Code integrated browser or the browser agent tools listed below. If those tools are unavailable, report that as a blocker instead of switching to an external browser.
 
 ## Prerequisites
 

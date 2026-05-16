@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "jsx": "react-jsx",
+    "types": ["bun-types"],
+    "noEmit": true,
+    "paths": {
+      "@/*": ["./apps/web/src/*"],
+      "@arrweeb-anime/anime-parser": ["./packages/anime-parser/src/index.ts"],
+      "@arrweeb-anime/shared": ["./packages/shared/src/index.ts"]
+    }
+  },
+  "include": [
+    "test/**/*.ts",
+    "scripts/**/*.ts",
+    "apps/server/src/**/*.ts",
+    "apps/web/src/**/*.ts",
+    "apps/web/src/**/*.tsx",
+    "packages/*/src/**/*.ts"
+  ]
+}

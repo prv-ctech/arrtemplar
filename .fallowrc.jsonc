@@ -1,0 +1,65 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+
+  // Bun discovers tests under test/ and preloads test/setup.ts from bunfig.toml.
+  // Fallow 2.75.0 does not currently turn those Bun test conventions into entry points.
+  "entry": ["test/**/*.test.ts", "test/setup.ts", ".github/scripts/*.ts"],
+
+  // Agent skill/template assets are documentation inputs, not this app's source graph.
+  "ignorePatterns": [".github/skills/**"],
+
+  // `import { $ } from "bun"` and other Bun module imports are runtime-provided by Bun.
+  "ignoreDependencies": ["bun"],
+
+  // shadcn/ui-style primitives are intentionally exported as a local component API even before
+  // every primitive is consumed by an app page. Fallow still checks whether the files themselves
+  // are reachable; it just does not prune the public surface Biome/TypeScript keep formatted/typed.
+  "ignoreExports": [{ "file": "apps/web/src/components/ui/*.tsx", "exports": ["*"] }],
+
+  // Fallow 2.75.0 currently reports these instance methods even though AuthService invokes them
+  // through its injected limiter instance. Treat them as used so Fallow does not fight runtime code.
+  "usedClassMembers": ["isBlocked", "recordFailure", "clear"],
+
+  "rules": {
+    "unresolved-imports": "error",
+    "unlisted-dependencies": "error",
+    "unused-files": "error",
+    "unused-dependencies": "error",
+    "unused-exports": "warn",
+    "unused-types": "warn",
+    "unused-enum-members": "warn",
+    "unused-class-members": "warn",
+    "duplicate-exports": "warn",
+    "circular-dependencies": "error",
+    "type-only-dependencies": "warn",
+    "test-only-dependencies": "warn",
+    "stale-suppressions": "warn"
+  },
+
+  "duplicates": {
+    "mode": "mild",
+    "minTokens": 50,
+    "minLines": 5,
+    "threshold": 0
+  },
+
+  "health": {
+    "maxCyclomatic": 20,
+    "maxCognitive": 15,
+    // This repo does not emit Istanbul coverage yet; keep CRAP informational until coverage exists.
+    "maxCrap": 10000,
+    "ignore": [".github/scripts/**"]
+  },
+
+  // Normal quality checks use audit mode only: Biome owns file-level lint/format,
+  // TypeScript owns type soundness, and Fallow owns codebase graph health.
+  "audit": {
+    "gate": "new-only"
+  },
+
+  "production": {
+    "deadCode": false,
+    "health": false,
+    "dupes": false
+  }
+}

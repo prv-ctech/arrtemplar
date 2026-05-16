@@ -50,6 +50,10 @@ Load these additional skills when the task involves their domain:
 - `.github/skills/spec-driven-development/SKILL.md` — vague design requests that need clearer requirements before implementation
 - `.github/skills/documentation-and-adrs/SKILL.md` — design-system decisions, shared component contracts, or public UI API changes
 
+## Browser Verification Rule
+
+When any design task needs browser-based verification, never use an external browser. Always use the VS Code integrated browser or browser agent tools from `.github/skills/browser-testing/SKILL.md` (`open_browser_page`, `read_page`, `screenshot_page`, `click_element`, `type_in_page`, `run_playwright_code`). If those tools are unavailable, report that as a blocker instead of switching to Chrome, Firefox, Safari, `$BROWSER`, Chrome DevTools MCP, or any other external browser workflow.
+
 ## Visual Direction Selection
 
 Choose the visual direction from the user's wording, then load the matching local Taste Skill variant in addition to the default `design-taste-frontend` baseline. The Taste Skill docs recommend starting with the default all-rounder, then adding specialized variants only when the visual direction or workflow calls for them.
@@ -275,8 +279,6 @@ Before finalizing any output, verify:
 - [ ] `cn()` utility configured to match the design system
 
 ## Handoffs
-
-`send: true` means the handoff prompt auto-submits after the user selects the handoff button. It does not run without the button click; automatic agent-to-agent work uses direct subagent invocation from the instructions above.
 
 After the user approves the implementation, present the handoff to continue the workflow:
 

@@ -1,37 +1,28 @@
-import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { createDatabase } from "./client";
-import { migrateDatabase } from "./migrate";
-import { auditLogs, users } from "./schema";
-import { seedAdminUser } from "./seed";
-
-const tempDirectories: string[] = [];
-
-afterEach(() => {
-  for (const directory of tempDirectories.splice(0)) {
-    rmSync(directory, { recursive: true, force: true });
-  }
-});
+import { describe, expect, it } from "bun:test";
+import { auditLogs, users } from "../../../../../apps/server/src/db/schema";
+import { seedAdminUser } from "../../../../../apps/server/src/db/seed";
+import {
+  openTestDatabase,
+  resetTestDatabase,
+  TEST_DATABASE_URL,
+} from "../../../../helpers/database";
 
 describe("seedAdminUser", () => {
   it("creates one admin user with an Argon2id password hash and is safe to rerun", async () => {
-    const databaseUrl = createTempDatabaseUrl();
     const password = "correct-horse-battery-staple";
 
-    migrateDatabase(databaseUrl);
+    await resetTestDatabase();
 
     const firstRun = await seedAdminUser(
       { username: "admin", email: "admin@example.local", password },
-      databaseUrl,
+      TEST_DATABASE_URL,
     );
     const secondRun = await seedAdminUser(
       { username: "admin", email: "admin@example.local", password },
-      databaseUrl,
+      TEST_DATABASE_URL,
     );
 
-    const database = createDatabase(databaseUrl);
+    const database = openTestDatabase();
 
     try {
       const seededUsers = database.db.select().from(users).all();
@@ -54,9 +45,7 @@ describe("seedAdminUser", () => {
   });
 
   it("rejects placeholder admin passwords", async () => {
-    const databaseUrl = createTempDatabaseUrl();
-
-    migrateDatabase(databaseUrl);
+    await resetTestDatabase();
 
     await expect(
       seedAdminUser(
@@ -65,15 +54,8 @@ describe("seedAdminUser", () => {
           email: "admin@example.local",
           password: "change-me-before-running-seed",
         },
-        databaseUrl,
+        TEST_DATABASE_URL,
       ),
     ).rejects.toThrow("ADMIN_PASSWORD must be changed");
   });
 });
-
-function createTempDatabaseUrl(): string {
-  const directory = mkdtempSync(join(tmpdir(), "arrweeb-anime-seed-"));
-  tempDirectories.push(directory);
-
-  return join(directory, "arrweeb-anime.sqlite");
-}

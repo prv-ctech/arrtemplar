@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { resolveApiBaseUrl } from "./api-base-url";
+import { resolveApiBaseUrl } from "../../../../../apps/web/src/lib/api-base-url";
 
 describe("resolveApiBaseUrl", () => {
   it("defaults to the browser origin so Vite can proxy API calls in development", () => {

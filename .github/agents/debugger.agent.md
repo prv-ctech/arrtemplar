@@ -37,6 +37,10 @@ Load these additional skills when the failure involves their domain:
 - `.github/skills/code-simplification/SKILL.md` — complex code paths where simplification is part of the root-cause fix
 - `.github/skills/deprecation-and-migration/SKILL.md` — failures caused by legacy replacements, deprecated APIs, migration regressions, or old/new system compatibility
 
+## Browser Verification Rule
+
+When any debugging task needs browser-based verification, never use an external browser. Always use the VS Code integrated browser or browser agent tools from `.github/skills/browser-testing/SKILL.md` (`open_browser_page`, `read_page`, `screenshot_page`, `click_element`, `type_in_page`, `run_playwright_code`). If those tools are unavailable, report that as a blocker instead of switching to Chrome, Firefox, Safari, `$BROWSER`, Chrome DevTools MCP, or any other external browser workflow.
+
 ## Process
 
 ### Step 1: Reproduce
@@ -144,7 +148,6 @@ After every code change, run the quality pipeline:
 
 ## Handoffs
 
-- `send: true` means the handoff prompt auto-submits after the user selects the handoff button. It does not run without the button click; automatic agent-to-agent work uses direct subagent invocation from the instructions above.
 - **If the fix requires significant new code:** Invoke the `implementer` subagent with the root cause, reproduction, failing test, and expected fix scope.
 - **After fix is verified:** Hand off to reviewer agent:
   - Agent: `reviewer`

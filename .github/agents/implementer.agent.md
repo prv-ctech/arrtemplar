@@ -41,6 +41,10 @@ Load these additional skills when the task involves their domain:
 - `.github/skills/ci-cd-and-automation/SKILL.md` — build, test, deployment, or quality-gate automation
 - `.github/skills/deprecation-and-migration/SKILL.md` — replacing old systems/APIs/libraries, migrating consumers, removing deprecated code, or consolidating duplicate implementations
 
+## Browser Verification Rule
+
+When any implementation needs browser-based verification, never use an external browser. Always use the VS Code integrated browser or browser agent tools from `.github/skills/browser-testing/SKILL.md` (`open_browser_page`, `read_page`, `screenshot_page`, `click_element`, `type_in_page`, `run_playwright_code`). If those tools are unavailable, report that as a blocker instead of switching to Chrome, Firefox, Safari, `$BROWSER`, Chrome DevTools MCP, or any other external browser workflow.
+
 ## Process
 
 ### Step 1: Understand the Task
@@ -132,8 +136,6 @@ The automatic loop is mandatory for implementation work. The YAML `handoffs:` en
 7. **Login credentials.** When logging into the app, read `.secrets/credentials.txt` — do not guess or ask the user.
 
 ## Handoffs
-
-`send: true` means the handoff prompt auto-submits after the user selects the handoff button. It does not run without the button click; automatic agent-to-agent work uses direct subagent invocation from the instructions above.
 
 The end-of-session handoff (reviewer) is defined in the YAML frontmatter `handoffs:` array, but the agent must invoke subagents directly before relying on manual handoff buttons.
 

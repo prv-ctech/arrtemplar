@@ -7,6 +7,7 @@ coverage/
 *.log
 .DS_Store
 .contextstream/
+.fallow/
 .vscode/mcp.json
 
 # Local environment and database files
@@ -18,3 +19,8 @@ data/
 *.sqlite-shm
 *.sqlite-wal
 .reference/
+
+#local docs (we must not share docs, they are not plublic)
+docs/research/
+docs/code-review/
+docs/plans/

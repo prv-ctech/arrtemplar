@@ -28,6 +28,10 @@ Load these additional skills when the research topic involves their domain:
 - `.github/skills/shipping-and-launch/SKILL.md` — production rollout, monitoring, staged releases, or rollback strategy
 - `.github/skills/deprecation-and-migration/SKILL.md` — migration guides, deprecated APIs/libraries, replacement options, compatibility timelines, or sunset strategy research
 
+## Browser Verification Rule
+
+When any research requires browser-based verification, never use an external browser. Always use the VS Code integrated browser or browser agent tools from `.github/skills/browser-testing/SKILL.md` (`open_browser_page`, `read_page`, `screenshot_page`, `click_element`, `type_in_page`, `run_playwright_code`). If those tools are unavailable, report that as a blocker instead of switching to Chrome, Firefox, Safari, `$BROWSER`, Chrome DevTools MCP, or any other external browser workflow.
+
 ## Research Sources (in priority order)
 
 ### 1. DeepWiki — Repo Documentation

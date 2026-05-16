@@ -1,26 +1,21 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { createApp } from "../app";
-import { createDatabase, type DatabaseClient } from "../db/client";
-import { migrateDatabase } from "../db/migrate";
-import { auditLogs, sessions, users } from "../db/schema";
-import { seedAdminUserWithDatabase } from "../db/seed";
-import { hashPassword } from "./password";
-import { LoginRateLimiter } from "./rate-limit";
-import { hashSessionToken, SESSION_COOKIE_NAME } from "./session-token";
+import { createApp } from "../../../../../apps/server/src/app";
+import { hashPassword } from "../../../../../apps/server/src/auth/password";
+import { LoginRateLimiter } from "../../../../../apps/server/src/auth/rate-limit";
+import {
+  hashSessionToken,
+  SESSION_COOKIE_NAME,
+} from "../../../../../apps/server/src/auth/session-token";
+import type { DatabaseClient } from "../../../../../apps/server/src/db/client";
+import { auditLogs, sessions, users } from "../../../../../apps/server/src/db/schema";
+import { seedAdminUserWithDatabase } from "../../../../../apps/server/src/db/seed";
+import { resetAndOpenTestDatabase } from "../../../../helpers/database";
 
-const tempDirectories: string[] = [];
 const openDatabases: DatabaseClient[] = [];
 
 afterEach(() => {
   for (const database of openDatabases.splice(0)) {
     database.close();
-  }
-
-  for (const directory of tempDirectories.splice(0)) {
-    rmSync(directory, { recursive: true, force: true });
   }
 });
 
@@ -191,10 +186,7 @@ async function createAuthTestApp(rateLimiter = new LoginRateLimiter()): Promise<
   app: ReturnType<typeof createApp>;
   database: DatabaseClient;
 }> {
-  const databaseUrl = createTempDatabaseUrl();
-  migrateDatabase(databaseUrl);
-
-  const database = createDatabase(databaseUrl);
+  const database = await resetAndOpenTestDatabase();
   openDatabases.push(database);
 
   await seedAdminUserWithDatabase(
@@ -224,13 +216,6 @@ async function createAuthTestApp(rateLimiter = new LoginRateLimiter()): Promise<
     app: createApp({ database, sessionCookieSecure: true, loginRateLimiter: rateLimiter }),
     database,
   };
-}
-
-function createTempDatabaseUrl(): string {
-  const directory = mkdtempSync(join(tmpdir(), "arrweeb-anime-auth-"));
-  tempDirectories.push(directory);
-
-  return join(directory, "arrweeb-anime.sqlite");
 }
 
 function jsonRequest(path: string, body: unknown): Request {

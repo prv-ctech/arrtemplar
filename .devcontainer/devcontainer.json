@@ -38,7 +38,11 @@
         "SmallMain.vscode-unify-chat-provider",
         "Catppuccin.catppuccin-vsc",
         "thang-nm.flow-icons",
-        "tonybaloney.vscode-pets"
+        "tonybaloney.vscode-pets",
+        "vscjava.vscode-java-debug",
+        "github.vscode-github-actions",
+        "vscjava.vscode-java-pack",
+        "bierner.markdown-mermaid"
       ],
       "settings": {
         "workbench.browser.openLocalhostLinks": true,
@@ -59,7 +63,7 @@
     },
     "5173": {
       "label": "Vite web app",
-      "onAutoForward": "openBrowser",
+      "onAutoForward": "silent",
       "protocol": "http"
     }
   },
