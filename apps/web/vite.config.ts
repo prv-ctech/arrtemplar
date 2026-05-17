@@ -2,6 +2,11 @@ import path from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv } from "vite";
+import {
+  devServerAllowedHosts,
+  devServerAllowedOrigins,
+  devServerDenyFiles,
+} from "./src/lib/vite-dev-server-security";
 
 const workspaceRoot = path.resolve(__dirname, "../..");
 const pollingContainerKeys = ["REMOTE_CONTAINERS", "CODESPACES", "DEVCONTAINER"] as const;
@@ -36,7 +41,16 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
+      // Required for VS Code dev containers and remote port forwarding; exposure is constrained below.
       host: "0.0.0.0",
+      allowedHosts: devServerAllowedHosts,
+      cors: {
+        origin: devServerAllowedOrigins,
+      },
+      fs: {
+        strict: true,
+        deny: devServerDenyFiles,
+      },
       proxy: {
         "/health": {
           target: backendOrigin,

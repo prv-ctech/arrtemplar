@@ -6,9 +6,9 @@ import type {
   LogoutResponse,
 } from "@arrweeb-anime/shared";
 import { Elysia, t } from "elysia";
-import { MIN_PASSWORD_LENGTH } from "./password";
 import type { DatabaseClient } from "../db/client";
 import { AuthService } from "./auth.service";
+import { MIN_PASSWORD_LENGTH } from "./password";
 import type { LoginRateLimiter } from "./rate-limit";
 import { SESSION_COOKIE_NAME, SESSION_DURATION_SECONDS } from "./session-token";
 
@@ -87,7 +87,12 @@ function createSetupRoutes(authService: AuthService, options: AuthRoutesOptions)
           return status(result.status, result.body);
         }
 
-        writeSessionCookie(cookie[SESSION_COOKIE_NAME], result.sessionToken, result.expiresAt, options);
+        writeSessionCookie(
+          cookie[SESSION_COOKIE_NAME],
+          result.sessionToken,
+          result.expiresAt,
+          options,
+        );
 
         return { user: result.user } satisfies CreateAdminResponse;
       },
@@ -123,7 +128,12 @@ function createSessionRoutes(authService: AuthService, options: AuthRoutesOption
           return status(401, result.body);
         }
 
-        writeSessionCookie(cookie[SESSION_COOKIE_NAME], result.sessionToken, result.expiresAt, options);
+        writeSessionCookie(
+          cookie[SESSION_COOKIE_NAME],
+          result.sessionToken,
+          result.expiresAt,
+          options,
+        );
 
         return { user: result.user } satisfies LoginResponse;
       },
@@ -183,42 +193,40 @@ function createSessionRoutes(authService: AuthService, options: AuthRoutesOption
 }
 
 function createAdminRoutes(authService: AuthService) {
-  return new Elysia()
-    .get(
-      "/admin/auth/check",
-      ({ cookie, request, status }) => {
-        const result = authService.requireRole(
-          readSessionToken(cookie[SESSION_COOKIE_NAME].value),
-          "admin",
-        );
+  return new Elysia().get(
+    "/admin/auth/check",
+    ({ cookie, request, status }) => {
+      const result = authService.requireRole(
+        readSessionToken(cookie[SESSION_COOKIE_NAME].value),
+        "admin",
+      );
 
-        if (!result.ok) {
-          if (result.status === 403) {
-            return status(403, result.body);
-          }
-
-          return status(401, result.body);
+      if (!result.ok) {
+        if (result.status === 403) {
+          return status(403, result.body);
         }
 
-        authService.recordAdminAuthCheck(result.user, createRequestContext(request));
+        return status(401, result.body);
+      }
 
-        return { user: result.user } satisfies AuthUserResponse;
+      authService.recordAdminAuthCheck(result.user, createRequestContext(request));
+
+      return { user: result.user } satisfies AuthUserResponse;
+    },
+    {
+      cookie: sessionCookieSchema,
+      response: {
+        200: authUserResponseSchema,
+        401: apiErrorResponseSchema,
+        403: apiErrorResponseSchema,
       },
-      {
-        cookie: sessionCookieSchema,
-        response: {
-          200: authUserResponseSchema,
-          401: apiErrorResponseSchema,
-          403: apiErrorResponseSchema,
-        },
-        detail: {
-          summary: "Check admin authentication",
-          description:
-            "Protected admin endpoint used to verify session and admin-role enforcement.",
-          tags: ["Auth"],
-        },
+      detail: {
+        summary: "Check admin authentication",
+        description: "Protected admin endpoint used to verify session and admin-role enforcement.",
+        tags: ["Auth"],
       },
-    );
+    },
+  );
 }
 
 function readSessionToken(value: unknown): string | null {

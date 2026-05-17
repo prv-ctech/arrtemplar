@@ -1,5 +1,5 @@
-import { CaretRightIcon } from "@phosphor-icons/react";
 import type { CreateAdminRequest } from "@arrweeb-anime/shared";
+import { CaretRightIcon } from "@phosphor-icons/react";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { type ComponentProps, type FormEvent, useId, useState } from "react";
@@ -68,7 +68,8 @@ function useAuthFormController() {
   const setupStatusError = setupQuery.error
     ? "Could not check first-run setup. Refresh the page or check the API."
     : null;
-  const errorMessage = formError ?? setupStatusError ?? getMutationErrorMessage(activeMutation.error, mode);
+  const errorMessage =
+    formError ?? setupStatusError ?? getMutationErrorMessage(activeMutation.error, mode);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -206,7 +207,11 @@ function AuthFields({ form }: { form: AuthFormController }) {
   );
 }
 
-function AuthTextField({ label, className, ...props }: ComponentProps<typeof Input> & { label: string }) {
+function AuthTextField({
+  label,
+  className,
+  ...props
+}: ComponentProps<typeof Input> & { label: string }) {
   return (
     <div className="flex flex-col gap-2">
       <Label className="text-muted-foreground" htmlFor={props.id}>

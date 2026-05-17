@@ -17,7 +17,8 @@
     "@elysia/cors": "latest",
     "@elysia/openapi": "latest",
     "drizzle-orm": "^0.45.2",
-    "elysia": "latest"
+    "elysia": "latest",
+    "elysiajs-helmet": "1.0.5"
   },
   "devDependencies": {
     "drizzle-kit": "^0.31.10",

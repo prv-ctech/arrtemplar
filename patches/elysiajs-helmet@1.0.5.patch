@@ -1,0 +1,25 @@
+diff --git a/src/index.ts b/src/index.ts
+index 94dae4a9aa1ae9b528706b37b74d1fa17b6eec19..01323daac982b750099e8e708351eb35bfd546f0 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -249,14 +249,17 @@ export function elysiaHelmet(config: Partial<SecurityConfig> = {}) {
+   // Validate configuration only once during initialization
+   validateConfig(config);
+ 
++  const defaultPermissionsPolicy = DEFAULT_SECURITY_CONFIG.permissionsPolicy ?? {};
++  const defaultHsts = DEFAULT_SECURITY_CONFIG.hsts ?? {};
++
+   const finalConfig: SecurityConfig = {
+     ...DEFAULT_SECURITY_CONFIG,
+     ...config,
+     csp: config.csp ? { ...DEFAULT_CSP_CONFIG, ...config.csp } : DEFAULT_CSP_CONFIG,
+     permissionsPolicy: config.permissionsPolicy
+-      ? { ...DEFAULT_SECURITY_CONFIG.permissionsPolicy, ...config.permissionsPolicy }
+-      : DEFAULT_SECURITY_CONFIG.permissionsPolicy,
+-    hsts: config.hsts ? { ...DEFAULT_SECURITY_CONFIG.hsts, ...config.hsts } : DEFAULT_SECURITY_CONFIG.hsts,
++      ? { ...defaultPermissionsPolicy, ...config.permissionsPolicy }
++      : defaultPermissionsPolicy,
++    hsts: config.hsts ? { ...defaultHsts, ...config.hsts } : defaultHsts,
+   };
+ 
+   const staticHeaders: Record<string, string> = {};

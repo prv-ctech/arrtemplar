@@ -39,5 +39,8 @@
     "react-doctor": "^0.1.6",
     "typescript": "latest"
   },
-  "module": "index.ts"
+  "module": "index.ts",
+  "patchedDependencies": {
+    "elysiajs-helmet@1.0.5": "patches/elysiajs-helmet@1.0.5.patch"
+  }
 }

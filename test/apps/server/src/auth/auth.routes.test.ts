@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { createApp } from "../../../../../apps/server/src/app";
 import { hashPassword } from "../../../../../apps/server/src/auth/password";
 import { LoginRateLimiter } from "../../../../../apps/server/src/auth/rate-limit";
 import {
@@ -8,14 +7,17 @@ import {
 } from "../../../../../apps/server/src/auth/session-token";
 import type { DatabaseClient } from "../../../../../apps/server/src/db/client";
 import { auditLogs, sessions, users } from "../../../../../apps/server/src/db/schema";
-import { resetAndOpenTestDatabase } from "../../../../helpers/database";
+import {
+  closeServerTestDatabases,
+  createServerTestApp,
+  csrfJsonRequest,
+  type TestAppContext,
+} from "../../../../helpers/server";
 
 const openDatabases: DatabaseClient[] = [];
 
 afterEach(() => {
-  for (const database of openDatabases.splice(0)) {
-    database.close();
-  }
+  closeServerTestDatabases(openDatabases);
 });
 
 describe("auth routes", () => {
@@ -33,7 +35,7 @@ describe("auth routes", () => {
     const { app, database } = await createEmptyAuthTestApp();
 
     const response = await app.handle(
-      jsonRequest("/api/auth/setup", {
+      csrfJsonRequest("/api/auth/setup", {
         username: "owner",
         email: "owner@example.local",
         password: "correct-horse-battery-staple",
@@ -69,9 +71,9 @@ describe("auth routes", () => {
     expect(storedUser?.role).toBe("admin");
     expect(storedUser?.passwordHash).toStartWith("$argon2id$");
     expect(storedUser?.passwordHash).not.toBe("correct-horse-battery-staple");
-    expect(await Bun.password.verify("correct-horse-battery-staple", storedUser?.passwordHash ?? "")).toBe(
-      true,
-    );
+    expect(
+      await Bun.password.verify("correct-horse-battery-staple", storedUser?.passwordHash ?? ""),
+    ).toBe(true);
     expect(storedSession?.userId).toBe(storedUser?.id);
     expect(storedSession?.tokenHash).toBe(hashSessionToken(sessionToken));
     expect(auditActions).toContain("auth.setup.admin_created");
@@ -89,7 +91,7 @@ describe("auth routes", () => {
     const statusResponse = await app.handle(new Request("http://localhost/api/auth/setup"));
     const statusBody = await statusResponse.json();
     const createResponse = await app.handle(
-      jsonRequest("/api/auth/setup", {
+      csrfJsonRequest("/api/auth/setup", {
         username: "second-admin",
         email: "second-admin@example.local",
         password: "correct-horse-battery-staple",
@@ -113,7 +115,7 @@ describe("auth routes", () => {
     const { app, database } = await createAuthTestApp();
 
     const loginResponse = await app.handle(
-      jsonRequest("/api/auth/login", {
+      csrfJsonRequest("/api/auth/login", {
         email: "admin@example.local",
         password: "correct-horse-battery-staple",
       }),
@@ -157,10 +159,7 @@ describe("auth routes", () => {
     expect(adminResponse.status).toBe(200);
 
     const logoutResponse = await app.handle(
-      new Request("http://localhost/api/auth/logout", {
-        method: "POST",
-        headers: { cookie: cookieHeader },
-      }),
+      csrfJsonRequest("/api/auth/logout", undefined, { cookie: cookieHeader }),
     );
     const logoutBody = await logoutResponse.json();
 
@@ -190,7 +189,7 @@ describe("auth routes", () => {
     const { app, database } = await createAuthTestApp();
 
     const response = await app.handle(
-      jsonRequest("/api/auth/login", {
+      csrfJsonRequest("/api/auth/login", {
         email: "admin@example.local",
         password: "wrong-password",
       }),
@@ -207,22 +206,25 @@ describe("auth routes", () => {
     expect(JSON.stringify(body)).not.toContain("passwordHash");
     expect(JSON.stringify(body)).not.toContain("wrong-password");
     expect(database.db.select().from(sessions).all()).toHaveLength(0);
-    expect(
-      database.db
-        .select()
-        .from(auditLogs)
-        .all()
-        .map((entry) => entry.action),
-    ).toContain("auth.login.failed");
+    const failedLoginAudit = database.db
+      .select()
+      .from(auditLogs)
+      .all()
+      .find((entry) => entry.action === "auth.login.failed");
+
+    expect(failedLoginAudit).toBeDefined();
+    expect(failedLoginAudit?.metadataJson).toBe(JSON.stringify({ email: "admin@example.local" }));
+    expect(JSON.stringify(failedLoginAudit)).not.toContain("wrong-password");
+    expect(JSON.stringify(failedLoginAudit)).not.toContain("arrweeb_session");
   });
 
   it("rate-limits repeated failed logins", async () => {
     const { app } = await createAuthTestApp(new LoginRateLimiter(2, 15 * 60 * 1000));
     const body = { email: "admin@example.local", password: "wrong-password" };
 
-    const first = await app.handle(jsonRequest("/api/auth/login", body));
-    const second = await app.handle(jsonRequest("/api/auth/login", body));
-    const third = await app.handle(jsonRequest("/api/auth/login", body));
+    const first = await app.handle(csrfJsonRequest("/api/auth/login", body));
+    const second = await app.handle(csrfJsonRequest("/api/auth/login", body));
+    const third = await app.handle(csrfJsonRequest("/api/auth/login", body));
     const thirdBody = await third.json();
 
     expect(first.status).toBe(401);
@@ -246,7 +248,7 @@ describe("auth routes", () => {
     expect(anonymousResponse.status).toBe(401);
 
     const loginResponse = await app.handle(
-      jsonRequest("/api/auth/login", {
+      csrfJsonRequest("/api/auth/login", {
         email: "viewer@example.local",
         password: "correct-horse-battery-staple",
       }),
@@ -266,13 +268,43 @@ describe("auth routes", () => {
       },
     });
   });
+
+  it("treats deleted sessions as anonymous for current-user and admin checks", async () => {
+    const { app, database } = await createAuthTestApp();
+    const cookieHeader = await loginAndReadCookie(app);
+
+    database.db.delete(sessions).run();
+
+    await expectSessionRejected(app, cookieHeader);
+  });
+
+  it("expires sessions before current-user and admin checks", async () => {
+    const { app, database } = await createAuthTestApp();
+    const cookieHeader = await loginAndReadCookie(app);
+    const expiredAt = new Date(Date.now() - 60_000).toISOString();
+
+    database.db.update(sessions).set({ expiresAt: expiredAt }).run();
+
+    await expectSessionRejected(app, cookieHeader);
+    expect(database.db.select().from(sessions).all()).toHaveLength(0);
+  });
+
+  it("blocks disabled users even when they still have a session", async () => {
+    const { app, database } = await createAuthTestApp();
+    const cookieHeader = await loginAndReadCookie(app);
+
+    database.db.update(users).set({ disabledAt: new Date().toISOString() }).run();
+
+    await expectSessionRejected(app, cookieHeader);
+  });
 });
 
 async function createAuthTestApp(rateLimiter = new LoginRateLimiter()): Promise<{
-  app: ReturnType<typeof createApp>;
+  app: TestAppContext["app"];
   database: DatabaseClient;
 }> {
-  const { database } = await createEmptyAuthTestApp(rateLimiter);
+  const context = await createEmptyAuthTestApp(rateLimiter);
+  const { database } = context;
 
   await insertTestUser(database, {
     username: "admin",
@@ -287,23 +319,13 @@ async function createAuthTestApp(rateLimiter = new LoginRateLimiter()): Promise<
     role: "user",
   });
 
-  return {
-    app: createApp({ database, sessionCookieSecure: true, loginRateLimiter: rateLimiter }),
-    database,
-  };
+  return context;
 }
 
-async function createEmptyAuthTestApp(rateLimiter = new LoginRateLimiter()): Promise<{
-  app: ReturnType<typeof createApp>;
-  database: DatabaseClient;
-}> {
-  const database = await resetAndOpenTestDatabase();
-  openDatabases.push(database);
-
-  return {
-    app: createApp({ database, sessionCookieSecure: true, loginRateLimiter: rateLimiter }),
-    database,
-  };
+async function createEmptyAuthTestApp(
+  rateLimiter = new LoginRateLimiter(),
+): Promise<TestAppContext> {
+  return createServerTestApp(openDatabases, { loginRateLimiter: rateLimiter });
 }
 
 async function insertTestUser(
@@ -325,12 +347,34 @@ async function insertTestUser(
     .run();
 }
 
-function jsonRequest(path: string, body: unknown): Request {
-  return new Request(`http://localhost${path}`, {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-forwarded-for": "127.0.0.1" },
-    body: JSON.stringify(body),
-  });
+async function loginAndReadCookie(app: TestAppContext["app"]): Promise<string> {
+  const loginResponse = await app.handle(
+    csrfJsonRequest("/api/auth/login", {
+      email: "admin@example.local",
+      password: "correct-horse-battery-staple",
+    }),
+  );
+
+  expect(loginResponse.status).toBe(200);
+
+  return toCookieHeader(loginResponse.headers.get("set-cookie") ?? "");
+}
+
+async function expectSessionRejected(
+  app: TestAppContext["app"],
+  cookieHeader: string,
+): Promise<void> {
+  const meResponse = await app.handle(
+    new Request("http://localhost/api/auth/me", { headers: { cookie: cookieHeader } }),
+  );
+  const meBody = await meResponse.json();
+  const adminResponse = await app.handle(
+    new Request("http://localhost/api/admin/auth/check", { headers: { cookie: cookieHeader } }),
+  );
+
+  expect(meResponse.status).toBe(200);
+  expect(meBody).toEqual({ user: null });
+  expect(adminResponse.status).toBe(401);
 }
 
 function toCookieHeader(setCookie: string): string {

@@ -2,10 +2,19 @@ import { APP_NAME, APP_VERSION, type HealthResponse } from "@arrweeb-anime/share
 import { cors } from "@elysia/cors";
 import { openapi } from "@elysia/openapi";
 import { Elysia, t } from "elysia";
+import { elysiaHelmet } from "elysiajs-helmet";
 import type { LoginRateLimiter } from "./auth/rate-limit";
 import { createAuthRoutes } from "./auth/routes";
 import { env } from "./config/env";
 import { createDatabase, type DatabaseClient } from "./db/client";
+import {
+  corsAllowedHeaders,
+  corsAllowedMethods,
+  removeRejectedOriginCredentials,
+} from "./security/cors";
+import { enforceCsrfPolicy } from "./security/csrf";
+import { handleSafeError } from "./security/errors";
+import { appendSupplementalCspDirectives, securityHeaderConfig } from "./security/headers";
 
 const healthResponseSchema = t.Object({
   name: t.Literal(APP_NAME),
@@ -33,8 +42,15 @@ export function createApp(options: CreateAppOptions = {}) {
       cors({
         origin: env.webOrigin,
         credentials: true,
+        methods: corsAllowedMethods,
+        allowedHeaders: corsAllowedHeaders,
       }),
     )
+    .onRequest(removeRejectedOriginCredentials(env.webOrigin))
+    .use(elysiaHelmet(securityHeaderConfig))
+    .onAfterHandle(appendSupplementalCspDirectives)
+    .onRequest(enforceCsrfPolicy(env.webOrigin))
+    .onError(handleSafeError)
     .use(
       openapi({
         documentation: {
