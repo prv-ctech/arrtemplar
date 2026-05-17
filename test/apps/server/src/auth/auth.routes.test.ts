@@ -111,6 +111,78 @@ describe("auth routes", () => {
     expect(database.db.select().from(users).all()).toHaveLength(2);
   });
 
+  it("lets only an admin create later local accounts and always stores them as users", async () => {
+    const { app, database } = await createAuthTestApp();
+    const adminCookie = await loginAndReadCookie(app);
+
+    const response = await app.handle(
+      csrfJsonRequest(
+        "/api/admin/users",
+        {
+          username: "watcher",
+          email: "watcher@example.local",
+          password: "correct-horse-battery-staple",
+          role: "admin",
+        },
+        { cookie: adminCookie },
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({
+      user: {
+        id: expect.any(String),
+        username: "watcher",
+        email: "watcher@example.local",
+        role: "user",
+        createdAt: expect.any(String),
+        lastLoginAt: null,
+      },
+    });
+
+    const createdUser = database.db
+      .select()
+      .from(users)
+      .all()
+      .find((user) => user.email === "watcher@example.local");
+    const auditActions = database.db
+      .select()
+      .from(auditLogs)
+      .all()
+      .map((entry) => entry.action);
+
+    expect(createdUser?.role).toBe("user");
+    expect(createdUser?.passwordHash).toStartWith("$argon2id$");
+    expect(createdUser?.passwordHash).not.toBe("correct-horse-battery-staple");
+    expect(auditActions).toContain("admin.users.created");
+  });
+
+  it("blocks anonymous and non-admin clients from creating local accounts", async () => {
+    const { app } = await createAuthTestApp();
+    const requestBody = {
+      username: "blocked-viewer",
+      email: "blocked-viewer@example.local",
+      password: "correct-horse-battery-staple",
+    };
+
+    const anonymousResponse = await app.handle(csrfJsonRequest("/api/admin/users", requestBody));
+    const viewerLoginResponse = await app.handle(
+      csrfJsonRequest("/api/auth/login", {
+        email: "viewer@example.local",
+        password: "correct-horse-battery-staple",
+      }),
+    );
+    const viewerCookie = toCookieHeader(viewerLoginResponse.headers.get("set-cookie") ?? "");
+    const viewerResponse = await app.handle(
+      csrfJsonRequest("/api/admin/users", requestBody, { cookie: viewerCookie }),
+    );
+
+    expect(anonymousResponse.status).toBe(401);
+    expect(viewerLoginResponse.status).toBe(200);
+    expect(viewerResponse.status).toBe(403);
+  });
+
   it("logs in an admin, sets a secure HttpOnly cookie, exposes /me, and logs out", async () => {
     const { app, database } = await createAuthTestApp();
 

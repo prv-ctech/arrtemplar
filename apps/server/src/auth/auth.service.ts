@@ -1,11 +1,12 @@
 import type {
   ApiErrorResponse,
   CreateAdminRequest,
+  CreateLocalUserRequest,
   LoginRequest,
   PublicUser,
   UserRole,
 } from "@arrweeb-anime/shared";
-import { eq, sql } from "drizzle-orm";
+import { eq, or, sql } from "drizzle-orm";
 import type { DatabaseClient } from "../db/client";
 import { auditLogs, sessions, type User, users } from "../db/schema";
 import { hashPassword, verifyPassword } from "./password";
@@ -47,6 +48,19 @@ export type CreateAdminFailure = {
 
 export type CreateAdminResult = CreateAdminSuccess | CreateAdminFailure;
 
+type CreateLocalUserSuccess = {
+  ok: true;
+  user: PublicUser;
+};
+
+type CreateLocalUserFailure = {
+  ok: false;
+  status: 409;
+  body: ApiErrorResponse;
+};
+
+type CreateLocalUserResult = CreateLocalUserSuccess | CreateLocalUserFailure;
+
 const invalidCredentialsError: ApiErrorResponse = {
   error: {
     code: "INVALID_CREDENTIALS",
@@ -82,6 +96,13 @@ const setupAlreadyCompleteError: ApiErrorResponse = {
   },
 };
 
+const userAlreadyExistsError: ApiErrorResponse = {
+  error: {
+    code: "USER_ALREADY_EXISTS",
+    message: "A user with that username or email already exists.",
+  },
+};
+
 export class AuthService {
   constructor(
     private readonly database: DatabaseClient,
@@ -101,7 +122,7 @@ export class AuthService {
     }
 
     const now = new Date();
-    const user = await createInitialAdminUser(input, now);
+    const user = await createUserRecord(input, "admin", now);
     const created = this.insertInitialAdmin(user, context, now);
 
     if (!created) {
@@ -116,6 +137,22 @@ export class AuthService {
       sessionToken: session.sessionToken,
       expiresAt: session.expiresAt,
     };
+  }
+
+  async createLocalUser(
+    input: CreateLocalUserRequest,
+    actor: PublicUser,
+    context: AuthRequestContext,
+  ): Promise<CreateLocalUserResult> {
+    const now = new Date();
+    const user = await createUserRecord(input, "user", now);
+    const created = this.insertLocalUser(user, actor, context, now);
+
+    if (!created) {
+      return { ok: false, status: 409, body: userAlreadyExistsError };
+    }
+
+    return { ok: true, user: toPublicUser(user) };
   }
 
   async login(input: LoginRequest, context: AuthRequestContext): Promise<LoginResult> {
@@ -319,6 +356,41 @@ export class AuthService {
     });
   }
 
+  private insertLocalUser(
+    user: User,
+    actor: PublicUser,
+    context: AuthRequestContext,
+    now: Date,
+  ): boolean {
+    return this.database.db.transaction((tx) => {
+      const existingUser = tx
+        .select({ id: users.id })
+        .from(users)
+        .where(or(eq(users.username, user.username), eq(users.email, user.email)))
+        .get();
+
+      if (existingUser) {
+        return false;
+      }
+
+      tx.insert(users).values(user).run();
+      tx.insert(auditLogs)
+        .values({
+          id: crypto.randomUUID(),
+          actorUserId: actor.id,
+          action: "admin.users.created",
+          targetType: "user",
+          targetId: user.id,
+          metadataJson: JSON.stringify({ username: user.username, email: user.email }),
+          ipAddress: context.ipAddress,
+          createdAt: now.toISOString(),
+        })
+        .run();
+
+      return true;
+    });
+  }
+
   private createSession(
     user: User,
     context: AuthRequestContext,
@@ -379,13 +451,17 @@ function toPublicUser(user: User): PublicUser {
   };
 }
 
-async function createInitialAdminUser(input: CreateAdminRequest, now: Date): Promise<User> {
+async function createUserRecord(
+  input: CreateAdminRequest | CreateLocalUserRequest,
+  role: UserRole,
+  now: Date,
+): Promise<User> {
   return {
     id: crypto.randomUUID(),
     username: input.username.trim(),
     email: normalizeEmail(input.email),
     passwordHash: await hashPassword(input.password),
-    role: "admin",
+    role,
     disabledAt: null,
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),

@@ -59,7 +59,7 @@ function LoginRoute() {
       <section className="relative grid min-h-dvh place-items-center px-3 py-3 sm:px-5 sm:py-4 lg:px-8">
         <div className="w-full max-w-6xl overflow-hidden rounded-[1.65rem] border border-border bg-card/90 p-0 text-card-foreground shadow-(--shadow-panel) backdrop-blur-xl">
           <div className="grid min-h-0 gap-3 p-3 md:h-[min(36rem,calc(100dvh-3.5rem))] md:grid-cols-[minmax(19rem,0.82fr)_minmax(23rem,1.18fr)]">
-            <div className="relative flex min-h-[min(34rem,calc(100dvh-2rem))] items-center justify-center overflow-hidden rounded-[1.35rem] border border-border bg-[linear-gradient(135deg,color-mix(in_srgb,var(--card)_94%,transparent),color-mix(in_srgb,var(--background)_94%,transparent),color-mix(in_srgb,var(--secondary)_92%,transparent))] px-5 py-7 shadow-[inset_0_1px_0_hsl(0_0%_100%/0.08)] sm:px-8 md:h-full md:min-h-0 md:px-6 md:py-5 lg:px-8">
+            <div className="relative flex min-h-[min(34rem,calc(100dvh-2rem))] items-start justify-center overflow-x-hidden overflow-y-auto overscroll-contain rounded-[1.35rem] border border-border bg-[linear-gradient(135deg,color-mix(in_srgb,var(--card)_94%,transparent),color-mix(in_srgb,var(--background)_94%,transparent),color-mix(in_srgb,var(--secondary)_92%,transparent))] px-5 py-7 shadow-[inset_0_1px_0_hsl(0_0%_100%/0.08)] sm:px-8 md:h-full md:min-h-0 md:px-6 md:py-5 lg:px-8">
               <div className="absolute right-4 top-4">
                 <ThemeSwitcher compact />
               </div>

@@ -20,11 +20,21 @@ export type CreateAdminRequest = {
   password: string;
 };
 
+export type CreateLocalUserRequest = {
+  username: string;
+  email: string;
+  password: string;
+};
+
 export type LoginResponse = {
   user: PublicUser;
 };
 
 export type CreateAdminResponse = {
+  user: PublicUser;
+};
+
+export type CreateLocalUserResponse = {
   user: PublicUser;
 };
 

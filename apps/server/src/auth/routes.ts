@@ -2,6 +2,7 @@ import type {
   AuthSetupStatusResponse,
   AuthUserResponse,
   CreateAdminResponse,
+  CreateLocalUserResponse,
   LoginResponse,
   LogoutResponse,
 } from "@arrweeb-anime/shared";
@@ -34,8 +35,15 @@ const createAdminRequestSchema = t.Object({
   password: t.String({ minLength: MIN_PASSWORD_LENGTH, maxLength: 1024 }),
 });
 
+const createLocalUserRequestSchema = t.Object({
+  username: t.String({ minLength: 1, maxLength: 80, pattern: ".*\\S.*" }),
+  email: t.String({ format: "email" }),
+  password: t.String({ minLength: MIN_PASSWORD_LENGTH, maxLength: 1024 }),
+});
+
 const loginResponseSchema = t.Object({ user: publicUserSchema });
 const createAdminResponseSchema = t.Object({ user: publicUserSchema });
+const createLocalUserResponseSchema = t.Object({ user: publicUserSchema });
 const authSetupStatusResponseSchema = t.Object({ required: t.Boolean() });
 const authUserResponseSchema = t.Object({ user: t.Union([publicUserSchema, t.Null()]) });
 const logoutResponseSchema = t.Object({ status: t.Literal("ok") });
@@ -193,40 +201,80 @@ function createSessionRoutes(authService: AuthService, options: AuthRoutesOption
 }
 
 function createAdminRoutes(authService: AuthService) {
-  return new Elysia().get(
-    "/admin/auth/check",
-    ({ cookie, request, status }) => {
-      const result = authService.requireRole(
-        readSessionToken(cookie[SESSION_COOKIE_NAME].value),
-        "admin",
-      );
+  return new Elysia()
+    .get(
+      "/admin/auth/check",
+      ({ cookie, request, status }) => {
+        const result = authService.requireRole(
+          readSessionToken(cookie[SESSION_COOKIE_NAME].value),
+          "admin",
+        );
 
-      if (!result.ok) {
-        if (result.status === 403) {
-          return status(403, result.body);
+        if (!result.ok) {
+          if (result.status === 403) {
+            return status(403, result.body);
+          }
+
+          return status(401, result.body);
         }
 
-        return status(401, result.body);
-      }
+        authService.recordAdminAuthCheck(result.user, createRequestContext(request));
 
-      authService.recordAdminAuthCheck(result.user, createRequestContext(request));
+        return { user: result.user } satisfies AuthUserResponse;
+      },
+      {
+        cookie: sessionCookieSchema,
+        response: {
+          200: authUserResponseSchema,
+          401: apiErrorResponseSchema,
+          403: apiErrorResponseSchema,
+        },
+        detail: {
+          summary: "Check admin authentication",
+          description:
+            "Protected admin endpoint used to verify session and admin-role enforcement.",
+          tags: ["Auth"],
+        },
+      },
+    )
+    .post(
+      "/admin/users",
+      async ({ body, cookie, request, status }) => {
+        const context = createRequestContext(request);
+        const adminResult = authService.requireRole(
+          readSessionToken(cookie[SESSION_COOKIE_NAME].value),
+          "admin",
+        );
 
-      return { user: result.user } satisfies AuthUserResponse;
-    },
-    {
-      cookie: sessionCookieSchema,
-      response: {
-        200: authUserResponseSchema,
-        401: apiErrorResponseSchema,
-        403: apiErrorResponseSchema,
+        if (!adminResult.ok) {
+          return status(adminResult.status, adminResult.body);
+        }
+
+        const result = await authService.createLocalUser(body, adminResult.user, context);
+
+        if (!result.ok) {
+          return status(result.status, result.body);
+        }
+
+        return { user: result.user } satisfies CreateLocalUserResponse;
       },
-      detail: {
-        summary: "Check admin authentication",
-        description: "Protected admin endpoint used to verify session and admin-role enforcement.",
-        tags: ["Auth"],
+      {
+        body: createLocalUserRequestSchema,
+        cookie: sessionCookieSchema,
+        response: {
+          200: createLocalUserResponseSchema,
+          401: apiErrorResponseSchema,
+          403: apiErrorResponseSchema,
+          409: apiErrorResponseSchema,
+        },
+        detail: {
+          summary: "Create local user account",
+          description:
+            "Admin-only endpoint for creating local user accounts. Accounts created here always receive the user role.",
+          tags: ["Auth"],
+        },
       },
-    },
-  );
+    );
 }
 
 function readSessionToken(value: unknown): string | null {
