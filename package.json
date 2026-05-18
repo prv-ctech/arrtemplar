@@ -9,7 +9,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "bun run --filter './apps/*' --parallel dev",
+    "dev": "bun scripts/dev.ts",
     "dev:server": "bun run --cwd apps/server dev",
     "dev:web": "bun run --cwd apps/web dev",
     "dev:typecheck": "tsc -b --noEmit --watch --preserveWatchOutput",

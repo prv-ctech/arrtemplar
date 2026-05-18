@@ -17,7 +17,9 @@ export function useAuthSetupQuery() {
   return useQuery({
     queryKey: authSetupQueryKey,
     queryFn: getAuthSetupStatus,
-    staleTime: 5_000,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: "always",
   });
 }
 

@@ -13,7 +13,7 @@ Arrweeb-anime is a self-hosted anime-native media request, automation, and watch
 - Server-side sessions with hashed session tokens stored in SQLite
 - HttpOnly SameSite session cookies with a production-secure cookie setting
 - Failed-login rate limiting and auth/admin audit log entries
-- Backend LogTape operational logging with redacted rotating JSONL output
+- Backend LogTape operational logging with redacted rotating JSONL output and local terminal mirroring
 - React + Vite + TypeScript frontend
 - Tailwind CSS v4 and shadcn/ui-compatible structure
 - TanStack Query and TanStack Router frontend foundation
@@ -39,12 +39,12 @@ Start the backend and frontend dev servers together:
 bun run dev
 ```
 
-This uses Bun's native workspace script runner to run the app dev scripts in parallel:
+This uses a small Bun-native dev runner instead of Bun workspace `--parallel` mode, so the terminal is not prefixed with package runner labels like `@arrweeb-anime/server:dev |`. Routine Vite output is silenced; backend operational output in the shared dev terminal should come from LogTape. Fatal Vite startup diagnostics are still allowed through stderr so broken frontend startup is not hidden.
 
 | App      | URL                              | Runtime                | Hot reload            |
 | -------- | -------------------------------- | ---------------------- | --------------------- |
 | Backend  | `http://localhost:3000`          | `bun --hot apps/server` | Bun `--hot` (file watcher) |
-| Frontend | `http://localhost:5173`          | `bunx --bun vite`      | Vite HMR / React Fast Refresh |
+| Frontend | `http://localhost:5173`          | `bunx --bun vite --logLevel error` | Vite HMR / React Fast Refresh |
 | Typecheck | `bun run dev:typecheck` (manual) | `tsc --noEmit --watch` | TypeScript watch mode |
 
 - **Backend changes** — Bun's `--hot` reloads Elysia automatically. No app restart needed.
@@ -92,7 +92,7 @@ SQLite does not start a separate database listener, so test isolation is enforce
 
 ### Backend logging
 
-The backend configures LogTape once at startup before migrations and request handling. Application, request, security, and Drizzle query logs always share one operational JSONL file sink. In local development they are also mirrored to the terminal with LogTape's ANSI console formatter, so `bun dev` shows backend startup and request logs next to Vite output.
+The backend configures LogTape once at startup before migrations and request handling. Application, request, security, and Drizzle query logs always share one operational JSONL file sink. In local development they are also mirrored to the terminal with LogTape's ANSI console formatter, so `bun dev` shows backend startup and request logs without Bun workspace prefixes or routine Vite output.
 
 - Default path: `data/logs/arrweeb-anime.jsonl`.
 - Default rotation: 10 MiB per file, keeping 5 rotated files.

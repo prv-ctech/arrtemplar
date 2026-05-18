@@ -1,7 +1,7 @@
 ---
 name: researcher
 description: Pure web research subagent. Gathers high-quality context from web search, DeepWiki repo docs, and official documentation. Writes findings to docs/research/*. Invoked by the brainstorming agent.
-model: route/mimo-v2.5-pro-precision (unify-chat-provider)
+model: GPT-5.5 (unify-chat-provider)
 user-invocable: false
 ---
 

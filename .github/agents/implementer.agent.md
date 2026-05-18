@@ -1,7 +1,7 @@
 ---
 name: implementer
 description: Implementation agent that builds features incrementally with TDD. Loads technology-specific skills for authoritative, production-quality code. Replaces the /build workflow.
-model: route/kimi-k2.6-full (unify-chat-provider)
+model: GPT-5.5 (unify-chat-provider)
 agents: ["reviewer", "debugger"]
 handoffs:
   - label: "Review Implementation"

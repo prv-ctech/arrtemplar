@@ -1,7 +1,7 @@
 ---
 name: reviewer
 description: Code review agent that evaluates changes across correctness, readability, architecture, security, performance, and project quality standards. Runs automated quality checks and auto-fixes when safe. Replaces the /review workflow.
-model: route/kimi-k2.6-full (unify-chat-provider)
+model: GPT-5.5 (unify-chat-provider)
 agents: ["security-auditor"]
 handoffs:
   - label: "Address Review Feedback"

@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { type AuthMode, resolveAuthMode } from "@/features/auth/auth-mode";
 import { getLandingPathForUser } from "@/features/auth/auth-navigation";
 import { authQueryKey, authSetupQueryKey, useAuthSetupQuery } from "@/features/auth/auth-state";
 import { createInitialAdmin, login } from "@/lib/api";
@@ -14,10 +15,32 @@ import { ApiClientError } from "@/lib/api-error";
 import { queryClient } from "@/lib/query-client";
 import { cn } from "@/lib/utils";
 
-type AuthMode = "login" | "setup";
-
 export function LoginForm() {
   const form = useAuthFormController();
+
+  if (form.mode === null) {
+    return (
+      <div className="w-full max-w-sm [@media(max-height:640px)]:max-w-xs">
+        <AuthFormHeader
+          description="Checking whether this server needs its first admin account."
+          title="Checking setup"
+        />
+        {form.errorMessage ? (
+          <div className="mt-7 [@media(max-height:640px)]:mt-5">
+            <AuthErrorMessage message={form.errorMessage} />
+          </div>
+        ) : (
+          <div
+            className="mt-7 rounded-2xl border border-border bg-secondary/45 px-4 py-3 text-center text-sm leading-6 text-muted-foreground [@media(max-height:640px)]:mt-5 [@media(max-height:640px)]:py-2"
+            role="status"
+          >
+            Checking setup status…
+          </div>
+        )}
+      </div>
+    );
+  }
+
   const copy = getAuthFormCopy(form.mode);
 
   return (
@@ -39,7 +62,7 @@ export function LoginForm() {
 function useAuthFormController() {
   const navigate = useNavigate();
   const setupQuery = useAuthSetupQuery();
-  const mode: AuthMode = setupQuery.data?.required === true ? "setup" : "login";
+  const mode = resolveAuthMode(setupQuery.data, setupQuery.isPending || setupQuery.isFetching);
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -68,12 +91,16 @@ function useAuthFormController() {
   const setupStatusError = setupQuery.error
     ? "Could not check first-run setup. Refresh the page or check the API."
     : null;
-  const errorMessage =
-    formError ?? setupStatusError ?? getMutationErrorMessage(activeMutation.error, mode);
+  const mutationErrorMessage = mode ? getMutationErrorMessage(activeMutation.error, mode) : null;
+  const errorMessage = formError ?? setupStatusError ?? mutationErrorMessage;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormError(null);
+
+    if (mode === null) {
+      return;
+    }
 
     if (mode === "setup") {
       submitSetupForm({ username, email, password, confirmPassword, setupMutation, setFormError });
@@ -94,7 +121,7 @@ function useAuthFormController() {
     confirmPassword,
     setConfirmPassword,
     errorMessage,
-    isFormDisabled: setupQuery.isPending || activeMutation.isPending,
+    isFormDisabled: mode === null || setupQuery.isFetching || activeMutation.isPending,
     isSubmitting: activeMutation.isPending,
     handleSubmit,
   };
@@ -122,7 +149,7 @@ function submitSetupForm(input: {
   });
 }
 
-function AuthFormHeader({ title, description }: { title: string; description: string }) {
+function AuthFormHeader({ title, description }: { title: string; description: string | null }) {
   return (
     <div className="flex flex-col items-center text-center">
       <div className="flex size-18 items-center justify-center rounded-[1.25rem] border border-border bg-foreground p-3 text-background shadow-(--shadow-soft) [@media(max-height:640px)]:size-14 [@media(max-height:640px)]:rounded-2xl [@media(max-height:640px)]:p-2.5">
@@ -136,9 +163,11 @@ function AuthFormHeader({ title, description }: { title: string; description: st
       <h1 className="mt-7 text-balance text-3xl font-semibold leading-none tracking-[-0.045em] text-foreground [@media(max-height:640px)]:mt-4 [@media(max-height:640px)]:text-2xl">
         {title}
       </h1>
-      <p className="mt-3 max-w-xs text-pretty text-sm leading-6 text-muted-foreground">
-        {description}
-      </p>
+      {description ? (
+        <p className="mt-3 max-w-xs text-pretty text-sm leading-6 text-muted-foreground">
+          {description}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -269,15 +298,15 @@ function PlexSignInPlaceholder() {
   );
 }
 
-function getAuthFormCopy(mode: AuthMode): { title: string; description: string } {
+function getAuthFormCopy(mode: AuthMode): { title: string; description: string | null } {
   return mode === "setup"
     ? {
         title: "Create admin",
-        description: "No users exist yet. Create the first account to become the administrator.",
+        description: null,
       }
     : {
         title: "Arrweeb",
-        description: "Sign in to manage requests, automation, and your watch queue.",
+        description: null,
       };
 }
 
