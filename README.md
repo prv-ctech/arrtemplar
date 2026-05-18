@@ -128,7 +128,7 @@ On a fresh database, open the app and create the first account from the login pa
 ## Services
 
 - Frontend: `http://localhost:5173`
-- Backend: `http://localhost:3000`
+- Backend: `http://localhost:3000` returns an API landing response with links to the frontend, health check, and OpenAPI UI
 - Health: `http://localhost:5173/health` via Vite proxy, or `http://localhost:3000/health` directly
 - OpenAPI UI: `http://localhost:3000/openapi`
 

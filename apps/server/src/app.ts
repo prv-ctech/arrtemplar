@@ -24,6 +24,30 @@ const healthResponseSchema = t.Object({
   timestamp: t.String({ format: "date-time" }),
 });
 
+const backendRootResponseSchema = t.Object({
+  name: t.Literal(APP_NAME),
+  version: t.String(),
+  service: t.Literal("backend"),
+  frontendUrl: t.String({ format: "uri" }),
+  links: t.Object({
+    frontend: t.String({ format: "uri" }),
+    health: t.String({ format: "uri" }),
+    openapi: t.String({ format: "uri" }),
+  }),
+});
+
+type BackendRootResponse = {
+  name: typeof APP_NAME;
+  version: string;
+  service: "backend";
+  frontendUrl: string;
+  links: {
+    frontend: string;
+    health: string;
+    openapi: string;
+  };
+};
+
 export type CreateAppOptions = {
   database?: DatabaseClient;
   loginRateLimiter?: LoginRateLimiter;
@@ -86,6 +110,29 @@ export function createApp(options: CreateAppOptions = {}) {
     )
     .use(createAuthRoutes(authRoutesOptions))
     .get(
+      "/",
+      ({ request }): BackendRootResponse => ({
+        name: APP_NAME,
+        version: APP_VERSION,
+        service: "backend",
+        frontendUrl: env.webOrigin,
+        links: {
+          frontend: env.webOrigin,
+          health: resolveRequestUrl("/health", request),
+          openapi: resolveRequestUrl("/openapi", request),
+        },
+      }),
+      {
+        response: backendRootResponseSchema,
+        detail: {
+          summary: "Show backend service links",
+          description:
+            "Confirms the Elysia API is running and points developers to the Vite frontend, health endpoint, and OpenAPI UI.",
+          tags: ["System"],
+        },
+      },
+    )
+    .get(
       "/health",
       (): HealthResponse => ({
         name: APP_NAME,
@@ -105,6 +152,10 @@ export function createApp(options: CreateAppOptions = {}) {
 }
 
 export type App = ReturnType<typeof createApp>;
+
+function resolveRequestUrl(path: string, request: Request): string {
+  return new URL(path, request.url).toString();
+}
 
 function normalizeStatusCode(status: number | string | undefined, responseValue: unknown): number {
   const responseStatus = readCustomStatusCode(responseValue);

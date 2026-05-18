@@ -25,7 +25,7 @@ describe("root dev runner", () => {
     expect(bunfig.run?.silent).toBe(true);
   });
 
-  it("passes only backend LogTape output through the terminal", async () => {
+  it("passes backend LogTape output and clean Vite local URL output through the terminal", async () => {
     const { devProcessSpecs } = await importDevModule();
 
     expect(devProcessSpecs).toEqual([
@@ -38,18 +38,18 @@ describe("root dev runner", () => {
       },
       {
         name: "web",
-        cmd: ["bunx", "--bun", "vite", "--no-open", "--logLevel", "error"],
+        cmd: ["bunx", "--bun", "vite", "--no-open"],
         cwd: "apps/web",
-        stdout: "ignore",
+        stdout: "inherit",
         stderr: "inherit",
       },
     ]);
   });
 
-  it("keeps standalone web dev routine output quiet while preserving errors", async () => {
+  it("keeps standalone web dev output visible without Bun workspace prefixes", async () => {
     const webPackageJson = await Bun.file("apps/web/package.json").json();
 
-    expect(webPackageJson.scripts.dev).toBe("bunx --bun vite --no-open --logLevel error");
+    expect(webPackageJson.scripts.dev).toBe("bunx --bun vite --no-open");
   });
 
   it("keeps fatal Vite startup diagnostics visible", async () => {

@@ -19,9 +19,9 @@ export const devProcessSpecs = [
   },
   {
     name: "web",
-    cmd: ["bunx", "--bun", "vite", "--no-open", "--logLevel", "error"],
+    cmd: ["bunx", "--bun", "vite", "--no-open"],
     cwd: "apps/web",
-    stdout: "ignore",
+    stdout: "inherit",
     stderr: "inherit",
   },
 ] as const satisfies readonly DevProcessSpec[];

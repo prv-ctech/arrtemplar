@@ -10,6 +10,33 @@ import {
 } from "../../../helpers/logging";
 import { csrfJsonRequest } from "../../../helpers/server";
 
+describe("GET /", () => {
+  it("returns a backend landing response instead of an Elysia not-found error", async () => {
+    const database = await resetAndOpenTestDatabase();
+    const app = createApp({ database });
+
+    const response = await app.handle(new Request("http://localhost/"));
+    const body = await response.json();
+
+    try {
+      expect(response.status).toBe(200);
+      expect(body).toMatchObject({
+        name: APP_NAME,
+        version: APP_VERSION,
+        service: "backend",
+        frontendUrl: "http://localhost:5173",
+        links: {
+          frontend: "http://localhost:5173",
+          health: "http://localhost/health",
+          openapi: "http://localhost/openapi",
+        },
+      });
+    } finally {
+      database.close();
+    }
+  });
+});
+
 describe("GET /health", () => {
   it("returns service status", async () => {
     const database = await resetAndOpenTestDatabase();
