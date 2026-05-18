@@ -13,6 +13,10 @@ describe("server environment database paths", () => {
 
     expect(env.databaseUrl).toBe(DEV_DATABASE_URL);
     expect(env.serverPort).toBe(DEV_SERVER_PORT);
+    expect(env.logLevel).toBe("debug");
+    expect(env.logFilePath).toBe("data/logs/arrweeb-anime.jsonl");
+    expect(env.logFileMaxSizeBytes).toBe(10 * 1024 * 1024);
+    expect(env.logFileMaxFiles).toBe(5);
     expect(DEV_DATABASE_URL).toBe("data/db/arrweeb-dev.sqlite");
   });
 
@@ -20,13 +24,42 @@ describe("server environment database paths", () => {
     expect(readRuntimeEnv({ NODE_ENV: "test", DATABASE_URL: TEST_DATABASE_URL })).toMatchObject({
       databaseUrl: TEST_DATABASE_URL,
       serverPort: TEST_SERVER_PORT,
+      logLevel: "fatal",
     });
     expect(readRuntimeEnv({ NODE_ENV: "test" })).toMatchObject({
       databaseUrl: TEST_DATABASE_URL,
       serverPort: TEST_SERVER_PORT,
+      logLevel: "fatal",
     });
     expect(TEST_DATABASE_URL).toBe("data/db/arrweeb-test.sqlite");
     expect(TEST_SERVER_PORT).not.toBe(DEV_SERVER_PORT);
+  });
+
+  it("uses production logging defaults when NODE_ENV is production", () => {
+    expect(readRuntimeEnv({ NODE_ENV: "production" })).toMatchObject({
+      databaseUrl: DEV_DATABASE_URL,
+      serverPort: DEV_SERVER_PORT,
+      logLevel: "info",
+      logFilePath: "data/logs/arrweeb-anime.jsonl",
+      logFileMaxSizeBytes: 10 * 1024 * 1024,
+      logFileMaxFiles: 5,
+    });
+  });
+
+  it("keeps logging settings overridable", () => {
+    expect(
+      readRuntimeEnv({
+        LOG_LEVEL: "trace",
+        LOG_FILE_PATH: "tmp/custom-arrweeb.jsonl",
+        LOG_FILE_MAX_SIZE_BYTES: "1024",
+        LOG_FILE_MAX_FILES: "2",
+      }),
+    ).toMatchObject({
+      logLevel: "trace",
+      logFilePath: "tmp/custom-arrweeb.jsonl",
+      logFileMaxSizeBytes: 1024,
+      logFileMaxFiles: 2,
+    });
   });
 
   it("keeps explicit test server ports overridable", () => {
@@ -48,6 +81,21 @@ describe("server environment database paths", () => {
     expect(() => readRuntimeEnv({ DATABASE_URL: "   " })).toThrow("DATABASE_URL must not be empty");
     expect(() => readRuntimeEnv({ DATABASE_URL: memoryDatabaseUrl })).toThrow(
       "DATABASE_URL must be a SQLite file path",
+    );
+  });
+
+  it("rejects invalid logging settings", () => {
+    expect(() => readRuntimeEnv({ LOG_LEVEL: "verbose" })).toThrow(
+      "LOG_LEVEL must be one of trace, debug, info, warning, error, fatal",
+    );
+    expect(() => readRuntimeEnv({ LOG_FILE_PATH: "   " })).toThrow(
+      "LOG_FILE_PATH must not be empty",
+    );
+    expect(() => readRuntimeEnv({ LOG_FILE_MAX_SIZE_BYTES: "0" })).toThrow(
+      "LOG_FILE_MAX_SIZE_BYTES must be a positive integer",
+    );
+    expect(() => readRuntimeEnv({ LOG_FILE_MAX_FILES: "0" })).toThrow(
+      "LOG_FILE_MAX_FILES must be a positive integer",
     );
   });
 });

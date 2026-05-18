@@ -6,7 +6,7 @@ export const TEST_DATABASE_URL = "data/db/arrweeb-test.sqlite";
 
 const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 
-function resolveWorkspacePath(path: string): string {
+export function resolveWorkspacePath(path: string): string {
   return isAbsolute(path) ? path : join(workspaceRoot, path);
 }
 

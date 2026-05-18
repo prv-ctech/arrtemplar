@@ -1,4 +1,7 @@
 import type { ApiErrorResponse } from "@arrweeb-anime/shared";
+import { getLogger } from "@logtape/logtape";
+
+const securityLogger = getLogger(["arrweeb", "security"]);
 
 const notFoundError: ApiErrorResponse = {
   error: {
@@ -44,7 +47,7 @@ export function handleSafeError({
 }
 
 function logUnexpectedError(code: string | number, error: unknown): void {
-  console.error("Unhandled request error", {
+  securityLogger.error("Unhandled request error {code}", {
     code,
     errorType: error instanceof Error ? error.name : typeof error,
   });

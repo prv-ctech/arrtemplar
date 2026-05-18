@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { configure } from "@logtape/logtape";
 import type { DatabaseClient } from "../../../../../apps/server/src/db/client";
+import { createLogBuffer, resetLogTape } from "../../../../helpers/logging";
 import {
   closeServerTestDatabases,
   createServerTestApp,
@@ -9,8 +11,9 @@ import {
 
 const openDatabases: DatabaseClient[] = [];
 
-afterEach(() => {
+afterEach(async () => {
   closeServerTestDatabases(openDatabases);
+  await resetLogTape();
 });
 
 describe("safe API error handling", () => {
@@ -41,7 +44,14 @@ describe("safe API error handling", () => {
   });
 
   it("does not expose thrown internal errors", async () => {
+    const { records, sink } = createLogBuffer();
     const app = await createErrorTestApp();
+
+    await configure({
+      sinks: { buffer: sink },
+      loggers: [{ category: ["arrweeb", "security"], sinks: ["buffer"] }],
+    });
+
     app.get("/api/force-error", () => {
       throw new Error(
         "database exploded at /workspaces/arrweeb-anime/apps/server/src/db/client.ts token=secret",
@@ -59,6 +69,15 @@ describe("safe API error handling", () => {
     expect(bodyText).not.toContain("database exploded");
     expect(bodyText).not.toContain("/workspaces/arrweeb-anime");
     expect(bodyText).not.toContain("token=secret");
+
+    const serializedLogs = JSON.stringify(records);
+
+    expect(records).toHaveLength(1);
+    expect(records[0]?.category).toEqual(["arrweeb", "security"]);
+    expect(records[0]?.level).toBe("error");
+    expect(records[0]?.properties).toMatchObject({ code: "UNKNOWN", errorType: "Error" });
+    expect(serializedLogs).not.toContain("database exploded");
+    expect(serializedLogs).not.toContain("token=secret");
   });
 });
 

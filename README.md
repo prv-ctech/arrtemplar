@@ -13,6 +13,7 @@ Arrweeb-anime is a self-hosted anime-native media request, automation, and watch
 - Server-side sessions with hashed session tokens stored in SQLite
 - HttpOnly SameSite session cookies with a production-secure cookie setting
 - Failed-login rate limiting and auth/admin audit log entries
+- Backend LogTape operational logging with redacted rotating JSONL output
 - React + Vite + TypeScript frontend
 - Tailwind CSS v4 and shadcn/ui-compatible structure
 - TanStack Query and TanStack Router frontend foundation
@@ -89,6 +90,26 @@ SQLite database paths are fixed by environment:
 Tests always set and validate the canonical test database path before app code loads. They reset `data/db/arrweeb-test.sqlite` and its SQLite sidecars deliberately, run the real migrations, and never fall back to the development database.
 SQLite does not start a separate database listener, so test isolation is enforced with the canonical test database file plus the isolated test server port.
 
+### Backend logging
+
+The backend configures LogTape once at startup before migrations and request handling. Application, request, security, and Drizzle query logs share one operational JSONL file sink:
+
+- Default path: `data/logs/arrweeb-anime.jsonl`.
+- Default rotation: 10 MiB per file, keeping 5 rotated files.
+- Default levels: `debug` in local development, `fatal` in tests, and `info` in production.
+- LogTape meta warnings/errors use a separate console sink so logging-system issues stay visible.
+
+Optional overrides:
+
+```txt
+LOG_LEVEL=info
+LOG_FILE_PATH=data/logs/arrweeb-anime.jsonl
+LOG_FILE_MAX_SIZE_BYTES=10485760
+LOG_FILE_MAX_FILES=5
+```
+
+Log output is redacted with both structured-field and formatted-message redaction. Do not intentionally log passwords, raw session tokens, cookies, authorization headers, CSRF tokens, or password hashes. The SQLite `auditLogs` table remains the durable security audit trail for auth/admin events; LogTape is for operational diagnostics. Frontend/browser LogTape logging is not included in this slice.
+
 Auth endpoints:
 
 ```txt
@@ -119,3 +140,7 @@ Copy `.env.example` to `.env` for local development.
 - `VITE_API_BASE_URL` is blank by default so the frontend uses the Vite dev proxy; set it only when serving the frontend separately from the API.
 - `USE_POLLING=true` enables polling file watchers for environments where native file watching is unreliable.
 - `SESSION_COOKIE_SECURE` is `false` in local HTTP development; set it to `true` behind HTTPS in production.
+- `LOG_LEVEL` controls backend operational log verbosity. Valid values are `trace`, `debug`, `info`, `warning`, `error`, and `fatal`.
+- `LOG_FILE_PATH` defaults to `data/logs/arrweeb-anime.jsonl` for the backend rotating JSONL log file.
+- `LOG_FILE_MAX_SIZE_BYTES` defaults to `10485760` bytes before rotation.
+- `LOG_FILE_MAX_FILES` defaults to `5` retained log files.

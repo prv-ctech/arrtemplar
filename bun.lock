@@ -6,6 +6,7 @@
       "name": "arrweeb-anime",
       "devDependencies": {
         "@biomejs/biome": "latest",
+        "@logtape/logtape": "^2.1.0",
         "@types/bun": "latest",
         "bun-types": "^1.3.14",
         "fallow": "^2.75.0",
@@ -20,6 +21,11 @@
         "@arrweeb-anime/shared": "workspace:*",
         "@elysia/cors": "latest",
         "@elysia/openapi": "latest",
+        "@logtape/drizzle-orm": "^2.1.0",
+        "@logtape/elysia": "^2.1.0",
+        "@logtape/file": "^2.1.0",
+        "@logtape/logtape": "^2.1.0",
+        "@logtape/redaction": "^2.1.0",
         "drizzle-orm": "^0.45.2",
         "elysia": "latest",
         "elysiajs-helmet": "1.0.5",
@@ -206,6 +212,16 @@
     "@jridgewell/sourcemap-codec": ["@jridgewell/sourcemap-codec@1.5.5", "", {}, "sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og=="],
 
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
+
+    "@logtape/drizzle-orm": ["@logtape/drizzle-orm@2.1.0", "", { "peerDependencies": { "@logtape/logtape": "^2.1.0" } }, "sha512-NCSjCK8mRjKzY9eRiBeRGyMjXgAUvDyY0CyQcbE0PXE88r/V2Z2AOPV/RdfwbgTJ7OgK4xm86+pt1Pv+w2v2ZQ=="],
+
+    "@logtape/elysia": ["@logtape/elysia@2.1.0", "", { "peerDependencies": { "@logtape/logtape": "^2.1.0", "elysia": "^1.4.0" } }, "sha512-jnfs+STwcQrWuBB++WfCKYgZCyjsAAzMcrGXxtr/HUh7eAR3NK9c5B6CUkYTWcuOzDELxP55MAtzgs5wyM2BVQ=="],
+
+    "@logtape/file": ["@logtape/file@2.1.0", "", { "peerDependencies": { "@logtape/logtape": "^2.1.0" } }, "sha512-sUHLrpsUayPKTe7y4tidMGkCxTpvBqm0EHIo222wftWUC0W5D4etga9Jly02CwySDkxDkkgAkEyWFyYXCHupNQ=="],
+
+    "@logtape/logtape": ["@logtape/logtape@2.1.0", "", {}, "sha512-KpKQBeLJSlFtkGr9Dpi03ld96nqBEG8WiD5lTrwE33oaKdQXOcO5oJAr28hsCQ1RnZ0U8xaVvxwopNDgjFNYuw=="],
+
+    "@logtape/redaction": ["@logtape/redaction@2.1.0", "", { "peerDependencies": { "@logtape/logtape": "^2.1.0" } }, "sha512-/Al96VD2cqwyZoQOy6GZqmO4TeB/41Oh5K1w6VTZ6g03EkZSlU0/R9hkjOMROszU9qMnTGpmFGl0emL3H/gglg=="],
 
     "@napi-rs/wasm-runtime": ["@napi-rs/wasm-runtime@1.1.4", "", { "dependencies": { "@tybys/wasm-util": "^0.10.1" }, "peerDependencies": { "@emnapi/core": "^1.7.1", "@emnapi/runtime": "^1.7.1" } }, "sha512-3NQNNgA1YSlJb/kMH1ildASP9HW7/7kYnRI2szWJaofaS1hWmbGI4H+d3+22aGzXXN9IJ+n+GiFVcGipJP18ow=="],
 

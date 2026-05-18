@@ -1,6 +1,7 @@
 import { APP_NAME, APP_VERSION, type HealthResponse } from "@arrweeb-anime/shared";
 import { cors } from "@elysia/cors";
 import { openapi } from "@elysia/openapi";
+import { elysiaLogger } from "@logtape/elysia";
 import { Elysia, t } from "elysia";
 import { elysiaHelmet } from "elysiajs-helmet";
 import type { LoginRateLimiter } from "./auth/rate-limit";
@@ -38,6 +39,22 @@ export function createApp(options: CreateAppOptions = {}) {
   };
 
   return new Elysia()
+    .use(
+      elysiaLogger({
+        category: ["arrweeb", "http"],
+        level: "info",
+        logRequest: false,
+        scope: "global",
+        skip: ({ path }) => path === "/health",
+        format: (context, responseTime) => ({
+          method: context.request.method,
+          path: context.path,
+          status: normalizeStatusCode(context.set.status, readResponseValue(context)),
+          responseTime,
+          contentLength: context.set.headers["content-length"],
+        }),
+      }),
+    )
     .use(
       cors({
         origin: env.webOrigin,
@@ -87,3 +104,33 @@ export function createApp(options: CreateAppOptions = {}) {
 }
 
 export type App = ReturnType<typeof createApp>;
+
+function normalizeStatusCode(status: number | string | undefined, responseValue: unknown): number {
+  const responseStatus = readCustomStatusCode(responseValue);
+
+  if (responseStatus !== null) {
+    return responseStatus;
+  }
+
+  if (typeof status === "number") {
+    return status;
+  }
+
+  if (status) {
+    return Number(status);
+  }
+
+  return 200;
+}
+
+function readResponseValue(context: object): unknown {
+  return "responseValue" in context ? context.responseValue : null;
+}
+
+function readCustomStatusCode(responseValue: unknown): number | null {
+  if (!responseValue || typeof responseValue !== "object" || !("code" in responseValue)) {
+    return null;
+  }
+
+  return typeof responseValue.code === "number" ? responseValue.code : null;
+}

@@ -11,7 +11,18 @@ export type RuntimeEnv = {
   webOrigin: string;
   databaseUrl: string;
   sessionCookieSecure: boolean;
+  logLevel: RuntimeLogLevel;
+  logFilePath: string;
+  logFileMaxSizeBytes: number;
+  logFileMaxFiles: number;
 };
+
+export type RuntimeLogLevel = "trace" | "debug" | "info" | "warning" | "error" | "fatal";
+
+const runtimeLogLevels = ["trace", "debug", "info", "warning", "error", "fatal"] as const;
+const DEFAULT_LOG_FILE_PATH = "data/logs/arrweeb-anime.jsonl";
+const DEFAULT_LOG_FILE_MAX_SIZE_BYTES = 10 * 1024 * 1024;
+const DEFAULT_LOG_FILE_MAX_FILES = 5;
 
 function readPort(value: string | undefined, environment: RuntimeEnvironment): number {
   if (!value) {
@@ -41,6 +52,56 @@ function readBoolean(value: string | undefined, defaultValue: boolean): boolean 
   }
 
   throw new Error(`Expected boolean environment value to be true or false, received: ${value}`);
+}
+
+function readLogLevel(value: string | undefined, environment: RuntimeEnvironment): RuntimeLogLevel {
+  const logLevel = value?.trim() ?? defaultLogLevel(environment);
+
+  if (isRuntimeLogLevel(logLevel)) {
+    return logLevel;
+  }
+
+  throw new Error(`LOG_LEVEL must be one of ${runtimeLogLevels.join(", ")}, received: ${value}`);
+}
+
+function defaultLogLevel(environment: RuntimeEnvironment): RuntimeLogLevel {
+  if (isTestEnvironment(environment)) {
+    return "fatal";
+  }
+
+  return environment.NODE_ENV === "production" ? "info" : "debug";
+}
+
+function isRuntimeLogLevel(value: string): value is RuntimeLogLevel {
+  return runtimeLogLevels.some((logLevel) => logLevel === value);
+}
+
+function readLogFilePath(value: string | undefined): string {
+  const path = value?.trim() ?? DEFAULT_LOG_FILE_PATH;
+
+  if (!path) {
+    throw new Error("LOG_FILE_PATH must not be empty.");
+  }
+
+  return path;
+}
+
+function readPositiveInteger(
+  name: "LOG_FILE_MAX_SIZE_BYTES" | "LOG_FILE_MAX_FILES",
+  value: string | undefined,
+  defaultValue: number,
+): number {
+  if (!value) {
+    return defaultValue;
+  }
+
+  const parsedValue = Number(value);
+
+  if (!Number.isInteger(parsedValue) || parsedValue <= 0) {
+    throw new Error(`${name} must be a positive integer, received: ${value}`);
+  }
+
+  return parsedValue;
 }
 
 function readDatabaseUrl(environment: RuntimeEnvironment): string {
@@ -97,6 +158,18 @@ export function readRuntimeEnv(environment: RuntimeEnvironment = Bun.env): Runti
     webOrigin: environment.WEB_ORIGIN ?? DEFAULT_WEB_ORIGIN,
     databaseUrl: readDatabaseUrl(environment),
     sessionCookieSecure: readBoolean(environment.SESSION_COOKIE_SECURE, true),
+    logLevel: readLogLevel(environment.LOG_LEVEL, environment),
+    logFilePath: readLogFilePath(environment.LOG_FILE_PATH),
+    logFileMaxSizeBytes: readPositiveInteger(
+      "LOG_FILE_MAX_SIZE_BYTES",
+      environment.LOG_FILE_MAX_SIZE_BYTES,
+      DEFAULT_LOG_FILE_MAX_SIZE_BYTES,
+    ),
+    logFileMaxFiles: readPositiveInteger(
+      "LOG_FILE_MAX_FILES",
+      environment.LOG_FILE_MAX_FILES,
+      DEFAULT_LOG_FILE_MAX_FILES,
+    ),
   };
 }
 
