@@ -15,6 +15,7 @@ export type RuntimeEnv = {
   logFilePath: string;
   logFileMaxSizeBytes: number;
   logFileMaxFiles: number;
+  logConsoleEnabled: boolean;
 };
 
 export type RuntimeLogLevel = "trace" | "debug" | "info" | "warning" | "error" | "fatal";
@@ -54,6 +55,22 @@ function readBoolean(value: string | undefined, defaultValue: boolean): boolean 
   throw new Error(`Expected boolean environment value to be true or false, received: ${value}`);
 }
 
+function readNamedBoolean(name: string, value: string | undefined, defaultValue: boolean): boolean {
+  if (!value) {
+    return defaultValue;
+  }
+
+  if (value === "true") {
+    return true;
+  }
+
+  if (value === "false") {
+    return false;
+  }
+
+  throw new Error(`${name} must be true or false, received: ${value}`);
+}
+
 function readLogLevel(value: string | undefined, environment: RuntimeEnvironment): RuntimeLogLevel {
   const logLevel = value?.trim() ?? defaultLogLevel(environment);
 
@@ -70,6 +87,10 @@ function defaultLogLevel(environment: RuntimeEnvironment): RuntimeLogLevel {
   }
 
   return environment.NODE_ENV === "production" ? "info" : "debug";
+}
+
+function defaultLogConsoleEnabled(environment: RuntimeEnvironment): boolean {
+  return !isTestEnvironment(environment) && environment.NODE_ENV !== "production";
 }
 
 function isRuntimeLogLevel(value: string): value is RuntimeLogLevel {
@@ -169,6 +190,11 @@ export function readRuntimeEnv(environment: RuntimeEnvironment = Bun.env): Runti
       "LOG_FILE_MAX_FILES",
       environment.LOG_FILE_MAX_FILES,
       DEFAULT_LOG_FILE_MAX_FILES,
+    ),
+    logConsoleEnabled: readNamedBoolean(
+      "LOG_CONSOLE",
+      environment.LOG_CONSOLE,
+      defaultLogConsoleEnabled(environment),
     ),
   };
 }

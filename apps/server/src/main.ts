@@ -40,7 +40,11 @@ export async function startServer(options: StartServerOptions = {}): Promise<Run
 }
 
 function logDefaultServerStarted(event: { appName: string; port: number; url: string }): void {
-  serverLogger.info("{appName} API listening on {url}", event);
+  serverLogger.info("{appName} API listening on {serverUrl}", {
+    appName: event.appName,
+    port: event.port,
+    serverUrl: event.url,
+  });
 }
 
 if (import.meta.main) {

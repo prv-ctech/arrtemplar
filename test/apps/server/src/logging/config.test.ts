@@ -1,14 +1,10 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { configure, dispose, getLogger } from "@logtape/logtape";
+import { dispose, getConfig, getLogger } from "@logtape/logtape";
 import { $ } from "bun";
 import { resolveWorkspacePath } from "../../../../../apps/server/src/config/database-paths";
 import { readRuntimeEnv } from "../../../../../apps/server/src/config/env";
 import { configureServerLogging } from "../../../../../apps/server/src/logging/config";
-import {
-  createRedactedSink,
-  createRedactedTextFormatter,
-} from "../../../../../apps/server/src/logging/redaction";
-import { createLogBuffer, resetLogTape } from "../../../../helpers/logging";
+import { configureRedactedLogCapture, resetLogTape } from "../../../../helpers/logging";
 
 const testLogPath = "data/logs/logtape-config-test.jsonl";
 const resolvedTestLogPath = resolveWorkspacePath(testLogPath);
@@ -20,21 +16,7 @@ afterEach(async () => {
 
 describe("LogTape server logging configuration", () => {
   it("redacts sensitive structured fields and formatted message patterns", async () => {
-    const { records, sink } = createLogBuffer();
-    const formattedOutput: string[] = [];
-    const formatter = createRedactedTextFormatter((record) => {
-      return `${record.message.join("")} ${JSON.stringify(record.properties)}`;
-    });
-
-    await configure({
-      sinks: {
-        buffer: createRedactedSink((record) => {
-          sink(record);
-          formattedOutput.push(formatter(record));
-        }),
-      },
-      loggers: [{ category: ["arrweeb"], sinks: ["buffer"] }],
-    });
+    const { records, formattedOutput } = await configureRedactedLogCapture();
 
     getLogger(["arrweeb", "auth"]).info(
       "Login for user@example.local with bearer eyJhbGciOiJIUzI1NiJ9.payload.signature and card 4111111111111111",
@@ -62,12 +44,45 @@ describe("LogTape server logging configuration", () => {
     expect(formattedRecords).not.toContain("4111111111111111");
   });
 
+  it("keeps non-sensitive locally generated startup URLs visible", async () => {
+    const { records, formattedOutput } = await configureRedactedLogCapture((record) => {
+      return record.message.join("");
+    });
+
+    getLogger(["arrweeb", "server"]).info("Server listening on {serverUrl}", {
+      serverUrl: "http://localhost:3124",
+    });
+
+    expect(JSON.stringify(records)).toContain("http://localhost:3124");
+    expect(formattedOutput.join("\n")).toContain("http://localhost:3124");
+  });
+
+  it("keeps request paths visible while redacting URL and referrer query values", async () => {
+    const { records, formattedOutput } = await configureRedactedLogCapture();
+
+    getLogger(["arrweeb", "http"]).info("GET {url} from {referrer}", {
+      url: "/api/auth/me?token=query-secret",
+      referrer: "http://localhost/login?session=referrer-secret",
+    });
+
+    const serializedRecords = JSON.stringify(records);
+    const formattedRecords = formattedOutput.join("\n");
+
+    expect(serializedRecords).toContain("/api/auth/me");
+    expect(serializedRecords).not.toContain("query-secret");
+    expect(serializedRecords).not.toContain("referrer-secret");
+    expect(formattedRecords).toContain("/api/auth/me");
+    expect(formattedRecords).not.toContain("query-secret");
+    expect(formattedRecords).not.toContain("referrer-secret");
+  });
+
   it("writes redacted application logs to the configured rotating JSONL file", async () => {
     const runtimeEnv = readRuntimeEnv({
       LOG_LEVEL: "debug",
       LOG_FILE_PATH: testLogPath,
       LOG_FILE_MAX_SIZE_BYTES: "1048576",
       LOG_FILE_MAX_FILES: "2",
+      LOG_CONSOLE: "false",
     });
 
     await configureServerLogging(runtimeEnv);
@@ -85,6 +100,58 @@ describe("LogTape server logging configuration", () => {
     expect(logText).toContain("arrweeb.server");
     expect(logText).not.toContain("operator@example.local");
     expect(logText).not.toContain("startup-session-token");
+  });
+
+  it("routes development application logs to both terminal console and rotating file sinks", async () => {
+    const runtimeEnv = readRuntimeEnv({
+      LOG_LEVEL: "debug",
+      LOG_FILE_PATH: testLogPath,
+      LOG_FILE_MAX_SIZE_BYTES: "1048576",
+      LOG_FILE_MAX_FILES: "2",
+    });
+
+    await configureServerLogging(runtimeEnv);
+
+    const arrweebLogger = getConfig()?.loggers.find((logger) => {
+      return Array.isArray(logger.category) && logger.category.join(".") === "arrweeb";
+    });
+
+    expect(arrweebLogger?.sinks).toEqual(["appFile", "appConsole"]);
+  });
+
+  it("keeps production application logs file-only unless console logging is explicitly enabled", async () => {
+    const productionEnv = readRuntimeEnv({
+      NODE_ENV: "production",
+      LOG_FILE_PATH: testLogPath,
+      LOG_FILE_MAX_SIZE_BYTES: "1048576",
+      LOG_FILE_MAX_FILES: "2",
+    });
+
+    await configureServerLogging(productionEnv);
+
+    const fileOnlyLogger = getConfig()?.loggers.find((logger) => {
+      return Array.isArray(logger.category) && logger.category.join(".") === "arrweeb";
+    });
+
+    expect(fileOnlyLogger?.sinks).toEqual(["appFile"]);
+
+    await resetLogTape();
+
+    const consoleEnabledEnv = readRuntimeEnv({
+      NODE_ENV: "production",
+      LOG_CONSOLE: "true",
+      LOG_FILE_PATH: testLogPath,
+      LOG_FILE_MAX_SIZE_BYTES: "1048576",
+      LOG_FILE_MAX_FILES: "2",
+    });
+
+    await configureServerLogging(consoleEnabledEnv);
+
+    const consoleEnabledLogger = getConfig()?.loggers.find((logger) => {
+      return Array.isArray(logger.category) && logger.category.join(".") === "arrweeb";
+    });
+
+    expect(consoleEnabledLogger?.sinks).toEqual(["appFile", "appConsole"]);
   });
 
   it("filters debug application logs when runtime log level is info", async () => {

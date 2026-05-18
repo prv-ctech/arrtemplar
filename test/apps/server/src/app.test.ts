@@ -1,13 +1,13 @@
 import { describe, expect, it } from "bun:test";
 import { configure } from "@logtape/logtape";
 import { createApp } from "../../../../apps/server/src/app";
-import {
-  createRedactedSink,
-  createRedactedTextFormatter,
-} from "../../../../apps/server/src/logging/redaction";
 import { APP_NAME, APP_VERSION } from "../../../../packages/shared/src";
 import { resetAndOpenTestDatabase } from "../../../helpers/database";
-import { createLogBuffer, resetLogTape } from "../../../helpers/logging";
+import {
+  configureRedactedLogCapture,
+  createLogBuffer,
+  resetLogTape,
+} from "../../../helpers/logging";
 import { csrfJsonRequest } from "../../../helpers/server";
 
 describe("GET /health", () => {
@@ -65,6 +65,7 @@ describe("GET /health", () => {
       expect(httpLogs).toHaveLength(1);
       expect(httpLogs[0]?.properties).toMatchObject({
         method: "POST",
+        url: "/api/auth/login",
         path: "/api/auth/login",
         status: 401,
       });
@@ -79,23 +80,9 @@ describe("GET /health", () => {
   });
 
   it("redacts sensitive Elysia adapter error fields before app logs are persisted", async () => {
-    const { records, sink } = createLogBuffer();
-    const formattedOutput: string[] = [];
-    const formatter = createRedactedTextFormatter((record) => {
-      return `${record.message.join("")} ${JSON.stringify(record.properties)}`;
-    });
+    const { records, formattedOutput } = await configureRedactedLogCapture();
     const database = await resetAndOpenTestDatabase();
     const app = createApp({ database });
-
-    await configure({
-      sinks: {
-        buffer: createRedactedSink((record) => {
-          sink(record);
-          formattedOutput.push(formatter(record));
-        }),
-      },
-      loggers: [{ category: ["arrweeb"], sinks: ["buffer"] }],
-    });
 
     app.get("/api/adapter-error", () => {
       throw new Error("adapter exploded token=super-secret-session-token cookie=raw-cookie-value");

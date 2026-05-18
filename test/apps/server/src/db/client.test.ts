@@ -3,12 +3,12 @@ import { configure } from "@logtape/logtape";
 import { createSessionExpiresAt } from "../../../../../apps/server/src/auth/session-token";
 import type { DatabaseClient } from "../../../../../apps/server/src/db/client";
 import { sessions, users } from "../../../../../apps/server/src/db/schema";
-import {
-  createRedactedSink,
-  createRedactedTextFormatter,
-} from "../../../../../apps/server/src/logging/redaction";
 import { resetAndOpenTestDatabase } from "../../../../helpers/database";
-import { createLogBuffer, resetLogTape } from "../../../../helpers/logging";
+import {
+  configureRedactedLogCapture,
+  createLogBuffer,
+  resetLogTape,
+} from "../../../../helpers/logging";
 
 let database: DatabaseClient | null = null;
 
@@ -42,23 +42,9 @@ describe("createDatabase", () => {
   });
 
   it("redacts Drizzle positional params before query logs are persisted", async () => {
-    const { records, sink } = createLogBuffer();
-    const formattedOutput: string[] = [];
-    const formatter = createRedactedTextFormatter((record) => {
-      return `${record.message.join("")} ${JSON.stringify(record.properties)}`;
-    });
+    const { records, formattedOutput } = await configureRedactedLogCapture();
     const userId = crypto.randomUUID();
     const sessionId = crypto.randomUUID();
-
-    await configure({
-      sinks: {
-        buffer: createRedactedSink((record) => {
-          sink(record);
-          formattedOutput.push(formatter(record));
-        }),
-      },
-      loggers: [{ category: ["arrweeb"], sinks: ["buffer"] }],
-    });
 
     database = await resetAndOpenTestDatabase();
     records.splice(0);

@@ -92,11 +92,12 @@ SQLite does not start a separate database listener, so test isolation is enforce
 
 ### Backend logging
 
-The backend configures LogTape once at startup before migrations and request handling. Application, request, security, and Drizzle query logs share one operational JSONL file sink:
+The backend configures LogTape once at startup before migrations and request handling. Application, request, security, and Drizzle query logs always share one operational JSONL file sink. In local development they are also mirrored to the terminal with LogTape's ANSI console formatter, so `bun dev` shows backend startup and request logs next to Vite output.
 
 - Default path: `data/logs/arrweeb-anime.jsonl`.
 - Default rotation: 10 MiB per file, keeping 5 rotated files.
 - Default levels: `debug` in local development, `fatal` in tests, and `info` in production.
+- Terminal app logs: enabled in local development, disabled by default in tests and production, override with `LOG_CONSOLE=true|false`.
 - LogTape meta warnings/errors use a separate console sink so logging-system issues stay visible.
 
 Optional overrides:
@@ -106,6 +107,7 @@ LOG_LEVEL=info
 LOG_FILE_PATH=data/logs/arrweeb-anime.jsonl
 LOG_FILE_MAX_SIZE_BYTES=10485760
 LOG_FILE_MAX_FILES=5
+LOG_CONSOLE=true
 ```
 
 Log output is redacted with both structured-field and formatted-message redaction. Do not intentionally log passwords, raw session tokens, cookies, authorization headers, CSRF tokens, or password hashes. The SQLite `auditLogs` table remains the durable security audit trail for auth/admin events; LogTape is for operational diagnostics. Frontend/browser LogTape logging is not included in this slice.
@@ -144,3 +146,4 @@ Copy `.env.example` to `.env` for local development.
 - `LOG_FILE_PATH` defaults to `data/logs/arrweeb-anime.jsonl` for the backend rotating JSONL log file.
 - `LOG_FILE_MAX_SIZE_BYTES` defaults to `10485760` bytes before rotation.
 - `LOG_FILE_MAX_FILES` defaults to `5` retained log files.
+- `LOG_CONSOLE` mirrors backend app logs to the terminal. It defaults to `true` in local development and `false` in tests and production.

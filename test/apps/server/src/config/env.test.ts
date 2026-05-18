@@ -17,6 +17,7 @@ describe("server environment database paths", () => {
     expect(env.logFilePath).toBe("data/logs/arrweeb-anime.jsonl");
     expect(env.logFileMaxSizeBytes).toBe(10 * 1024 * 1024);
     expect(env.logFileMaxFiles).toBe(5);
+    expect(env.logConsoleEnabled).toBe(true);
     expect(DEV_DATABASE_URL).toBe("data/db/arrweeb-dev.sqlite");
   });
 
@@ -25,11 +26,13 @@ describe("server environment database paths", () => {
       databaseUrl: TEST_DATABASE_URL,
       serverPort: TEST_SERVER_PORT,
       logLevel: "fatal",
+      logConsoleEnabled: false,
     });
     expect(readRuntimeEnv({ NODE_ENV: "test" })).toMatchObject({
       databaseUrl: TEST_DATABASE_URL,
       serverPort: TEST_SERVER_PORT,
       logLevel: "fatal",
+      logConsoleEnabled: false,
     });
     expect(TEST_DATABASE_URL).toBe("data/db/arrweeb-test.sqlite");
     expect(TEST_SERVER_PORT).not.toBe(DEV_SERVER_PORT);
@@ -43,6 +46,7 @@ describe("server environment database paths", () => {
       logFilePath: "data/logs/arrweeb-anime.jsonl",
       logFileMaxSizeBytes: 10 * 1024 * 1024,
       logFileMaxFiles: 5,
+      logConsoleEnabled: false,
     });
   });
 
@@ -53,12 +57,18 @@ describe("server environment database paths", () => {
         LOG_FILE_PATH: "tmp/custom-arrweeb.jsonl",
         LOG_FILE_MAX_SIZE_BYTES: "1024",
         LOG_FILE_MAX_FILES: "2",
+        LOG_CONSOLE: "false",
       }),
     ).toMatchObject({
       logLevel: "trace",
       logFilePath: "tmp/custom-arrweeb.jsonl",
       logFileMaxSizeBytes: 1024,
       logFileMaxFiles: 2,
+      logConsoleEnabled: false,
+    });
+
+    expect(readRuntimeEnv({ NODE_ENV: "production", LOG_CONSOLE: "true" })).toMatchObject({
+      logConsoleEnabled: true,
     });
   });
 
@@ -96,6 +106,9 @@ describe("server environment database paths", () => {
     );
     expect(() => readRuntimeEnv({ LOG_FILE_MAX_FILES: "0" })).toThrow(
       "LOG_FILE_MAX_FILES must be a positive integer",
+    );
+    expect(() => readRuntimeEnv({ LOG_CONSOLE: "sometimes" })).toThrow(
+      "LOG_CONSOLE must be true or false",
     );
   });
 });

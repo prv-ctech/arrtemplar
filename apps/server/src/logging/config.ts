@@ -13,6 +13,9 @@ import { createRedactedSink, createRedactedTextFormatter } from "./redaction";
 
 export async function configureServerLogging(runtimeEnv: RuntimeEnv = env): Promise<void> {
   const logFilePath = resolveWorkspacePath(runtimeEnv.logFilePath);
+  const appSinks = runtimeEnv.logConsoleEnabled
+    ? (["appFile", "appConsole"] as const)
+    : (["appFile"] as const);
 
   await ensureParentDirectory(logFilePath);
   await configure({
@@ -22,7 +25,7 @@ export async function configureServerLogging(runtimeEnv: RuntimeEnv = env): Prom
       metaWarnings: "warning",
     },
     sinks: {
-      app: createRedactedSink(
+      appFile: createRedactedSink(
         getRotatingFileSink(logFilePath, {
           maxSize: runtimeEnv.logFileMaxSizeBytes,
           maxFiles: runtimeEnv.logFileMaxFiles,
@@ -32,6 +35,13 @@ export async function configureServerLogging(runtimeEnv: RuntimeEnv = env): Prom
               message: "rendered",
               properties: "nest:properties",
             }),
+          ),
+        }),
+      ),
+      appConsole: createRedactedSink(
+        getConsoleSink({
+          formatter: createRedactedTextFormatter(
+            getAnsiColorFormatter({ timestamp: "date-time-tz" }),
           ),
         }),
       ),
@@ -52,7 +62,7 @@ export async function configureServerLogging(runtimeEnv: RuntimeEnv = env): Prom
       {
         category: ["arrweeb"],
         filters: ["runtimeLevel"],
-        sinks: ["app"],
+        sinks: [...appSinks],
       },
     ],
   });

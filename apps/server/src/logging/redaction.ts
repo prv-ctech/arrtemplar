@@ -19,8 +19,6 @@ const appSensitiveFields: FieldPatterns = [
   /^errorMessage$/i,
   /^formattedQuery$/i,
   /^params$/i,
-  /^referrer$/i,
-  /^url$/i,
   /cookie/i,
   /authorization/i,
   /csrf/i,
@@ -28,6 +26,8 @@ const appSensitiveFields: FieldPatterns = [
   /token[-_]?hash/i,
   /password[-_]?hash/i,
 ];
+
+const urlSensitiveFields: FieldPatterns = [/^referrer$/i, /^url$/i];
 
 const appSensitivePatterns: RedactionPatterns = [
   EMAIL_ADDRESS_PATTERN,
@@ -42,13 +42,19 @@ const appSensitivePatterns: RedactionPatterns = [
     replacement: "$1=[REDACTED]",
   },
   {
-    pattern: /\b(?:\d[ -]?){13,19}\b/g,
-    replacement: "[CARD REDACTED]",
+    pattern:
+      /(^|[^\d.])((?:4\d{12}(?:\d{3})?|5[1-5]\d{14}|3[47]\d{13}|6(?:011|5\d{2})\d{12}))(?![\d.])/g,
+    replacement: "$1[CARD REDACTED]",
   },
 ];
 
 export function createRedactedSink<TSink extends Sink>(sink: TSink): TSink {
-  return redactByField(sink, {
+  const urlRedactedSink = redactByField(sink, {
+    fieldPatterns: urlSensitiveFields,
+    action: redactUrlField,
+  });
+
+  return redactByField(urlRedactedSink, {
     fieldPatterns: appSensitiveFields,
     action: () => "[REDACTED]",
   }) as TSink;
@@ -56,4 +62,34 @@ export function createRedactedSink<TSink extends Sink>(sink: TSink): TSink {
 
 export function createRedactedTextFormatter(formatter: TextFormatter): TextFormatter {
   return redactByPattern(formatter, appSensitivePatterns) as TextFormatter;
+}
+
+function redactUrlField(value: unknown): unknown {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  try {
+    return redactParsedUrl(value);
+  } catch {
+    return value.replace(
+      /\b(cookie|token|session|secret|password|auth|key)=([^&\s;]+)/gi,
+      "$1=[REDACTED]",
+    );
+  }
+}
+
+function redactParsedUrl(value: string): string {
+  const isAbsolute = /^[a-z][a-z\d+.-]*:/i.test(value);
+  const url = new URL(value, "http://arrweeb.local");
+
+  for (const key of url.searchParams.keys()) {
+    url.searchParams.set(key, "[REDACTED]");
+  }
+
+  if (isAbsolute) {
+    return url.toString();
+  }
+
+  return `${url.pathname}${url.search}${url.hash}`;
 }

@@ -48,6 +48,7 @@ export function createApp(options: CreateAppOptions = {}) {
         skip: ({ path }) => path === "/health",
         format: (context, responseTime) => ({
           method: context.request.method,
+          url: context.path,
           path: context.path,
           status: normalizeStatusCode(context.set.status, readResponseValue(context)),
           responseTime,
