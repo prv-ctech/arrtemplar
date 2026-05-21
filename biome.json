@@ -23,7 +23,8 @@
       "scripts/**/*.ts",
       "test/**/*.ts",
       "packages/*/*.json",
-      "packages/*/src/**/*.ts"
+      "packages/*/src/**/*.ts",
+      "!packages/anime-parser"
     ]
   },
   "formatter": {

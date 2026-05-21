@@ -1,7 +1,7 @@
-import type { ApiErrorResponse } from "@arrweeb-anime/shared";
+import type { ApiErrorResponse } from "@arrtemplar/shared";
 import { getLogger } from "@logtape/logtape";
 
-const securityLogger = getLogger(["arrweeb", "security"]);
+const securityLogger = getLogger(["arrtemplar", "security"]);
 
 const notFoundError: ApiErrorResponse = {
   error: {

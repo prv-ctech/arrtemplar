@@ -1,8 +1,8 @@
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const DEV_DATABASE_URL = "data/db/arrweeb-dev.sqlite";
-export const TEST_DATABASE_URL = "data/db/arrweeb-test.sqlite";
+export const DEV_DATABASE_URL = "data/db/arrtemplar-dev.sqlite";
+export const TEST_DATABASE_URL = "data/db/arrtemplar-test.sqlite";
 
 const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 

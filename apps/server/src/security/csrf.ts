@@ -1,4 +1,4 @@
-import { type ApiErrorResponse, CSRF_HEADER_NAME, CSRF_HEADER_VALUE } from "@arrweeb-anime/shared";
+import { type ApiErrorResponse, CSRF_HEADER_NAME, CSRF_HEADER_VALUE } from "@arrtemplar/shared";
 
 const unsafeMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const csrfVaryHeaders = ["Sec-Fetch-Site", "Origin"];

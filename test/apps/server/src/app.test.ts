@@ -65,7 +65,7 @@ describe("GET /health", () => {
 
     await configure({
       sinks: { buffer: sink },
-      loggers: [{ category: ["arrweeb", "http"], sinks: ["buffer"] }],
+      loggers: [{ category: ["arrtemplar", "http"], sinks: ["buffer"] }],
     });
 
     try {
@@ -79,12 +79,12 @@ describe("GET /health", () => {
           },
           {
             authorization: "Bearer raw-authorization-token",
-            cookie: "arrweeb_session=raw-cookie-value",
+            cookie: "arrtemplar_session=raw-cookie-value",
           },
         ),
       );
 
-      const httpLogs = records.filter((record) => record.category.join(".") === "arrweeb.http");
+      const httpLogs = records.filter((record) => record.category.join(".") === "arrtemplar.http");
       const serializedLogs = JSON.stringify(httpLogs);
 
       expect(healthResponse.status).toBe(200);
@@ -120,7 +120,7 @@ describe("GET /health", () => {
         new Request("http://localhost/api/adapter-error?token=query-secret", {
           headers: {
             referer: "http://localhost/login?token=referrer-secret",
-            cookie: "arrweeb_session=raw-cookie-value",
+            cookie: "arrtemplar_session=raw-cookie-value",
           },
         }),
       );
@@ -129,7 +129,7 @@ describe("GET /health", () => {
       const formattedRecords = formattedOutput.join("\n");
 
       expect(response.status).toBe(500);
-      expect(records.some((record) => record.category.join(".") === "arrweeb.http")).toBe(true);
+      expect(records.some((record) => record.category.join(".") === "arrtemplar.http")).toBe(true);
       expect(serializedRecords).not.toContain("super-secret-session-token");
       expect(serializedRecords).not.toContain("raw-cookie-value");
       expect(serializedRecords).not.toContain("query-secret");

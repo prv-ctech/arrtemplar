@@ -1,4 +1,4 @@
-import { CSRF_HEADER_NAME } from "@arrweeb-anime/shared";
+import { CSRF_HEADER_NAME } from "@arrtemplar/shared";
 import type { HTTPMethod } from "@elysia/cors";
 
 export const corsAllowedMethods: HTTPMethod[] = ["GET", "POST", "OPTIONS"];

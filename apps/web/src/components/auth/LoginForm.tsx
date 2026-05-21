@@ -1,4 +1,4 @@
-import type { CreateAdminRequest } from "@arrweeb-anime/shared";
+import type { CreateAdminRequest } from "@arrtemplar/shared";
 import { CaretRightIcon } from "@phosphor-icons/react";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -305,7 +305,7 @@ function getAuthFormCopy(mode: AuthMode): { title: string; description: string |
         description: null,
       }
     : {
-        title: "Arrweeb",
+        title: "Arrtemplar",
         description: null,
       };
 }

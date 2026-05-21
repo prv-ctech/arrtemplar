@@ -36,7 +36,7 @@ export async function configureRedactedLogCapture(
         formattedOutput.push(redactedFormatter(record));
       }),
     },
-    loggers: [{ category: ["arrweeb"], sinks: ["buffer"] }],
+    loggers: [{ category: ["arrtemplar"], sinks: ["buffer"] }],
   });
 
   return { records, sink, formattedOutput };

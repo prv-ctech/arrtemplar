@@ -49,7 +49,7 @@ describe("safe API error handling", () => {
 
     await configure({
       sinks: { buffer: sink },
-      loggers: [{ category: ["arrweeb", "security"], sinks: ["buffer"] }],
+      loggers: [{ category: ["arrtemplar", "security"], sinks: ["buffer"] }],
     });
 
     app.get("/api/force-error", () => {
@@ -73,7 +73,7 @@ describe("safe API error handling", () => {
     const serializedLogs = JSON.stringify(records);
 
     expect(records).toHaveLength(1);
-    expect(records[0]?.category).toEqual(["arrweeb", "security"]);
+    expect(records[0]?.category).toEqual(["arrtemplar", "security"]);
     expect(records[0]?.level).toBe("error");
     expect(records[0]?.properties).toMatchObject({ code: "UNKNOWN", errorType: "Error" });
     expect(serializedLogs).not.toContain("database exploded");

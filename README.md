@@ -1,11 +1,11 @@
-# Arrweeb-anime
+# Arrtemplar
 
-Arrweeb-anime is a self-hosted anime-native media request, automation, and watching app.
+Arrtemplar is a production-ready Bun monorepo template for Arrbit projects. It provides a clean, extensible foundation with auth, admin, and observability built in — ready to be cloned and specialized for any domain.
 
 - Bun monorepo workspace
 - Elysia backend with `GET /health`
 - OpenAPI docs at `/openapi`
-- Drizzle ORM schema for the Phase 1 SQLite tables
+- Drizzle ORM schema for the core SQLite tables (users, sessions, audit_logs)
 - Drizzle Kit generated SQL migrations
 - Bun-native `bun:sqlite` migration runner
 - First-boot admin account setup using Argon2id password hashing
@@ -19,9 +19,24 @@ Arrweeb-anime is a self-hosted anime-native media request, automation, and watch
 - TanStack Query and TanStack Router frontend foundation
 - Eden-based internal API client typing
 - Shared TypeScript contracts
-- Anime parser package skeleton
 
-Later phases will add the frontend auth shell, metadata imports, request workflows, search providers, download clients, jobs, and playback.
+## Usage as a template
+
+```sh
+# Clone the template
+git clone <arrtemplar-repo> my-new-project
+cd my-new-project
+
+# Customize for your project
+# - Update APP_NAME in packages/shared/src/constants/app.ts
+# - Extend the DB schema in apps/server/src/db/schema.ts
+# - Change the project name in package.json files
+# - Update the web app title in apps/web/index.html
+
+# Install and run
+bun install
+bun run dev
+```
 
 ## Development
 
@@ -39,7 +54,7 @@ Start the backend and frontend dev servers together:
 bun run dev
 ```
 
-This uses a small Bun-native dev runner instead of Bun workspace `--parallel` mode, so the terminal is not prefixed with package runner labels like `@arrweeb-anime/server:dev |`. Routine Vite output is silenced; backend operational output in the shared dev terminal should come from LogTape. Fatal Vite startup diagnostics are still allowed through stderr so broken frontend startup is not hidden.
+This uses a small Bun-native dev runner instead of Bun workspace `--parallel` mode, so the terminal is not prefixed with package runner labels. Routine Vite output is silenced; backend operational output in the shared dev terminal should come from LogTape. Fatal Vite startup diagnostics are still allowed through stderr so broken frontend startup is not hidden.
 
 | App      | URL                              | Runtime                | Hot reload            |
 | -------- | -------------------------------- | ---------------------- | --------------------- |
@@ -48,6 +63,14 @@ This uses a small Bun-native dev runner instead of Bun workspace `--parallel` mo
 | Typecheck | `bun run dev:typecheck` (manual) | `tsc --noEmit --watch` | TypeScript watch mode |
 
 - **Backend changes** — Bun's `--hot` reloads Elysia automatically. No app restart needed.
+
+## Quality checks
+
+```sh
+bun run check
+```
+
+Runs Biome lint/format, TypeScript typecheck, and Bun tests in sequence.
 - **Frontend changes** — Vite HMR updates the browser instantly. No page reload needed.
 - **TypeScript contract changes** — Run `bun run dev:typecheck` in a separate terminal for live type-checking across the workspace.
 - **API calls** — The frontend client uses the browser's current origin. Vite proxies `/health` and `/api` to the backend via `http://localhost:3000`.
@@ -84,17 +107,17 @@ bun run db:migrate
 
 SQLite database paths are fixed by environment:
 
-- Development database: `data/db/arrweeb-dev.sqlite`.
-- Test database: `data/db/arrweeb-test.sqlite`.
+- Development database: `data/db/arrtemplar-dev.sqlite`.
+- Test database: `data/db/arrtemplar-test.sqlite`.
 
-Tests always set and validate the canonical test database path before app code loads. They reset `data/db/arrweeb-test.sqlite` and its SQLite sidecars deliberately, run the real migrations, and never fall back to the development database.
+Tests always set and validate the canonical test database path before app code loads. They reset `data/db/arrtemplar-test.sqlite` and its SQLite sidecars deliberately, run the real migrations, and never fall back to the development database.
 SQLite does not start a separate database listener, so test isolation is enforced with the canonical test database file plus the isolated test server port.
 
 ### Backend logging
 
 The backend configures LogTape once at startup before migrations and request handling. Application, request, security, and Drizzle query logs always share one operational JSONL file sink. In local development they are also mirrored to the terminal with LogTape's ANSI console formatter, so `bun dev` shows backend startup and request logs without Bun workspace prefixes or routine Vite output.
 
-- Default path: `data/logs/arrweeb-anime.jsonl`.
+- Default path: `data/logs/arrtemplar.jsonl`.
 - Default rotation: 10 MiB per file, keeping 5 rotated files.
 - Default levels: `debug` in local development, `fatal` in tests, and `info` in production.
 - Terminal app logs: enabled in local development, disabled by default in tests and production, override with `LOG_CONSOLE=true|false`.
@@ -104,7 +127,7 @@ Optional overrides:
 
 ```txt
 LOG_LEVEL=info
-LOG_FILE_PATH=data/logs/arrweeb-anime.jsonl
+LOG_FILE_PATH=data/logs/arrtemplar.jsonl
 LOG_FILE_MAX_SIZE_BYTES=10485760
 LOG_FILE_MAX_FILES=5
 LOG_CONSOLE=true
@@ -136,14 +159,14 @@ On a fresh database, open the app and create the first account from the login pa
 
 Copy `.env.example` to `.env` for local development.
 
-- `DATABASE_URL` defaults to `data/db/arrweeb-dev.sqlite` outside tests.
-- In `NODE_ENV=test`, `DATABASE_URL` must be `data/db/arrweeb-test.sqlite`; unsafe test settings fail loudly instead of falling back to the dev database.
+- `DATABASE_URL` defaults to `data/db/arrtemplar-dev.sqlite` outside tests.
+- In `NODE_ENV=test`, `DATABASE_URL` must be `data/db/arrtemplar-test.sqlite`; unsafe test settings fail loudly instead of falling back to the dev database.
 - `BACKEND_ORIGIN` is the backend target Vite proxies to during development.
 - `VITE_API_BASE_URL` is blank by default so the frontend uses the Vite dev proxy; set it only when serving the frontend separately from the API.
 - `USE_POLLING=true` enables polling file watchers for environments where native file watching is unreliable.
 - `SESSION_COOKIE_SECURE` is `false` in local HTTP development; set it to `true` behind HTTPS in production.
 - `LOG_LEVEL` controls backend operational log verbosity. Valid values are `trace`, `debug`, `info`, `warning`, `error`, and `fatal`.
-- `LOG_FILE_PATH` defaults to `data/logs/arrweeb-anime.jsonl` for the backend rotating JSONL log file.
+- `LOG_FILE_PATH` defaults to `data/logs/arrtemplar.jsonl` for the backend rotating JSONL log file.
 - `LOG_FILE_MAX_SIZE_BYTES` defaults to `10485760` bytes before rotation.
 - `LOG_FILE_MAX_FILES` defaults to `5` retained log files.
 - `LOG_CONSOLE` mirrors backend app logs to the terminal. It defaults to `true` in local development and `false` in tests and production.

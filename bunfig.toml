@@ -3,3 +3,6 @@ silent = true
 
 [test]
 preload = ["./test/setup.ts"]
+
+[install]
+peer = false

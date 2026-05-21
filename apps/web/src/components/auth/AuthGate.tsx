@@ -1,4 +1,4 @@
-import type { PublicUser, UserRole } from "@arrweeb-anime/shared";
+import type { PublicUser, UserRole } from "@arrtemplar/shared";
 import { Navigate } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";

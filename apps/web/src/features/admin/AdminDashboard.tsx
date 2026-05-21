@@ -67,7 +67,7 @@ const scopePanels = [
 const adminTiles = [
   {
     title: "Library",
-    description: "Anime records, aliases, episodes, and manual corrections land here next.",
+    description: "Item records, aliases, and manual corrections land here next.",
     icon: <DatabaseIcon aria-hidden="true" className="size-5" weight="duotone" />,
   },
   {
@@ -308,7 +308,7 @@ function RegistryPanel() {
           <img
             alt="Abstract media registry preview"
             className="aspect-4/3 w-full object-cover opacity-86"
-            src="https://picsum.photos/seed/arrweeb-admin-registry/760/570"
+            src="https://picsum.photos/seed/arrtemplar-admin-registry/760/570"
           />
         </div>
         <dl className="mt-5 space-y-3 text-sm">

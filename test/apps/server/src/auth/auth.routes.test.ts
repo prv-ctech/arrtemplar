@@ -287,7 +287,7 @@ describe("auth routes", () => {
     expect(failedLoginAudit).toBeDefined();
     expect(failedLoginAudit?.metadataJson).toBe(JSON.stringify({ email: "admin@example.local" }));
     expect(JSON.stringify(failedLoginAudit)).not.toContain("wrong-password");
-    expect(JSON.stringify(failedLoginAudit)).not.toContain("arrweeb_session");
+    expect(JSON.stringify(failedLoginAudit)).not.toContain("arrtemplar_session");
   });
 
   it("rate-limits repeated failed logins", async () => {

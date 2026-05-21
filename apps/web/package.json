@@ -1,5 +1,5 @@
 {
-  "name": "@arrweeb-anime/web",
+  "name": "@arrtemplar/web",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,8 +11,8 @@
     "test": "cd ../.. && bun test test/apps/web"
   },
   "dependencies": {
-    "@arrweeb-anime/server": "workspace:*",
-    "@arrweeb-anime/shared": "workspace:*",
+    "@arrtemplar/server": "workspace:*",
+    "@arrtemplar/shared": "workspace:*",
     "@elysia/eden": "latest",
     "@phosphor-icons/react": "^2.1.10",
     "@tanstack/react-query": "latest",

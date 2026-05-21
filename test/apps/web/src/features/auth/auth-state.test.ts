@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const authStateSourcePath = `${Bun.env.PWD ?? "."}/apps/web/src/features/auth/auth-state.ts`;
+const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../../../");
+const authStateSourcePath = `${workspaceRoot}/apps/web/src/features/auth/auth-state.ts`;
 
 describe("useAuthSetupQuery", () => {
   it("always refreshes setup status when the login form mounts", async () => {

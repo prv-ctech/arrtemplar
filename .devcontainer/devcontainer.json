@@ -1,5 +1,5 @@
 {
-  "name": "Arrweeb Anime",
+  "name": "Arrtemplar",
   "image": "oven/bun:1-debian",
   "init": true,
   "containerUser": "root",

@@ -1,5 +1,5 @@
 {
-  "name": "@arrweeb-anime/server",
+  "name": "@arrtemplar/server",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -8,12 +8,12 @@
     "start": "bun src/main.ts",
     "build": "bun build src/main.ts --target=bun --outdir=dist",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "cd ../.. && DATABASE_URL=data/db/arrweeb-test.sqlite bun test test/apps/server",
+    "test": "cd ../.. && DATABASE_URL=data/db/arrtemplar-test.sqlite bun test test/apps/server",
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",
     "db:migrate": "bun src/db/migrate.ts"
   },
   "dependencies": {
-    "@arrweeb-anime/shared": "workspace:*",
+    "@arrtemplar/shared": "workspace:*",
     "@elysia/cors": "latest",
     "@elysia/openapi": "latest",
     "@logtape/drizzle-orm": "^2.1.0",

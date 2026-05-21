@@ -34,8 +34,8 @@ const appSensitivePatterns: RedactionPatterns = [
   JWT_PATTERN,
   CREDIT_CARD_NUMBER_PATTERN,
   {
-    pattern: /arrweeb_session=[^;\s]+/g,
-    replacement: "arrweeb_session=[REDACTED]",
+    pattern: /arrtemplar_session=[^;\s]+/g,
+    replacement: "arrtemplar_session=[REDACTED]",
   },
   {
     pattern: /\b(cookie|token|session|secret|password|auth|key)=([^&\s;]+)/gi,
@@ -81,7 +81,7 @@ function redactUrlField(value: unknown): unknown {
 
 function redactParsedUrl(value: string): string {
   const isAbsolute = /^[a-z][a-z\d+.-]*:/i.test(value);
-  const url = new URL(value, "http://arrweeb.local");
+  const url = new URL(value, "http://arrtemplar.local");
 
   for (const key of url.searchParams.keys()) {
     url.searchParams.set(key, "[REDACTED]");

@@ -10,14 +10,14 @@ export function readTableNames(database: DatabaseClient): string[] {
     .map((table) => table.name);
 }
 
-export function expectPhaseOneTables(tableNames: string[]): void {
+export function expectCoreTables(tableNames: string[]): void {
   expect(tableNames).toContain("users");
   expect(tableNames).toContain("sessions");
   expect(tableNames).toContain("audit_logs");
-  expect(tableNames).toContain("anime_titles");
-  expect(tableNames).toContain("anime_aliases");
-  expect(tableNames).toContain("anime_external_ids");
-  expect(tableNames).toContain("episodes");
-  expect(tableNames).toContain("metadata_cache");
+  expect(tableNames).not.toContain("anime_titles");
+  expect(tableNames).not.toContain("anime_aliases");
+  expect(tableNames).not.toContain("anime_external_ids");
+  expect(tableNames).not.toContain("episodes");
+  expect(tableNames).not.toContain("metadata_cache");
   expect(tableNames).toContain("__drizzle_migrations");
 }

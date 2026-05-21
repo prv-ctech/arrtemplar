@@ -17,8 +17,8 @@ import { AdminDashboard } from "../features/admin/AdminDashboard";
 import { DashboardPage } from "../features/dashboard/DashboardPage";
 
 const loginMediaAssets = {
-  backdrop: "https://picsum.photos/seed/arrweeb-login-backdrop/1800/1200",
-  artwork: "https://picsum.photos/seed/arrweeb-login-panel/1400/1600",
+  backdrop: "https://picsum.photos/seed/arrtemplar-login-backdrop/1800/1200",
+  artwork: "https://picsum.photos/seed/arrtemplar-login-panel/1400/1600",
 } as const;
 
 function RootLayout() {

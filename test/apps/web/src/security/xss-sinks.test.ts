@@ -1,7 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import { Glob } from "bun";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const webSourceRoot = `${Bun.env.PWD ?? "."}/apps/web/src`;
+const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../..");
+const webSourceRoot = `${workspaceRoot}/apps/web/src`;
 
 const unsafeSinkPatterns = [
   { name: "React dangerouslySetInnerHTML", pattern: /dangerouslySetInnerHTML/ },

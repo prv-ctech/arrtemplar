@@ -1,4 +1,4 @@
-import type { App } from "@arrweeb-anime/server";
+import type { App } from "@arrtemplar/server";
 import type {
   AuthSetupStatusResponse,
   AuthUserResponse,
@@ -9,8 +9,8 @@ import type {
   LoginResponse,
   LogoutResponse,
   PublicUser,
-} from "@arrweeb-anime/shared";
-import { CSRF_HEADER_NAME, CSRF_HEADER_VALUE } from "@arrweeb-anime/shared";
+} from "@arrtemplar/shared";
+import { CSRF_HEADER_NAME, CSRF_HEADER_VALUE } from "@arrtemplar/shared";
 import { treaty } from "@elysia/eden";
 import { resolveApiBaseUrl } from "./api-base-url";
 import { ApiClientError, getApiErrorCode, getApiErrorMessage } from "./api-error";

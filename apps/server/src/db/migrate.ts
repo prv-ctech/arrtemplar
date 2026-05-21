@@ -7,7 +7,7 @@ import { configureServerLogging } from "../logging/config";
 import { createDatabase } from "./client";
 
 const migrationsFolder = join(dirname(fileURLToPath(import.meta.url)), "../../drizzle");
-const serverLogger = getLogger(["arrweeb", "server"]);
+const serverLogger = getLogger(["arrtemplar", "server"]);
 
 export function migrateDatabase(databaseUrl = env.databaseUrl): void {
   const database = createDatabase(databaseUrl);

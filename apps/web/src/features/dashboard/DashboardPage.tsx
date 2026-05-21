@@ -1,4 +1,4 @@
-import type { PublicUser } from "@arrweeb-anime/shared";
+import type { PublicUser } from "@arrtemplar/shared";
 import {
   ArrowRightIcon,
   DatabaseIcon,
@@ -51,15 +51,14 @@ const demandBars = [
 ] as const;
 
 const mediaCards = [
-  ["Kitsune Relay", "Dual-audio match", "arrweeb-kitsune-relay", "1080p"],
-  ["Harbor of Glass", "Artwork pending", "arrweeb-harbor-glass", "OVA"],
-  ["Moonlit Saffron", "Alias confidence 84.6%", "arrweeb-moonlit-saffron", "S02"],
-  ["Aster Train", "Watchlist request", "arrweeb-aster-train", "TV"],
+  ["Kitsune Relay", "Dual-audio match", "arrtemplar-kitsune-relay", "1080p"],
+  ["Harbor of Glass", "Artwork pending", "arrtemplar-harbor-glass", "OVA"],
+  ["Moonlit Saffron", "Alias confidence 84.6%", "arrtemplar-moonlit-saffron", "S02"],
+  ["Aster Train", "Watchlist request", "arrtemplar-aster-train", "TV"],
 ] as const;
 
 const operations = [
   ["Protected routing", "Server session decides the landing page."],
-  ["Parser lane", "Release names stay inspectable before import."],
   ["Admin review", "Role-gated tools remain visible without leaking actions."],
 ] as const;
 

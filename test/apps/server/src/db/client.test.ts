@@ -19,12 +19,12 @@ afterEach(async () => {
 });
 
 describe("createDatabase", () => {
-  it("logs Drizzle queries through the Arrweeb database query category", async () => {
+  it("logs Drizzle queries through the database query category", async () => {
     const { records, sink } = createLogBuffer();
 
     await configure({
       sinks: { buffer: sink },
-      loggers: [{ category: ["arrweeb", "database", "query"], sinks: ["buffer"] }],
+      loggers: [{ category: ["arrtemplar", "database", "query"], sinks: ["buffer"] }],
     });
 
     database = await resetAndOpenTestDatabase();
@@ -33,7 +33,7 @@ describe("createDatabase", () => {
     database.db.select().from(users).all();
 
     expect(records).toHaveLength(1);
-    expect(records[0]?.category).toEqual(["arrweeb", "database", "query"]);
+    expect(records[0]?.category).toEqual(["arrtemplar", "database", "query"]);
     expect(records[0]?.level).toBe("debug");
     expect(records[0]?.properties).toMatchObject({
       query: expect.stringContaining("select"),

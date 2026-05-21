@@ -55,12 +55,12 @@ export async function configureServerLogging(runtimeEnv: RuntimeEnv = env): Prom
     },
     loggers: [
       {
-        category: ["logtape", "meta"],
+        category: ["arrtemplar", "meta"],
         filters: ["metaWarnings"],
         sinks: ["meta"],
       },
       {
-        category: ["arrweeb"],
+        category: ["arrtemplar"],
         filters: ["runtimeLevel"],
         sinks: [...appSinks],
       },
@@ -75,7 +75,7 @@ async function ensureParentDirectory(filePath: string): Promise<void> {
     return;
   }
 
-  const markerPath = `${directory}/.arrweeb-log-dir`;
+  const markerPath = `${directory}/.arrtemplar-log-dir`;
 
   await Bun.write(markerPath, "", { createPath: true });
   await Bun.file(markerPath).delete();

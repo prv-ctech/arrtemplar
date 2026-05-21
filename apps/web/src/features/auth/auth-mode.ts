@@ -1,4 +1,4 @@
-import type { AuthSetupStatusResponse } from "@arrweeb-anime/shared";
+import type { AuthSetupStatusResponse } from "@arrtemplar/shared";
 
 export type AuthMode = "login" | "setup";
 

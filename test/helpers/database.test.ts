@@ -7,7 +7,7 @@ import {
   TEST_DATABASE_FILES,
   TEST_DATABASE_URL,
 } from "./database";
-import { expectPhaseOneTables, readTableNames } from "./schema-assertions";
+import { expectCoreTables, readTableNames } from "./schema-assertions";
 
 describe("canonical test database helper", () => {
   it("removes the canonical test database and SQLite sidecars", async () => {
@@ -29,7 +29,7 @@ describe("canonical test database helper", () => {
     const database = openTestDatabase();
 
     try {
-      expectPhaseOneTables(readTableNames(database));
+      expectCoreTables(readTableNames(database));
     } finally {
       database.close();
     }

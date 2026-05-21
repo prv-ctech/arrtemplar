@@ -1,7 +1,10 @@
 import { describe, expect, it } from "bun:test";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const loginFormSourcePath = `${Bun.env.PWD ?? "."}/apps/web/src/components/auth/LoginForm.tsx`;
-const routerSourcePath = `${Bun.env.PWD ?? "."}/apps/web/src/routes/router.tsx`;
+const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../");
+const loginFormSourcePath = `${workspaceRoot}/apps/web/src/components/auth/LoginForm.tsx`;
+const routerSourcePath = `${workspaceRoot}/apps/web/src/routes/router.tsx`;
 
 describe("login route layout", () => {
   it("omits the login subtitle that makes the compact auth panel overflow", async () => {

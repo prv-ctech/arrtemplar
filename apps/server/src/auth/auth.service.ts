@@ -5,7 +5,7 @@ import type {
   LoginRequest,
   PublicUser,
   UserRole,
-} from "@arrweeb-anime/shared";
+} from "@arrtemplar/shared";
 import { eq, or, sql } from "drizzle-orm";
 import type { DatabaseClient } from "../db/client";
 import { auditLogs, sessions, type User, users } from "../db/schema";

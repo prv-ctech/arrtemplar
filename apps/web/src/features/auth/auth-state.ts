@@ -1,4 +1,4 @@
-import type { PublicUser, UserRole } from "@arrweeb-anime/shared";
+import type { PublicUser, UserRole } from "@arrtemplar/shared";
 import { useQuery } from "@tanstack/react-query";
 import { getAuthSetupStatus, getCurrentUser } from "@/lib/api";
 

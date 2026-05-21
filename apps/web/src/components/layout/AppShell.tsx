@@ -1,4 +1,4 @@
-import type { PublicUser } from "@arrweeb-anime/shared";
+import type { PublicUser } from "@arrtemplar/shared";
 import {
   ArrowSquareOutIcon,
   CompassIcon,
@@ -77,7 +77,7 @@ export function AppShell({
 
   const sectionDescription =
     section === "Admin"
-      ? "Import rules, queue pressure, and audit review for the anime library."
+      ? "Import rules, queue pressure, and audit review."
       : "Requests, release signals, health checks, and watchlist movement in one desk.";
 
   return (
@@ -134,7 +134,7 @@ export function AppShell({
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="min-w-0">
                   <p className="text-xs font-semibold uppercase tracking-[0.28em] text-muted-foreground">
-                    Arrweeb anime
+                    Arrtemplar
                   </p>
                   <div className="mt-1 flex flex-wrap items-end gap-x-4 gap-y-1">
                     <h1 className="text-3xl font-semibold tracking-[-0.045em] text-foreground sm:text-4xl">

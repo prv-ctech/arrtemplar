@@ -18,7 +18,7 @@ describe("LogTape server logging configuration", () => {
   it("redacts sensitive structured fields and formatted message patterns", async () => {
     const { records, formattedOutput } = await configureRedactedLogCapture();
 
-    getLogger(["arrweeb", "auth"]).info(
+    getLogger(["arrtemplar", "auth"]).info(
       "Login for user@example.local with bearer eyJhbGciOiJIUzI1NiJ9.payload.signature and card 4111111111111111",
       {
         email: "user@example.local",
@@ -26,7 +26,7 @@ describe("LogTape server logging configuration", () => {
         passwordHash: "$argon2id$secret",
         sessionToken: "raw-session-token",
         tokenHash: "hashed-session-token",
-        cookie: "arrweeb_session=raw-cookie-value",
+        cookie: "arrtemplar_session=raw-cookie-value",
       },
     );
 
@@ -49,7 +49,7 @@ describe("LogTape server logging configuration", () => {
       return record.message.join("");
     });
 
-    getLogger(["arrweeb", "server"]).info("Server listening on {serverUrl}", {
+    getLogger(["arrtemplar", "server"]).info("Server listening on {serverUrl}", {
       serverUrl: "http://localhost:3124",
     });
 
@@ -60,7 +60,7 @@ describe("LogTape server logging configuration", () => {
   it("keeps request paths visible while redacting URL and referrer query values", async () => {
     const { records, formattedOutput } = await configureRedactedLogCapture();
 
-    getLogger(["arrweeb", "http"]).info("GET {url} from {referrer}", {
+    getLogger(["arrtemplar", "http"]).info("GET {url} from {referrer}", {
       url: "/api/auth/me?token=query-secret",
       referrer: "http://localhost/login?session=referrer-secret",
     });
@@ -87,7 +87,7 @@ describe("LogTape server logging configuration", () => {
 
     await configureServerLogging(runtimeEnv);
 
-    getLogger(["arrweeb", "server"]).info("Server started for {email}", {
+    getLogger(["arrtemplar", "server"]).info("Server started for {email}", {
       email: "operator@example.local",
       sessionToken: "startup-session-token",
     });
@@ -97,7 +97,7 @@ describe("LogTape server logging configuration", () => {
     const logText = await Bun.file(resolvedTestLogPath).text();
 
     expect(logText).toContain("Server started");
-    expect(logText).toContain("arrweeb.server");
+    expect(logText).toContain("arrtemplar.server");
     expect(logText).not.toContain("operator@example.local");
     expect(logText).not.toContain("startup-session-token");
   });
@@ -113,7 +113,7 @@ describe("LogTape server logging configuration", () => {
     await configureServerLogging(runtimeEnv);
 
     const arrweebLogger = getConfig()?.loggers.find((logger) => {
-      return Array.isArray(logger.category) && logger.category.join(".") === "arrweeb";
+      return Array.isArray(logger.category) && logger.category.join(".") === "arrtemplar";
     });
 
     expect(arrweebLogger?.sinks).toEqual(["appFile", "appConsole"]);
@@ -130,7 +130,7 @@ describe("LogTape server logging configuration", () => {
     await configureServerLogging(productionEnv);
 
     const fileOnlyLogger = getConfig()?.loggers.find((logger) => {
-      return Array.isArray(logger.category) && logger.category.join(".") === "arrweeb";
+      return Array.isArray(logger.category) && logger.category.join(".") === "arrtemplar";
     });
 
     expect(fileOnlyLogger?.sinks).toEqual(["appFile"]);
@@ -148,7 +148,7 @@ describe("LogTape server logging configuration", () => {
     await configureServerLogging(consoleEnabledEnv);
 
     const consoleEnabledLogger = getConfig()?.loggers.find((logger) => {
-      return Array.isArray(logger.category) && logger.category.join(".") === "arrweeb";
+      return Array.isArray(logger.category) && logger.category.join(".") === "arrtemplar";
     });
 
     expect(consoleEnabledLogger?.sinks).toEqual(["appFile", "appConsole"]);
@@ -164,7 +164,7 @@ describe("LogTape server logging configuration", () => {
 
     await configureServerLogging(runtimeEnv);
 
-    const logger = getLogger(["arrweeb", "database", "query"]);
+    const logger = getLogger(["arrtemplar", "database", "query"]);
 
     logger.debug("Debug query should stay out of production logs", { query: "select 1" });
     logger.info("Info query summary should be logged", { query: "select 1" });

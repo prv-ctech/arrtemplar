@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 
-export const SESSION_COOKIE_NAME = "arrweeb_session" as const;
+export const SESSION_COOKIE_NAME = "arrtemplar_session" as const;
 export const SESSION_DURATION_SECONDS = 60 * 60 * 24 * 30;
 
 export function createSessionExpiresAt(now = new Date()): Date {

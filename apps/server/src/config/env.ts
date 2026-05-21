@@ -21,7 +21,7 @@ export type RuntimeEnv = {
 export type RuntimeLogLevel = "trace" | "debug" | "info" | "warning" | "error" | "fatal";
 
 const runtimeLogLevels = ["trace", "debug", "info", "warning", "error", "fatal"] as const;
-const DEFAULT_LOG_FILE_PATH = "data/logs/arrweeb-anime.jsonl";
+const DEFAULT_LOG_FILE_PATH = "data/logs/arrtemplar.jsonl";
 const DEFAULT_LOG_FILE_MAX_SIZE_BYTES = 10 * 1024 * 1024;
 const DEFAULT_LOG_FILE_MAX_FILES = 5;
 

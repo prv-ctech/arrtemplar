@@ -5,7 +5,7 @@ import type {
   CreateLocalUserResponse,
   LoginResponse,
   LogoutResponse,
-} from "@arrweeb-anime/shared";
+} from "@arrtemplar/shared";
 import { Elysia, t } from "elysia";
 import type { DatabaseClient } from "../db/client";
 import { AuthService } from "./auth.service";

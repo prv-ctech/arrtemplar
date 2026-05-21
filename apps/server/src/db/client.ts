@@ -28,7 +28,7 @@ export function createDatabase(databaseUrl = env.databaseUrl): DatabaseClient {
     db: drizzle(sqlite, {
       schema,
       logger: getDrizzleLogger({
-        category: ["arrweeb", "database", "query"],
+        category: ["arrtemplar", "database", "query"],
         level: "debug",
       }),
     }),

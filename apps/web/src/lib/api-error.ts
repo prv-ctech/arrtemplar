@@ -1,4 +1,4 @@
-import type { ApiErrorResponse } from "@arrweeb-anime/shared";
+import type { ApiErrorResponse } from "@arrtemplar/shared";
 
 export class ApiClientError extends Error {
   constructor(

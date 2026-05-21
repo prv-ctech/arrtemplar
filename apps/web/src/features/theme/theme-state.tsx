@@ -7,7 +7,7 @@ import {
   resolveCatppuccinTheme,
 } from "./theme-options";
 
-const THEME_STORAGE_KEY = "arrweeb-anime.catppuccin-theme";
+const THEME_STORAGE_KEY = "arrtemplar.catppuccin-theme";
 
 type ThemeContextValue = {
   theme: CatppuccinTheme;
