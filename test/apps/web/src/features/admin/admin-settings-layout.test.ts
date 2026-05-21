@@ -33,6 +33,31 @@ describe("admin settings layout", () => {
     expect(source).toContain("user.username");
   });
 
+  it("keeps theme and account actions in the primary shell header", async () => {
+    const source = await Bun.file(appShellSourcePath).text();
+    const shellHeaderStart = source.indexOf("<aside");
+    const contentAreaStart = source.indexOf("<section");
+    const themeSwitcherPosition = source.indexOf("<ThemeSwitcher compact />");
+    const accountMenuPosition = source.indexOf("Open account menu for");
+
+    expect(shellHeaderStart).toBeGreaterThan(-1);
+    expect(contentAreaStart).toBeGreaterThan(shellHeaderStart);
+    expect(themeSwitcherPosition).toBeGreaterThan(shellHeaderStart);
+    expect(themeSwitcherPosition).toBeLessThan(contentAreaStart);
+    expect(accountMenuPosition).toBeGreaterThan(shellHeaderStart);
+    expect(accountMenuPosition).toBeLessThan(contentAreaStart);
+  });
+
+  it("uses a desktop-only full-width search header without adding a mobile header", async () => {
+    const source = await Bun.file(appShellSourcePath).text();
+
+    expect(source).toContain(
+      'className="sticky top-0 z-20 hidden border-b border-border bg-background/92 backdrop-blur-lg lg:block"',
+    );
+    expect(source).toContain('className="flex w-full items-center gap-3');
+    expect(source).not.toContain("hidden min-w-72 items-center");
+  });
+
   it("styles native scrollbars with theme tokens", async () => {
     const source = await Bun.file(stylesSourcePath).text();
 
