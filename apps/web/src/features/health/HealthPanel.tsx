@@ -5,6 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton";
 import { getHealth } from "@/lib/api";
 
+const healthTimestampFormatter = new Intl.DateTimeFormat(undefined, {
+  dateStyle: "medium",
+  timeStyle: "short",
+});
+
 export function HealthPanel() {
   const healthQuery = useQuery({
     queryKey: ["health"],
@@ -17,7 +22,7 @@ export function HealthPanel() {
       <CardHeader>
         <div className="flex items-center gap-3">
           <div className="rounded-2xl border border-primary/25 bg-primary/10 p-2 text-primary">
-            <ActivityIcon aria-hidden="true" className="h-5 w-5" weight="duotone" />
+            <ActivityIcon aria-hidden="true" className="size-5" weight="duotone" />
           </div>
           <div>
             <CardTitle>Backend health</CardTitle>
@@ -57,7 +62,7 @@ function HealthError({ message, onRetry }: { message: string; onRetry: () => voi
       <div className="flex items-start gap-3">
         <WarningCircleIcon
           aria-hidden="true"
-          className="mt-0.5 h-5 w-5 text-destructive"
+          className="mt-0.5 size-5 text-destructive"
           weight="duotone"
         />
         <div>
@@ -80,14 +85,17 @@ function HealthReady({
   return (
     <div className="grid gap-4 rounded-3xl border border-primary/25 bg-primary/10 p-4 sm:grid-cols-2">
       <div className="flex items-center gap-3 sm:col-span-2">
-        <CheckCircleIcon aria-hidden="true" className="h-5 w-5 text-primary" weight="duotone" />
+        <CheckCircleIcon aria-hidden="true" className="size-5 text-primary" weight="duotone" />
         <p className="font-medium">
           {health.name} API is {health.status}
         </p>
       </div>
       <dl className="grid gap-4 sm:col-span-2 sm:grid-cols-2">
         <StatusField label="Version" value={health.version} />
-        <StatusField label="Updated" value={new Date(health.timestamp).toLocaleString()} />
+        <StatusField
+          label="Updated"
+          value={healthTimestampFormatter.format(Date.parse(health.timestamp))}
+        />
       </dl>
     </div>
   );

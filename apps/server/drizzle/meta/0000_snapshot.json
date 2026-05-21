@@ -288,9 +288,5 @@
     "schemas": {},
     "tables": {},
     "columns": {}
-  },
-  "version": "1",
-  "dialect": "sqlite",
-  "id": "0000_core_tables",
-  "prevId": "00000000-0000-0000-0000-000000000000"
+  }
 }

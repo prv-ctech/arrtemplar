@@ -13,7 +13,7 @@ import { getLandingPathForUser } from "@/features/auth/auth-navigation";
 import { useCurrentUserQuery } from "@/features/auth/auth-state";
 import { ThemeSwitcher } from "@/features/theme/ThemeSwitcher";
 import { useTheme } from "@/features/theme/theme-state";
-import { AdminDashboard } from "../features/admin/AdminDashboard";
+import { AdminSettings } from "../features/admin/AdminSettings";
 import { DashboardPage } from "../features/dashboard/DashboardPage";
 
 const loginMediaAssets = {
@@ -100,7 +100,7 @@ function AdminRoute() {
     <AuthGate requiredRole="admin">
       {(user) => (
         <AppShell section="Admin" user={user}>
-          <AdminDashboard />
+          <AdminSettings />
         </AppShell>
       )}
     </AuthGate>
