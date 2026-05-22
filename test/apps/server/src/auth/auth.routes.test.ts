@@ -7,6 +7,7 @@ import {
 } from "../../../../../apps/server/src/auth/session-token";
 import type { DatabaseClient } from "../../../../../apps/server/src/db/client";
 import { auditLogs, sessions, users } from "../../../../../apps/server/src/db/schema";
+import { CSRF_HEADER_NAME, CSRF_HEADER_VALUE } from "../../../../../packages/shared/src";
 import {
   closeServerTestDatabases,
   createServerTestApp,
@@ -343,6 +344,139 @@ describe("auth routes", () => {
     });
   });
 
+  it("returns only the authenticated user's profile from /api/user/profile", async () => {
+    const { app } = await createAuthTestApp();
+    const anonymousResponse = await app.handle(new Request("http://localhost/api/user/profile"));
+    const viewerCookie = await loginAndReadCookie(app, "viewer@example.local");
+    const viewerResponse = await app.handle(
+      new Request("http://localhost/api/user/profile", { headers: { cookie: viewerCookie } }),
+    );
+    const viewerBody = await viewerResponse.json();
+
+    expect(anonymousResponse.status).toBe(401);
+    expect(viewerResponse.status).toBe(200);
+    expect(viewerBody).toEqual({
+      user: {
+        id: expect.any(String),
+        username: "viewer",
+        email: "viewer@example.local",
+        role: "user",
+        createdAt: expect.any(String),
+        lastLoginAt: expect.any(String),
+      },
+    });
+    expect(JSON.stringify(viewerBody)).not.toContain("passwordHash");
+  });
+
+  it("updates only the authenticated user's username and email", async () => {
+    const { app, database } = await createAuthTestApp();
+    const viewerCookie = await loginAndReadCookie(app, "viewer@example.local");
+
+    const response = await app.handle(
+      csrfJsonPutRequest(
+        "/api/user/profile",
+        { username: "reader", email: "reader@example.local" },
+        { cookie: viewerCookie },
+      ),
+    );
+    const body = await response.json();
+    const storedViewer = findStoredUserById(database, body.user.id);
+
+    expect(response.status).toBe(200);
+    expect(body.user).toMatchObject({
+      username: "reader",
+      email: "reader@example.local",
+      role: "user",
+    });
+    expect(storedViewer?.username).toBe("reader");
+    expect(storedViewer?.email).toBe("reader@example.local");
+
+    const duplicateResponse = await app.handle(
+      csrfJsonPutRequest(
+        "/api/user/profile",
+        { username: "admin", email: "admin@example.local" },
+        { cookie: viewerCookie },
+      ),
+    );
+    const duplicateBody = await duplicateResponse.json();
+
+    expect(duplicateResponse.status).toBe(409);
+    expect(duplicateBody).toEqual({
+      error: {
+        code: "USER_ALREADY_EXISTS",
+        message: "A user with that username or email already exists.",
+      },
+    });
+  });
+
+  it("changes the authenticated user's password after verifying the current password", async () => {
+    const { app, database } = await createAuthTestApp();
+    const viewerCookie = await loginAndReadCookie(app, "viewer@example.local");
+
+    const wrongCurrentResponse = await app.handle(
+      csrfJsonPutRequest(
+        "/api/user/password",
+        {
+          currentPassword: "wrong-password",
+          newPassword: "correct-horse-battery-staple-updated",
+        },
+        { cookie: viewerCookie },
+      ),
+    );
+
+    expect(wrongCurrentResponse.status).toBe(401);
+
+    const tooShortResponse = await app.handle(
+      csrfJsonPutRequest(
+        "/api/user/password",
+        { currentPassword: "correct-horse-battery-staple", newPassword: "short" },
+        { cookie: viewerCookie },
+      ),
+    );
+
+    expect(tooShortResponse.status).toBe(422);
+
+    const response = await app.handle(
+      csrfJsonPutRequest(
+        "/api/user/password",
+        {
+          currentPassword: "correct-horse-battery-staple",
+          newPassword: "correct-horse-battery-staple-updated",
+        },
+        { cookie: viewerCookie },
+      ),
+    );
+    const body = await response.json();
+    const storedViewer = findStoredUserByEmail(database, "viewer@example.local");
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({ status: "ok" });
+    expect(storedViewer?.passwordHash).toStartWith("$argon2id$");
+    expect(storedViewer?.passwordHash).not.toContain("correct-horse-battery-staple-updated");
+    expect(
+      await Bun.password.verify(
+        "correct-horse-battery-staple-updated",
+        storedViewer?.passwordHash ?? "",
+      ),
+    ).toBe(true);
+
+    const oldPasswordLogin = await app.handle(
+      csrfJsonRequest("/api/auth/login", {
+        email: "viewer@example.local",
+        password: "correct-horse-battery-staple",
+      }),
+    );
+    const newPasswordLogin = await app.handle(
+      csrfJsonRequest("/api/auth/login", {
+        email: "viewer@example.local",
+        password: "correct-horse-battery-staple-updated",
+      }),
+    );
+
+    expect(oldPasswordLogin.status).toBe(401);
+    expect(newPasswordLogin.status).toBe(200);
+  });
+
   it("treats deleted sessions as anonymous for current-user and admin checks", async () => {
     const { app, database } = await createAuthTestApp();
     const cookieHeader = await loginAndReadCookie(app);
@@ -421,10 +555,13 @@ async function insertTestUser(
     .run();
 }
 
-async function loginAndReadCookie(app: TestAppContext["app"]): Promise<string> {
+async function loginAndReadCookie(
+  app: TestAppContext["app"],
+  email = "admin@example.local",
+): Promise<string> {
   const loginResponse = await app.handle(
     csrfJsonRequest("/api/auth/login", {
-      email: "admin@example.local",
+      email,
       password: "correct-horse-battery-staple",
     }),
   );
@@ -464,6 +601,40 @@ function expectSecureSessionCookie(setCookie: string): void {
 
 function readCookieValue(cookieHeader: string): string {
   return cookieHeader.slice(`${SESSION_COOKIE_NAME}=`.length);
+}
+
+function findStoredUserById(database: DatabaseClient, id: string) {
+  return database.db
+    .select()
+    .from(users)
+    .all()
+    .find((user) => user.id === id);
+}
+
+function findStoredUserByEmail(database: DatabaseClient, email: string) {
+  return database.db
+    .select()
+    .from(users)
+    .all()
+    .find((user) => user.email === email);
+}
+
+function csrfJsonPutRequest(
+  path: string,
+  body: unknown,
+  headers: Record<string, string> = {},
+): Request {
+  return new Request(`http://localhost${path}`, {
+    method: "PUT",
+    headers: {
+      "content-type": "application/json",
+      "x-forwarded-for": "127.0.0.1",
+      origin: "http://localhost:5173",
+      [CSRF_HEADER_NAME]: CSRF_HEADER_VALUE,
+      ...headers,
+    },
+    body: JSON.stringify(body),
+  });
 }
 
 function expectUuidv7(id: string | undefined): void {

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../../../");
 const adminSettingsSourcePath = `${workspaceRoot}/apps/web/src/features/admin/AdminSettings.tsx`;
 const appShellSourcePath = `${workspaceRoot}/apps/web/src/components/layout/AppShell.tsx`;
-const settingsNavSourcePath = `${workspaceRoot}/apps/web/src/features/admin/settings/SettingsNav.tsx`;
+const settingsNavSourcePath = `${workspaceRoot}/apps/web/src/features/settings/SettingsNav.tsx`;
 const switchSourcePath = `${workspaceRoot}/apps/web/src/components/ui/switch.tsx`;
 const stylesSourcePath = `${workspaceRoot}/apps/web/src/styles.css`;
 

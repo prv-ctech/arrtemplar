@@ -47,3 +47,25 @@ describe("app shell mobile search", () => {
     expect(mobileHeaderRowClass).not.toMatch(/(^|\s)h-full(\s|$)/);
   });
 });
+
+describe("app shell navigation", () => {
+  it("uses the /app dashboard route for the logo and dashboard button", async () => {
+    const source = await Bun.file(appShellSourcePath).text();
+
+    expect(source).toContain('to="/app/dashboard"');
+    expect(source).toContain('to: "/app/dashboard"');
+    expect(source).not.toContain('to="/dashboard"');
+    expect(source).not.toContain('to: "/dashboard"');
+  });
+
+  it("shows separate settings and admin buttons with different visibility rules", async () => {
+    const source = await Bun.file(appShellSourcePath).text();
+
+    expect(source).toContain('to?: "/app/dashboard" | "/user/settings" | "/admin"');
+    expect(source).toContain('label: "Settings"');
+    expect(source).toContain('to: "/user/settings"');
+    expect(source).toContain('label: "Admin"');
+    expect(source).toContain('to: "/admin" as const');
+    expect(source).toContain('user.role === "admin"');
+  });
+});

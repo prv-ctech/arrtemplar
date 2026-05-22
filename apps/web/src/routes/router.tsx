@@ -1,3 +1,4 @@
+import type { PublicUser } from "@arrtemplar/shared";
 import {
   createRootRoute,
   createRoute,
@@ -5,6 +6,7 @@ import {
   Navigate,
   Outlet,
 } from "@tanstack/react-router";
+import { createContext, useContext } from "react";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { AppShell } from "@/components/layout/AppShell";
@@ -15,6 +17,7 @@ import { ThemeSwitcher } from "@/features/theme/ThemeSwitcher";
 import { useTheme } from "@/features/theme/theme-state";
 import { AdminSettings } from "../features/admin/AdminSettings";
 import { DashboardPage } from "../features/dashboard/DashboardPage";
+import { UserSettings } from "../features/user/UserSettings";
 
 const loginMediaAssets = {
   backdrop: "https://picsum.photos/seed/arrtemplar-login-backdrop/1800/1200",
@@ -32,8 +35,20 @@ function RootLayout() {
   );
 }
 
+const AuthenticatedUserContext = createContext<PublicUser | null>(null);
+
+function useAuthenticatedRouteUser(): PublicUser {
+  const user = useContext(AuthenticatedUserContext);
+
+  if (!user) {
+    throw new Error("Authenticated route user is only available inside authenticated layouts.");
+  }
+
+  return user;
+}
+
 function IndexRoute() {
-  return <Navigate replace to="/dashboard" />;
+  return <Navigate replace to="/app/dashboard" />;
 }
 
 function LoginRoute() {
@@ -83,16 +98,44 @@ function LoginRoute() {
   );
 }
 
-function DashboardRoute() {
+function AppRoute() {
   return (
     <AuthGate>
       {(user) => (
         <AppShell section="Dashboard" user={user}>
-          <DashboardPage user={user} />
+          <AuthenticatedUserContext.Provider value={user}>
+            <Outlet />
+          </AuthenticatedUserContext.Provider>
         </AppShell>
       )}
     </AuthGate>
   );
+}
+
+function UserRoute() {
+  return (
+    <AuthGate>
+      {(user) => (
+        <AppShell section="Settings" user={user}>
+          <AuthenticatedUserContext.Provider value={user}>
+            <Outlet />
+          </AuthenticatedUserContext.Provider>
+        </AppShell>
+      )}
+    </AuthGate>
+  );
+}
+
+function DashboardRoute() {
+  const user = useAuthenticatedRouteUser();
+
+  return <DashboardPage user={user} />;
+}
+
+function UserSettingsRoute() {
+  const user = useAuthenticatedRouteUser();
+
+  return <UserSettings user={user} />;
 }
 
 function AdminRoute() {
@@ -121,10 +164,28 @@ const loginRoute = createRoute({
   component: LoginRoute,
 });
 
-const dashboardRoute = createRoute({
+const appRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/dashboard",
+  path: "app",
+  component: AppRoute,
+});
+
+const dashboardRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "dashboard",
   component: DashboardRoute,
+});
+
+const userRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "user",
+  component: UserRoute,
+});
+
+const userSettingsRoute = createRoute({
+  getParentRoute: () => userRoute,
+  path: "settings",
+  component: UserSettingsRoute,
 });
 
 const adminRoute = createRoute({
@@ -133,7 +194,13 @@ const adminRoute = createRoute({
   component: AdminRoute,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, loginRoute, dashboardRoute, adminRoute]);
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  loginRoute,
+  appRoute.addChildren([dashboardRoute]),
+  userRoute.addChildren([userSettingsRoute]),
+  adminRoute,
+]);
 
 export const router = createRouter({ routeTree });
 

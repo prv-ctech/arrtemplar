@@ -8,18 +8,29 @@ import {
   ScrollIcon,
   UserIcon,
 } from "@phosphor-icons/react";
-import { type ComponentProps, type ReactElement, type ReactNode, useState } from "react";
+import { type ReactElement, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { cn } from "@/lib/utils";
-import { type SettingsEntry, SettingsNav, type SettingsPage } from "./settings/SettingsNav";
+import { type SettingsEntry, SettingsNav } from "../settings/SettingsNav";
+import {
+  SettingsPanel,
+  SettingsRow,
+  SettingsSection,
+  SettingsSelect,
+} from "../settings/SettingsPrimitives";
 
-const selectClassName =
-  "h-11 w-full rounded-2xl border border-input bg-background/50 px-4 py-2 text-sm text-foreground shadow-[inset_0_1px_0_hsl(0_0%_100%/0.04)] outline-none transition-[border-color] duration-300 focus-visible:border-primary/70 focus-visible:ring-2 focus-visible:ring-primary/20 sm:max-w-48";
+type AdminSettingsPage =
+  | "general"
+  | "library"
+  | "users"
+  | "import"
+  | "notifications"
+  | "services"
+  | "logs"
+  | "about";
 
 const settingsEntries = [
   {
@@ -70,63 +81,7 @@ const settingsEntries = [
     icon: <InfoIcon aria-hidden="true" className="size-5" />,
     description: "Version info and credits",
   },
-] satisfies [SettingsEntry, ...SettingsEntry[]];
-
-function SettingsSection({
-  children,
-  description,
-  title,
-}: {
-  children: ReactNode;
-  title: string;
-  description?: string;
-}) {
-  return (
-    <div>
-      <div className="mb-5">
-        <h3 className="text-base font-semibold tracking-tight text-foreground">{title}</h3>
-        {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
-      </div>
-      <div className="divide-y divide-border rounded-3xl border border-border bg-card/50">
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function SettingsRow({
-  children,
-  controlId,
-  description,
-  label,
-}: {
-  children: ReactNode;
-  label: string;
-  description?: string;
-  controlId?: string;
-}) {
-  return (
-    <div className="flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-      <div className="min-w-0 shrink-0 sm:max-w-sm lg:max-w-md">
-        {controlId ? (
-          <Label className="text-sm font-medium" htmlFor={controlId}>
-            {label}
-          </Label>
-        ) : (
-          <p className="text-sm font-medium text-foreground">{label}</p>
-        )}
-        {description && (
-          <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{description}</p>
-        )}
-      </div>
-      <div className="flex min-w-0 items-center gap-3 sm:justify-end sm:pl-4">{children}</div>
-    </div>
-  );
-}
-
-function SettingsSelect({ className, ...props }: ComponentProps<"select">) {
-  return <select className={cn(selectClassName, className)} {...props} />;
-}
+] satisfies [SettingsEntry<AdminSettingsPage>, ...SettingsEntry<AdminSettingsPage>[]];
 
 function GeneralSettings() {
   return (
@@ -723,7 +678,7 @@ function AboutPage() {
 
 type SettingsComponent = () => ReactElement;
 
-const pageComponents: Record<SettingsPage, SettingsComponent> = {
+const pageComponents: Record<AdminSettingsPage, SettingsComponent> = {
   general: GeneralSettings,
   library: LibrarySettings,
   users: UsersSettings,
@@ -735,7 +690,7 @@ const pageComponents: Record<SettingsPage, SettingsComponent> = {
 };
 
 export function AdminSettings() {
-  const [activePage, setActivePage] = useState<SettingsPage>("general");
+  const [activePage, setActivePage] = useState<AdminSettingsPage>("general");
   const activeEntry =
     settingsEntries.find((entry) => entry.id === activePage) ?? settingsEntries[0];
   const ActiveComponent = pageComponents[activePage];
@@ -743,22 +698,20 @@ export function AdminSettings() {
   return (
     <div className="flex flex-col">
       <h1 className="sr-only">Admin settings</h1>
-      <SettingsNav active={activePage} entries={settingsEntries} onSelect={setActivePage} />
+      <SettingsNav
+        active={activePage}
+        entries={settingsEntries}
+        label="Admin settings"
+        onSelect={setActivePage}
+      />
 
-      <div
-        aria-labelledby={`${activePage}-settings-tab`}
-        className="min-w-0 flex-1 pt-6"
-        id={`${activePage}-settings-panel`}
-        role="tabpanel"
+      <SettingsPanel
+        activeId={activePage}
+        description={activeEntry.description}
+        title={activeEntry.label}
       >
-        <div className="mb-8">
-          <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-            {activeEntry.label}
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">{activeEntry.description}</p>
-        </div>
         <ActiveComponent />
-      </div>
+      </SettingsPanel>
     </div>
   );
 }

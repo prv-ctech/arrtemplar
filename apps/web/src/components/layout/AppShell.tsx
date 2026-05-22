@@ -2,6 +2,7 @@ import type { PublicUser } from "@arrtemplar/shared";
 import {
   ArrowSquareOutIcon,
   CompassIcon,
+  GearIcon,
   HouseIcon,
   MagnifyingGlassIcon,
   SignOutIcon,
@@ -29,7 +30,7 @@ import { cn } from "@/lib/utils";
 
 type ShellNavItem = {
   label: string;
-  to?: "/dashboard" | "/admin";
+  to?: "/app/dashboard" | "/user/settings" | "/admin";
   icon: ReactNode;
   disabled?: boolean;
 };
@@ -115,8 +116,13 @@ export function AppShell({
   const navItems: ShellNavItem[] = [
     {
       label: "Dashboard",
-      to: "/dashboard",
+      to: "/app/dashboard",
       icon: <HouseIcon aria-hidden="true" className="size-5" />,
+    },
+    {
+      label: "Settings",
+      to: "/user/settings",
+      icon: <GearIcon aria-hidden="true" className="size-5" />,
     },
     { label: "Watch", icon: <CompassIcon aria-hidden="true" className="size-5" />, disabled: true },
     {
@@ -160,7 +166,7 @@ export function AppShell({
               <Link
                 aria-label="Open dashboard"
                 className="group grid size-11 shrink-0 place-items-center rounded-[1.15rem] bg-primary text-primary-foreground shadow-(--shadow-button) transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 active:translate-y-px"
-                to="/dashboard"
+                to="/app/dashboard"
               >
                 <span className="text-sm font-black tracking-[-0.08em]">AW</span>
               </Link>

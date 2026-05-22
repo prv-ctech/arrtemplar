@@ -28,7 +28,7 @@ export function AuthGate({
   }
 
   if (!hasRequiredRole(userQuery.data, requiredRole)) {
-    return <Navigate replace to="/dashboard" />;
+    return <Navigate replace to="/app/dashboard" />;
   }
 
   return children(userQuery.data);

@@ -11,11 +11,11 @@ const baseUser = {
 } satisfies Omit<PublicUser, "role">;
 
 describe("getLandingPathForUser", () => {
-  it("sends admins to the admin shell", () => {
-    expect(getLandingPathForUser({ ...baseUser, role: "admin" })).toBe("/admin");
+  it("sends admins to the shared app dashboard", () => {
+    expect(getLandingPathForUser({ ...baseUser, role: "admin" })).toBe("/app/dashboard");
   });
 
-  it("sends normal users to the user dashboard", () => {
-    expect(getLandingPathForUser({ ...baseUser, role: "user" })).toBe("/dashboard");
+  it("sends normal users to the shared app dashboard", () => {
+    expect(getLandingPathForUser({ ...baseUser, role: "user" })).toBe("/app/dashboard");
   });
 });

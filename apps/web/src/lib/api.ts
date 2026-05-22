@@ -2,6 +2,8 @@ import type { App } from "@arrtemplar/server";
 import type {
   AuthSetupStatusResponse,
   AuthUserResponse,
+  ChangePasswordRequest,
+  ChangePasswordResponse,
   CreateAdminRequest,
   CreateAdminResponse,
   HealthResponse,
@@ -9,6 +11,9 @@ import type {
   LoginResponse,
   LogoutResponse,
   PublicUser,
+  UpdateUserProfileRequest,
+  UpdateUserProfileResponse,
+  UserProfileResponse,
 } from "@arrtemplar/shared";
 import { CSRF_HEADER_NAME, CSRF_HEADER_VALUE } from "@arrtemplar/shared";
 import { treaty } from "@elysia/eden";
@@ -59,6 +64,30 @@ export async function getCurrentUser(): Promise<PublicUser | null> {
   const response = unwrapData<AuthUserResponse>(await api.api.auth.me.get(), "Auth check failed.");
 
   return response.user;
+}
+
+export async function getUserProfile(): Promise<PublicUser> {
+  const response = unwrapData<UserProfileResponse>(
+    await api.api.user.profile.get(),
+    "Profile request failed.",
+  );
+
+  return response.user;
+}
+
+export async function updateUserProfile(input: UpdateUserProfileRequest): Promise<PublicUser> {
+  const response = unwrapData<UpdateUserProfileResponse>(
+    await api.api.user.profile.put(input),
+    "Profile update failed.",
+  );
+
+  return response.user;
+}
+
+export async function changePassword(
+  input: ChangePasswordRequest,
+): Promise<ChangePasswordResponse> {
+  return unwrapData(await api.api.user.password.put(input), "Password update failed.");
 }
 
 export function createApiRequestHeaders(

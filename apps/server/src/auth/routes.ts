@@ -1,10 +1,13 @@
 import type {
   AuthSetupStatusResponse,
   AuthUserResponse,
+  ChangePasswordResponse,
   CreateAdminResponse,
   CreateLocalUserResponse,
   LoginResponse,
   LogoutResponse,
+  UpdateUserProfileResponse,
+  UserProfileResponse,
 } from "@arrtemplar/shared";
 import { Elysia, t } from "elysia";
 import type { DatabaseClient } from "../db/client";
@@ -41,12 +44,25 @@ const createLocalUserRequestSchema = t.Object({
   password: t.String({ minLength: MIN_PASSWORD_LENGTH, maxLength: 1024 }),
 });
 
+const updateUserProfileRequestSchema = t.Object({
+  username: t.Optional(t.String({ minLength: 1, maxLength: 80, pattern: ".*\\S.*" })),
+  email: t.Optional(t.String({ format: "email" })),
+});
+
+const changePasswordRequestSchema = t.Object({
+  currentPassword: t.String({ minLength: 1, maxLength: 1024 }),
+  newPassword: t.String({ minLength: MIN_PASSWORD_LENGTH, maxLength: 1024 }),
+});
+
 const loginResponseSchema = t.Object({ user: publicUserSchema });
 const createAdminResponseSchema = t.Object({ user: publicUserSchema });
 const createLocalUserResponseSchema = t.Object({ user: publicUserSchema });
 const authSetupStatusResponseSchema = t.Object({ required: t.Boolean() });
 const authUserResponseSchema = t.Object({ user: t.Union([publicUserSchema, t.Null()]) });
+const userProfileResponseSchema = t.Object({ user: publicUserSchema });
+const updateUserProfileResponseSchema = t.Object({ user: publicUserSchema });
 const logoutResponseSchema = t.Object({ status: t.Literal("ok") });
+const changePasswordResponseSchema = t.Object({ status: t.Literal("ok") });
 const sessionCookieSchema = t.Cookie({
   [SESSION_COOKIE_NAME]: t.Optional(t.String()),
 });
@@ -69,6 +85,7 @@ export function createAuthRoutes(options: AuthRoutesOptions) {
   return new Elysia({ prefix: "/api" })
     .use(createSetupRoutes(authService, options))
     .use(createSessionRoutes(authService, options))
+    .use(createUserRoutes(authService))
     .use(createAdminRoutes(authService));
 }
 
@@ -194,6 +211,96 @@ function createSessionRoutes(authService: AuthService, options: AuthRoutesOption
         detail: {
           summary: "Get current user",
           description: "Returns the current authenticated user or null for anonymous clients.",
+          tags: ["Auth"],
+        },
+      },
+    );
+}
+
+function createUserRoutes(authService: AuthService) {
+  return new Elysia()
+    .get(
+      "/user/profile",
+      ({ cookie, status }) => {
+        const result = authService.getUserProfile(
+          readSessionToken(cookie[SESSION_COOKIE_NAME].value),
+        );
+
+        if (!result.ok) {
+          return status(result.status, result.body);
+        }
+
+        return { user: result.user } satisfies UserProfileResponse;
+      },
+      {
+        cookie: sessionCookieSchema,
+        response: {
+          200: userProfileResponseSchema,
+          401: apiErrorResponseSchema,
+        },
+        detail: {
+          summary: "Get user profile",
+          description: "Returns the authenticated user's own profile.",
+          tags: ["Auth"],
+        },
+      },
+    )
+    .put(
+      "/user/profile",
+      ({ body, cookie, request, status }) => {
+        const result = authService.updateUserProfile(
+          readSessionToken(cookie[SESSION_COOKIE_NAME].value),
+          body,
+          createRequestContext(request),
+        );
+
+        if (!result.ok) {
+          return status(result.status, result.body);
+        }
+
+        return { user: result.user } satisfies UpdateUserProfileResponse;
+      },
+      {
+        body: updateUserProfileRequestSchema,
+        cookie: sessionCookieSchema,
+        response: {
+          200: updateUserProfileResponseSchema,
+          401: apiErrorResponseSchema,
+          409: apiErrorResponseSchema,
+        },
+        detail: {
+          summary: "Update user profile",
+          description: "Updates username and email for the authenticated user only.",
+          tags: ["Auth"],
+        },
+      },
+    )
+    .put(
+      "/user/password",
+      async ({ body, cookie, request, status }) => {
+        const result = await authService.changePassword(
+          readSessionToken(cookie[SESSION_COOKIE_NAME].value),
+          body,
+          createRequestContext(request),
+        );
+
+        if (!result.ok) {
+          return status(result.status, result.body);
+        }
+
+        return result.body satisfies ChangePasswordResponse;
+      },
+      {
+        body: changePasswordRequestSchema,
+        cookie: sessionCookieSchema,
+        response: {
+          200: changePasswordResponseSchema,
+          401: apiErrorResponseSchema,
+        },
+        detail: {
+          summary: "Change user password",
+          description:
+            "Changes the authenticated user's password after verifying the current password.",
           tags: ["Auth"],
         },
       },

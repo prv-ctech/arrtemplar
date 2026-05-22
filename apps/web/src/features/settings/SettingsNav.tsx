@@ -1,32 +1,24 @@
 import type { KeyboardEvent, ReactNode } from "react";
 
-export type SettingsPage =
-  | "general"
-  | "library"
-  | "users"
-  | "import"
-  | "notifications"
-  | "services"
-  | "logs"
-  | "about";
-
-export type SettingsEntry = {
-  id: SettingsPage;
+export type SettingsEntry<TPage extends string = string> = {
+  id: TPage;
   label: string;
   icon: ReactNode;
   description: string;
 };
 
-export function SettingsNav({
-  entries,
+export function SettingsNav<TPage extends string>({
   active,
+  entries,
+  label,
   onSelect,
 }: {
-  entries: SettingsEntry[];
-  active: SettingsPage;
-  onSelect: (id: SettingsPage) => void;
+  entries: readonly SettingsEntry<TPage>[];
+  active: TPage;
+  label: string;
+  onSelect: (id: TPage) => void;
 }) {
-  function selectAndFocus(entry: SettingsEntry) {
+  function selectAndFocus(entry: SettingsEntry<TPage>) {
     onSelect(entry.id);
     document.getElementById(`${entry.id}-settings-tab`)?.focus();
   }
@@ -50,7 +42,7 @@ export function SettingsNav({
   }
 
   return (
-    <nav aria-label="Admin settings" className="w-full">
+    <nav aria-label={label} className="w-full">
       <div
         aria-label="Settings categories"
         className="scrollbar-hidden flex gap-0 overflow-x-auto border-b border-border"
