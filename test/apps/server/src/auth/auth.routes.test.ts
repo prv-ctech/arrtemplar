@@ -62,20 +62,22 @@ describe("auth routes", () => {
 
     const [storedUser] = database.db.select().from(users).all();
     const [storedSession] = database.db.select().from(sessions).all();
-    const auditActions = database.db
-      .select()
-      .from(auditLogs)
-      .all()
-      .map((entry) => entry.action);
+    const storedAuditLogs = database.db.select().from(auditLogs).all();
+    const auditActions = storedAuditLogs.map((entry) => entry.action);
 
     expect(storedUser?.role).toBe("admin");
+    expectUuidv7(storedUser?.id);
     expect(storedUser?.passwordHash).toStartWith("$argon2id$");
     expect(storedUser?.passwordHash).not.toBe("correct-horse-battery-staple");
     expect(
       await Bun.password.verify("correct-horse-battery-staple", storedUser?.passwordHash ?? ""),
     ).toBe(true);
+    expectUuidv7(storedSession?.id);
     expect(storedSession?.userId).toBe(storedUser?.id);
     expect(storedSession?.tokenHash).toBe(hashSessionToken(sessionToken));
+    for (const auditLog of storedAuditLogs) {
+      expectUuidv7(auditLog.id);
+    }
     expect(auditActions).toContain("auth.setup.admin_created");
 
     const adminResponse = await app.handle(
@@ -462,4 +464,8 @@ function expectSecureSessionCookie(setCookie: string): void {
 
 function readCookieValue(cookieHeader: string): string {
   return cookieHeader.slice(`${SESSION_COOKIE_NAME}=`.length);
+}
+
+function expectUuidv7(id: string | undefined): void {
+  expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 }

@@ -40,6 +40,31 @@ export default defineConfig(({ mode }) => {
         "@": path.resolve(__dirname, "./src"),
       },
     },
+    build: {
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            groups: [
+              {
+                name: "react-vendor",
+                test: /node_modules[\\/](react|react-dom)[\\/]/,
+                priority: 30,
+              },
+              {
+                name: "tanstack-vendor",
+                test: /node_modules[\\/]@tanstack[\\/]/,
+                priority: 20,
+              },
+              {
+                name: "ui-vendor",
+                test: /node_modules[\\/](radix-ui|@phosphor-icons|sonner)[\\/]/,
+                priority: 10,
+              },
+            ],
+          },
+        },
+      },
+    },
     server: {
       // Required for VS Code dev containers and remote port forwarding; exposure is constrained below.
       host: "0.0.0.0",

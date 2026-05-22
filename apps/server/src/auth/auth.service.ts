@@ -341,7 +341,7 @@ export class AuthService {
       tx.insert(users).values(user).run();
       tx.insert(auditLogs)
         .values({
-          id: crypto.randomUUID(),
+          id: Bun.randomUUIDv7(),
           actorUserId: user.id,
           action: "auth.setup.admin_created",
           targetType: "user",
@@ -376,7 +376,7 @@ export class AuthService {
       tx.insert(users).values(user).run();
       tx.insert(auditLogs)
         .values({
-          id: crypto.randomUUID(),
+          id: Bun.randomUUIDv7(),
           actorUserId: actor.id,
           action: "admin.users.created",
           targetType: "user",
@@ -398,7 +398,7 @@ export class AuthService {
   ): { sessionId: string; sessionToken: string; expiresAt: Date } {
     const expiresAt = createSessionExpiresAt(now);
     const sessionToken = generateSessionToken();
-    const sessionId = crypto.randomUUID();
+    const sessionId = Bun.randomUUIDv7();
 
     this.database.db
       .insert(sessions)
@@ -427,7 +427,7 @@ export class AuthService {
     this.database.db
       .insert(auditLogs)
       .values({
-        id: crypto.randomUUID(),
+        id: Bun.randomUUIDv7(),
         actorUserId: input.actorUserId ?? null,
         action: input.action,
         targetType: input.targetType ?? null,
@@ -457,7 +457,7 @@ async function createUserRecord(
   now: Date,
 ): Promise<User> {
   return {
-    id: crypto.randomUUID(),
+    id: Bun.randomUUIDv7(),
     username: input.username.trim(),
     email: normalizeEmail(input.email),
     passwordHash: await hashPassword(input.password),

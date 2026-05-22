@@ -23,6 +23,7 @@ interface Rule {
   severity: "error" | "warning" | "info";
   scope?: "server" | "browser" | "all";
   excludePaths?: string[]; // Relative to project root
+  allowPaths?: string[]; // Relative to project root
 }
 
 const RULES: Rule[] = [
@@ -54,11 +55,18 @@ const RULES: Rule[] = [
     scope: "all",
   },
   {
-    name: "bun:sqlite or Bun.sql usage",
-    pattern:
-      /(from\s+["']bun:sqlite["']|new\s+Database\s*\(|\bBun\.sql\b|\bBun\.SQL\b|from\s+["']bun:sql["'])(?![\s;]*\/\/\s*verify-ignore)/g,
+    name: "Unapproved Bun SQLite usage",
+    pattern: /(from\s+["']bun:sqlite["']|new\s+Database\s*\()(?![\s;]*\/\/\s*verify-ignore)/g,
     suggestion:
-      "Keep the app database on PostgreSQL + Drizzle. Do not introduce bun:sqlite, Bun.sql, or Bun.SQL for primary storage.",
+      "Keep Bun SQLite usage centralized in apps/server/src/db; do not create ad-hoc SQLite clients elsewhere.",
+    severity: "error",
+    scope: "all",
+    allowPaths: ["apps/server/src/db/"],
+  },
+  {
+    name: "Bun SQL usage",
+    pattern: /(\bBun\.sql\b|\bBun\.SQL\b|from\s+["']bun:sql["'])(?![\s;]*\/\/\s*verify-ignore)/g,
+    suggestion: "Do not use Bun.sql, Bun.SQL, or bun:sql for app data; keep database access on Drizzle + Bun SQLite.",
     severity: "error",
     scope: "all",
   },
@@ -259,13 +267,22 @@ const RULES: Rule[] = [
 const EXCLUDES = [
   "node_modules",
   "dist",
+  "apps/server/dist",
+  "apps/web/dist",
   ".git",
   ".agents",
-  ".agent/scripts/verify-bun-rules.ts",
+  ".github/scripts/verify-bun-rules.ts",
   "docs/verify-bun-rules.ts",
   "verify_output.txt",
   "public",
 ];
+
+function isExcludedPath(normalizedFile: string): boolean {
+  return (
+    EXCLUDES.some((exclude) => normalizedFile === exclude || normalizedFile.startsWith(`${exclude}/`)) ||
+    normalizedFile.includes("/dist/")
+  );
+}
 
 async function verify() {
   console.log("\x1b[36m%s\x1b[0m", "🔍 Verifying Bun-Native Compliance...");
@@ -276,15 +293,18 @@ async function verify() {
 
   for (const file of files) {
     const normalizedFile = file.replace(/\\/g, "/");
-    if (EXCLUDES.some((exclude) => normalizedFile.startsWith(exclude))) continue;
+    if (isExcludedPath(normalizedFile)) continue;
 
-    const isBrowser = normalizedFile.startsWith("src/app/");
-    const isTest = normalizedFile.includes("tests/") || normalizedFile.includes(".test.");
+    const isBrowser = normalizedFile.startsWith("apps/web/src/") || normalizedFile.startsWith("src/app/");
+    const isTest = normalizedFile.startsWith("test/") || normalizedFile.includes(".test.");
     const isScript =
       normalizedFile.startsWith("scripts/") ||
       normalizedFile.startsWith(".github/scripts/") ||
       normalizedFile === "dev.ts";
-    const isServer = !isBrowser && !isTest && (normalizedFile.startsWith("src/") || isScript);
+    const isServer =
+      !isBrowser &&
+      !isTest &&
+      (normalizedFile.startsWith("apps/server/src/") || normalizedFile.startsWith("src/") || isScript);
 
     const content = await Bun.file(file).text();
 
@@ -295,6 +315,7 @@ async function verify() {
 
       // Skip excluded paths for specific rules
       if (rule.excludePaths?.some((p) => normalizedFile.includes(p))) continue;
+      if (rule.allowPaths?.some((p) => normalizedFile.startsWith(p))) continue;
 
       const matches = content.match(rule.pattern);
       if (matches) {

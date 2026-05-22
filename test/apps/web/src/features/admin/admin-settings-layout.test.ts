@@ -33,28 +33,38 @@ describe("admin settings layout", () => {
     expect(source).toContain("user.username");
   });
 
-  it("keeps theme and account actions in the primary shell header", async () => {
+  it("keeps mobile shell actions and places desktop actions beside search", async () => {
     const source = await Bun.file(appShellSourcePath).text();
     const shellHeaderStart = source.indexOf("<aside");
     const contentAreaStart = source.indexOf("<section");
-    const themeSwitcherPosition = source.indexOf("<ThemeSwitcher compact />");
-    const accountMenuPosition = source.indexOf("Open account menu for");
+    const desktopHeaderStart = source.indexOf("Desktop-only header with search and actions");
+    const searchPosition = source.indexOf("<search", desktopHeaderStart);
+    const desktopActionsPosition = source.indexOf(
+      'className="hidden gap-2 lg:flex"',
+      searchPosition,
+    );
+    const mobileActionsPosition = source.indexOf('className="lg:hidden"', shellHeaderStart);
 
     expect(shellHeaderStart).toBeGreaterThan(-1);
     expect(contentAreaStart).toBeGreaterThan(shellHeaderStart);
-    expect(themeSwitcherPosition).toBeGreaterThan(shellHeaderStart);
-    expect(themeSwitcherPosition).toBeLessThan(contentAreaStart);
-    expect(accountMenuPosition).toBeGreaterThan(shellHeaderStart);
-    expect(accountMenuPosition).toBeLessThan(contentAreaStart);
+    expect(desktopHeaderStart).toBeGreaterThan(contentAreaStart);
+    expect(mobileActionsPosition).toBeGreaterThan(shellHeaderStart);
+    expect(mobileActionsPosition).toBeLessThan(contentAreaStart);
+    expect(searchPosition).toBeGreaterThan(desktopHeaderStart);
+    expect(desktopActionsPosition).toBeGreaterThan(searchPosition);
+    expect(source).toContain('accountMenuSide="right"');
   });
 
-  it("uses a desktop-only full-width search header without adding a mobile header", async () => {
+  it("uses a desktop-only search header without adding a mobile header", async () => {
     const source = await Bun.file(appShellSourcePath).text();
 
     expect(source).toContain(
       'className="sticky top-0 z-20 hidden border-b border-border bg-background/92 backdrop-blur-lg lg:block"',
     );
-    expect(source).toContain('className="flex w-full items-center gap-3');
+    expect(source).toContain(
+      'className="mx-auto flex max-w-370 items-center gap-3 px-4 py-3 sm:px-6 lg:px-8"',
+    );
+    expect(source).toContain('className="flex min-w-0 flex-1 items-center gap-3');
     expect(source).not.toContain("hidden min-w-72 items-center");
   });
 

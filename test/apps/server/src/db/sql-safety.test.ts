@@ -45,6 +45,8 @@ describe("server SQL safety", () => {
 
     expect(clientSource).toContain('sqlite.run("PRAGMA foreign_keys = ON")');
     expect(clientSource).toContain('sqlite.run("PRAGMA journal_mode = WAL")');
+    expect(clientSource).toContain('sqlite.run("PRAGMA busy_timeout = 5000")');
+    expect(clientSource).toContain('sqlite.run("PRAGMA synchronous = NORMAL")');
     expect(clientSource).not.toMatch(/sqlite\.run\s*\(\s*`[^`]*\$\{/);
     expect(schemaSource).toContain("sql<string>`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`");
   });

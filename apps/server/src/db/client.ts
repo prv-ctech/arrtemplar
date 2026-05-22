@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { mkdirSync } from "node:fs";
+import { mkdirSync } from "node:fs"; // verify-ignore: bun:sqlite opens synchronously, so DB parent directory creation must be synchronous.
 import { dirname } from "node:path";
 import { getLogger as getDrizzleLogger } from "@logtape/drizzle-orm";
 import { type BunSQLiteDatabase, drizzle } from "drizzle-orm/bun-sqlite";
@@ -19,6 +19,8 @@ export function createDatabase(databaseUrl = env.databaseUrl): DatabaseClient {
 
   const sqlite = new Database(resolvedDatabaseUrl, { create: true, strict: true });
   sqlite.run("PRAGMA foreign_keys = ON");
+  sqlite.run("PRAGMA busy_timeout = 5000");
+  sqlite.run("PRAGMA synchronous = NORMAL");
 
   if (resolvedDatabaseUrl !== ":memory:") {
     sqlite.run("PRAGMA journal_mode = WAL");
