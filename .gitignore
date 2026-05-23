@@ -25,3 +25,4 @@ docs/research/
 docs/code-review/
 docs/plans/
 node_modules
+.secrets/
