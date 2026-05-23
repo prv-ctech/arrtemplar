@@ -23,12 +23,15 @@ describe("router route hierarchy", () => {
 
   it("keeps admin and login routes at the root authorization boundary", async () => {
     const source = await Bun.file(routerSourcePath).text();
-    const adminRoute = source.match(/const adminRoute = createRoute\([\s\S]*?\);/)?.[0];
+    const adminLayoutRoute = source.match(/const adminLayoutRoute = createRoute\([\s\S]*?\);/)?.[0];
+    const adminIndexRoute = source.match(/const adminIndexRoute = createRoute\([\s\S]*?\);/)?.[0];
     const loginRoute = source.match(/const loginRoute = createRoute\([\s\S]*?\);/)?.[0];
 
-    expect(adminRoute).toContain("getParentRoute: () => rootRoute");
-    expect(adminRoute).toContain('path: "/admin"');
+    expect(adminLayoutRoute).toContain("getParentRoute: () => rootRoute");
+    expect(adminLayoutRoute).toContain('path: "/admin"');
     expect(source).toContain('AuthGate requiredRole="admin"');
+    expect(adminIndexRoute).toContain("getParentRoute: () => adminLayoutRoute");
+    expect(adminIndexRoute).toContain('path: "/"');
     expect(loginRoute).toContain("getParentRoute: () => rootRoute");
     expect(loginRoute).toContain('path: "/login"');
   });

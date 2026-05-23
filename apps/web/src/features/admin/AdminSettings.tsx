@@ -8,7 +8,8 @@ import {
   ScrollIcon,
   UserIcon,
 } from "@phosphor-icons/react";
-import { type ReactElement, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import type { ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,7 +23,7 @@ import {
   SettingsSelect,
 } from "../settings/SettingsPrimitives";
 
-type AdminSettingsPage =
+export type AdminSettingsPage =
   | "general"
   | "library"
   | "users"
@@ -32,56 +33,68 @@ type AdminSettingsPage =
   | "logs"
   | "about";
 
-const settingsEntries = [
+export type AdminSettingsEntry = SettingsEntry<AdminSettingsPage> & {
+  path: `/admin/${AdminSettingsPage}`;
+};
+
+export const adminSettingsEntries = [
   {
     id: "general",
     label: "General",
     icon: <GearIcon aria-hidden="true" className="size-5" />,
     description: "Application settings and display preferences",
+    path: "/admin/general" as const,
   },
   {
     id: "library",
     label: "Library",
     icon: <BookOpenIcon aria-hidden="true" className="size-5" />,
     description: "Metadata import and library curation",
+    path: "/admin/library" as const,
   },
   {
     id: "users",
     label: "Users",
     icon: <UserIcon aria-hidden="true" className="size-5" />,
     description: "User management and permissions",
+    path: "/admin/users" as const,
   },
   {
     id: "import",
     label: "Import",
     icon: <DownloadSimpleIcon aria-hidden="true" className="size-5" />,
     description: "Import queue, files, and parser",
+    path: "/admin/import" as const,
   },
   {
     id: "notifications",
     label: "Notifications",
     icon: <BellIcon aria-hidden="true" className="size-5" />,
     description: "Notification channels and webhooks",
+    path: "/admin/notifications" as const,
   },
   {
     id: "services",
     label: "Services",
     icon: <PlugsConnectedIcon aria-hidden="true" className="size-5" />,
     description: "External service integrations",
+    path: "/admin/services" as const,
   },
   {
     id: "logs",
     label: "Logs",
     icon: <ScrollIcon aria-hidden="true" className="size-5" />,
     description: "Logging level, retention, audit",
+    path: "/admin/logs" as const,
   },
   {
     id: "about",
     label: "About",
     icon: <InfoIcon aria-hidden="true" className="size-5" />,
     description: "Version info and credits",
+    path: "/admin/about" as const,
   },
-] satisfies [SettingsEntry<AdminSettingsPage>, ...SettingsEntry<AdminSettingsPage>[]];
+] satisfies [AdminSettingsEntry, ...AdminSettingsEntry[]];
 
 function GeneralSettings() {
   return (
@@ -689,20 +702,27 @@ const pageComponents: Record<AdminSettingsPage, SettingsComponent> = {
   about: AboutPage,
 };
 
-export function AdminSettings() {
-  const [activePage, setActivePage] = useState<AdminSettingsPage>("general");
+export function AdminSettings({ activePage }: { activePage: AdminSettingsPage }) {
+  const navigate = useNavigate();
   const activeEntry =
-    settingsEntries.find((entry) => entry.id === activePage) ?? settingsEntries[0];
+    adminSettingsEntries.find((entry) => entry.id === activePage) ?? adminSettingsEntries[0];
   const ActiveComponent = pageComponents[activePage];
+
+  function handlePageChange(page: AdminSettingsPage) {
+    const entry = adminSettingsEntries.find((e) => e.id === page);
+    if (entry) {
+      navigate({ to: entry.path, replace: true });
+    }
+  }
 
   return (
     <div className="flex flex-col">
       <h1 className="sr-only">Admin settings</h1>
       <SettingsNav
         active={activePage}
-        entries={settingsEntries}
+        entries={adminSettingsEntries}
         label="Admin settings"
-        onSelect={setActivePage}
+        onSelect={handlePageChange}
       />
 
       <SettingsPanel

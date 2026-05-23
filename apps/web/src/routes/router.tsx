@@ -3,6 +3,7 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  Link,
   Navigate,
   Outlet,
 } from "@tanstack/react-router";
@@ -15,7 +16,7 @@ import { getLandingPathForUser } from "@/features/auth/auth-navigation";
 import { useCurrentUserQuery } from "@/features/auth/auth-state";
 import { ThemeSwitcher } from "@/features/theme/ThemeSwitcher";
 import { useTheme } from "@/features/theme/theme-state";
-import { AdminSettings } from "../features/admin/AdminSettings";
+import { AdminSettings, type AdminSettingsPage } from "../features/admin/AdminSettings";
 import { DashboardPage } from "../features/dashboard/DashboardPage";
 import { UserSettings } from "../features/user/UserSettings";
 
@@ -138,16 +139,46 @@ function UserSettingsRoute() {
   return <UserSettings user={user} />;
 }
 
-function AdminRoute() {
+function AdminNotFound() {
+  return (
+    <div className="flex flex-col items-center justify-center px-4 py-24 text-center">
+      <p className="text-5xl font-black tracking-tight text-muted-foreground">404</p>
+      <h2 className="mt-4 text-xl font-semibold text-foreground">Admin section not found</h2>
+      <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+        The admin section you're looking for doesn't exist.
+      </p>
+      <Link
+        className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground shadow-(--shadow-button) transition-transform duration-300 hover:-translate-y-0.5 active:translate-y-px"
+        to="/admin/general"
+      >
+        Back to General settings
+      </Link>
+    </div>
+  );
+}
+
+function AdminLayout() {
   return (
     <AuthGate requiredRole="admin">
       {(user) => (
         <AppShell section="Admin" user={user}>
-          <AdminSettings />
+          <Outlet />
         </AppShell>
       )}
     </AuthGate>
   );
+}
+
+function AdminIndexRedirect() {
+  return <Navigate to="/admin/general" replace />;
+}
+
+function createAdminSection(page: AdminSettingsPage) {
+  const component = function AdminSection() {
+    return <AdminSettings activePage={page} />;
+  };
+  component.displayName = `Admin${page.charAt(0).toUpperCase() + page.slice(1)}Section`;
+  return component;
 }
 
 const rootRoute = createRootRoute({ component: RootLayout });
@@ -188,10 +219,65 @@ const userSettingsRoute = createRoute({
   component: UserSettingsRoute,
 });
 
-const adminRoute = createRoute({
+const adminLayoutRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/admin",
-  component: AdminRoute,
+  component: AdminLayout,
+  notFoundComponent: AdminNotFound,
+});
+
+const adminIndexRoute = createRoute({
+  getParentRoute: () => adminLayoutRoute,
+  path: "/",
+  component: AdminIndexRedirect,
+});
+
+const adminGeneralRoute = createRoute({
+  getParentRoute: () => adminLayoutRoute,
+  path: "general",
+  component: createAdminSection("general"),
+});
+
+const adminLibraryRoute = createRoute({
+  getParentRoute: () => adminLayoutRoute,
+  path: "library",
+  component: createAdminSection("library"),
+});
+
+const adminUsersRoute = createRoute({
+  getParentRoute: () => adminLayoutRoute,
+  path: "users",
+  component: createAdminSection("users"),
+});
+
+const adminImportRoute = createRoute({
+  getParentRoute: () => adminLayoutRoute,
+  path: "import",
+  component: createAdminSection("import"),
+});
+
+const adminNotificationsRoute = createRoute({
+  getParentRoute: () => adminLayoutRoute,
+  path: "notifications",
+  component: createAdminSection("notifications"),
+});
+
+const adminServicesRoute = createRoute({
+  getParentRoute: () => adminLayoutRoute,
+  path: "services",
+  component: createAdminSection("services"),
+});
+
+const adminLogsRoute = createRoute({
+  getParentRoute: () => adminLayoutRoute,
+  path: "logs",
+  component: createAdminSection("logs"),
+});
+
+const adminAboutRoute = createRoute({
+  getParentRoute: () => adminLayoutRoute,
+  path: "about",
+  component: createAdminSection("about"),
 });
 
 const routeTree = rootRoute.addChildren([
@@ -199,7 +285,17 @@ const routeTree = rootRoute.addChildren([
   loginRoute,
   appRoute.addChildren([dashboardRoute]),
   userRoute.addChildren([userSettingsRoute]),
-  adminRoute,
+  adminLayoutRoute.addChildren([
+    adminIndexRoute,
+    adminGeneralRoute,
+    adminLibraryRoute,
+    adminUsersRoute,
+    adminImportRoute,
+    adminNotificationsRoute,
+    adminServicesRoute,
+    adminLogsRoute,
+    adminAboutRoute,
+  ]),
 ]);
 
 export const router = createRouter({ routeTree });
