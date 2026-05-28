@@ -14,6 +14,7 @@ coverage/
 .env
 .env.local
 .env.*.local
+.secrets/
 data/
 *.sqlite
 *.sqlite-shm
@@ -25,4 +26,3 @@ docs/research/
 docs/code-review/
 docs/plans/
 node_modules
-.secrets/

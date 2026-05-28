@@ -61,9 +61,13 @@ describe("app shell navigation", () => {
   it("shows separate settings and admin buttons with different visibility rules", async () => {
     const source = await Bun.file(appShellSourcePath).text();
 
-    expect(source).toContain('to?: "/app/dashboard" | "/user/settings" | "/admin"');
+    expect(source).toContain('to: "/account"');
     expect(source).toContain('label: "Settings"');
-    expect(source).toContain('to: "/user/settings"');
+    expect(source).not.toContain("ShellAccountNavItem");
+    expect(source).not.toContain("publicUserId");
+    expect(source).not.toContain('to: "/user/$publicUserId"');
+    expect(source).not.toContain("$publicUserId/settings");
+    expect(source).not.toContain("/user/settings");
     expect(source).toContain('label: "Admin"');
     expect(source).toContain('to: "/admin" as const');
     expect(source).toContain('user.role === "admin"');

@@ -1,11 +1,24 @@
 import type { App } from "@arrtemplar/server";
 import type {
+  AdminChangeUserPasswordRequest,
+  AdminChangeUserPasswordResponse,
+  AdminChangeUserRoleRequest,
+  AdminDisableUserRequest,
+  AdminPermissionCatalogEntry,
+  AdminPermissionCatalogResponse,
+  AdminUpdateUserPermissionsRequest,
+  AdminUpdateUserStatusRequest,
+  AdminUserResponse,
+  AdminUserSummary,
+  AdminUsersListResponse,
   AuthSetupStatusResponse,
   AuthUserResponse,
   ChangePasswordRequest,
   ChangePasswordResponse,
   CreateAdminRequest,
   CreateAdminResponse,
+  CreateLocalUserRequest,
+  CreateLocalUserResponse,
   HealthResponse,
   LoginRequest,
   LoginResponse,
@@ -88,6 +101,91 @@ export async function changePassword(
   input: ChangePasswordRequest,
 ): Promise<ChangePasswordResponse> {
   return unwrapData(await api.api.user.password.put(input), "Password update failed.");
+}
+
+export async function listAdminUsers(): Promise<AdminUserSummary[]> {
+  const response = unwrapData<AdminUsersListResponse>(
+    await api.api.admin.users.get(),
+    "Admin users request failed.",
+  );
+
+  return response.users;
+}
+
+export async function getAdminPermissionCatalog(): Promise<readonly AdminPermissionCatalogEntry[]> {
+  const response = unwrapData<AdminPermissionCatalogResponse>(
+    await api.api.admin["permission-catalog"].get(),
+    "Admin permission catalog request failed.",
+  );
+
+  return response.permissions;
+}
+
+export async function createAdminUser(input: CreateLocalUserRequest): Promise<PublicUser> {
+  const response = unwrapData<CreateLocalUserResponse>(
+    await api.api.admin.users.post(input),
+    "Admin user creation failed.",
+  );
+
+  return response.user;
+}
+
+export async function changeAdminUserPassword(
+  userId: string,
+  input: AdminChangeUserPasswordRequest,
+): Promise<AdminChangeUserPasswordResponse> {
+  return unwrapData(
+    await api.api.admin.users({ id: userId }).password.patch(input),
+    "Admin password update failed.",
+  );
+}
+
+export async function changeAdminUserRole(
+  userId: string,
+  input: AdminChangeUserRoleRequest,
+): Promise<AdminUserSummary> {
+  const response = unwrapData<AdminUserResponse>(
+    await api.api.admin.users({ id: userId }).role.patch(input),
+    "Admin role update failed.",
+  );
+
+  return response.user;
+}
+
+export async function updateAdminUserPermissions(
+  userId: string,
+  input: AdminUpdateUserPermissionsRequest,
+): Promise<AdminUserSummary> {
+  const response = unwrapData<AdminUserResponse>(
+    await api.api.admin.users({ id: userId }).permissions.patch(input),
+    "Admin permission update failed.",
+  );
+
+  return response.user;
+}
+
+export async function disableAdminUser(
+  userId: string,
+  input: AdminDisableUserRequest,
+): Promise<AdminUserSummary> {
+  const response = unwrapData<AdminUserResponse>(
+    await api.api.admin.users({ id: userId }).delete(input),
+    "Admin user removal failed.",
+  );
+
+  return response.user;
+}
+
+export async function enableAdminUser(
+  userId: string,
+  input: AdminUpdateUserStatusRequest,
+): Promise<AdminUserSummary> {
+  const response = unwrapData<AdminUserResponse>(
+    await api.api.admin.users({ id: userId }).status.patch(input),
+    "Admin user restore failed.",
+  );
+
+  return response.user;
 }
 
 export function createApiRequestHeaders(

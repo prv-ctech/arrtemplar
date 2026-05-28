@@ -1,9 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { readWorkspaceSource } from "./admin-settings-test-sources";
 
-const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../../../");
-const adminSettingsSourcePath = `${workspaceRoot}/apps/web/src/features/admin/AdminSettings.tsx`;
+const adminSettingsSourcePath = "apps/web/src/features/admin/AdminSettings.tsx";
 
 const CANONICAL_PATHS = [
   "/admin/general",
@@ -28,8 +26,8 @@ const ADMIN_PAGE_IDS = [
 ] as const;
 
 describe("admin settings routing metadata", () => {
-  it("exports admin settings entries with canonical paths for every section", async () => {
-    const source = await Bun.file(adminSettingsSourcePath).text();
+  it("defines admin settings entries with canonical paths for every section", async () => {
+    const source = await readWorkspaceSource(adminSettingsSourcePath);
 
     for (const path of CANONICAL_PATHS) {
       expect(source).toContain(`path: "${path}"`);
@@ -37,7 +35,7 @@ describe("admin settings routing metadata", () => {
   });
 
   it("does not contain any legacy query-param tab mapping", async () => {
-    const source = await Bun.file(adminSettingsSourcePath).text();
+    const source = await readWorkspaceSource(adminSettingsSourcePath);
 
     // No helper that maps query-param tab values to paths
     expect(source).not.toContain("?tab=");
@@ -47,7 +45,7 @@ describe("admin settings routing metadata", () => {
   });
 
   it("does not map unknown page IDs to valid paths", async () => {
-    const source = await Bun.file(adminSettingsSourcePath).text();
+    const source = await readWorkspaceSource(adminSettingsSourcePath);
 
     // Unknown IDs like "nope" should not appear as path entries
     expect(source).not.toContain('/admin/nope"');
@@ -56,7 +54,7 @@ describe("admin settings routing metadata", () => {
   });
 
   it("exports AdminSettingsPage type as a finite union of supported sections", async () => {
-    const source = await Bun.file(adminSettingsSourcePath).text();
+    const source = await readWorkspaceSource(adminSettingsSourcePath);
 
     for (const id of ADMIN_PAGE_IDS) {
       expect(source).toContain(`"${id}"`);
@@ -64,7 +62,7 @@ describe("admin settings routing metadata", () => {
   });
 
   it("associates each entry ID with a path that matches the entry id", async () => {
-    const source = await Bun.file(adminSettingsSourcePath).text();
+    const source = await readWorkspaceSource(adminSettingsSourcePath);
 
     for (const id of ADMIN_PAGE_IDS) {
       // Each entry has both id and path
@@ -74,7 +72,7 @@ describe("admin settings routing metadata", () => {
   });
 
   it("only allows canonical admin paths from the known sections", async () => {
-    const source = await Bun.file(adminSettingsSourcePath).text();
+    const source = await readWorkspaceSource(adminSettingsSourcePath);
 
     // Count the canonical path references
     const pathMatches = source.match(/path: "\/admin\/\w+"/g) ?? [];
@@ -88,7 +86,7 @@ describe("admin settings routing metadata", () => {
   });
 
   it("does not use a catch-all dynamic section route", async () => {
-    const source = await Bun.file(adminSettingsSourcePath).text();
+    const source = await readWorkspaceSource(adminSettingsSourcePath);
 
     // No dynamic param pattern for admin section
     expect(source).not.toContain("$section");

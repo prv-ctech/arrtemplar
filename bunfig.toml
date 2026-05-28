@@ -5,4 +5,4 @@ silent = true
 preload = ["./test/setup.ts"]
 
 [install]
-peer = false
+peer = true

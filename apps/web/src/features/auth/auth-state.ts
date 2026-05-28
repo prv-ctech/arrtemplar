@@ -1,4 +1,4 @@
-import type { PublicUser, UserRole } from "@arrtemplar/shared";
+import type { PublicUser, UserPermission, UserRole } from "@arrtemplar/shared";
 import { useQuery } from "@tanstack/react-query";
 import { getAuthSetupStatus, getCurrentUser } from "@/lib/api";
 
@@ -25,4 +25,19 @@ export function useAuthSetupQuery() {
 
 export function hasRequiredRole(user: PublicUser, role?: UserRole): boolean {
   return role ? user.role === role : true;
+}
+
+export function hasRequiredPermission(user: PublicUser, permission: UserPermission): boolean {
+  if (user.role === "admin") {
+    return true;
+  }
+
+  return user.role === "mod" && user.permissions.includes(permission);
+}
+
+export function hasDelegatedAccountPermission(
+  user: PublicUser,
+  permission: UserPermission,
+): boolean {
+  return user.role === "mod" && user.permissions.includes(permission);
 }

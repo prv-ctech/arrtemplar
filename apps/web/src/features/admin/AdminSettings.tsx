@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { AdminUsersSettings } from "@/features/admin/AdminUsersSettings";
 import { type SettingsEntry, SettingsNav } from "../settings/SettingsNav";
 import {
   SettingsPanel,
@@ -33,11 +34,11 @@ export type AdminSettingsPage =
   | "logs"
   | "about";
 
-export type AdminSettingsEntry = SettingsEntry<AdminSettingsPage> & {
+type AdminSettingsEntry = SettingsEntry<AdminSettingsPage> & {
   path: `/admin/${AdminSettingsPage}`;
 };
 
-export const adminSettingsEntries = [
+const adminSettingsEntries = [
   {
     id: "general",
     label: "General",
@@ -259,84 +260,6 @@ function LibrarySettings() {
             placeholder="0.75"
             type="number"
           />
-        </SettingsRow>
-      </SettingsSection>
-
-      <div className="flex justify-end">
-        <Button type="button">Save Changes</Button>
-      </div>
-    </div>
-  );
-}
-
-function UsersSettings() {
-  return (
-    <div className="space-y-10">
-      <SettingsSection
-        description="Configure user registration and default settings."
-        title="User Management"
-      >
-        <SettingsRow
-          controlId="settings-allow-registration"
-          description="Allow new users to register without an invite."
-          label="Allow Registration"
-        >
-          <Switch id="settings-allow-registration" />
-        </SettingsRow>
-        <SettingsRow
-          controlId="settings-default-role"
-          description="Default role assigned to newly registered users."
-          label="Default Role"
-        >
-          <SettingsSelect id="settings-default-role">
-            <option>Viewer</option>
-            <option>Requester</option>
-            <option>Contributor</option>
-          </SettingsSelect>
-        </SettingsRow>
-        <SettingsRow
-          controlId="settings-max-requests-per-user"
-          description="Maximum number of active requests a user can have."
-          label="Max Requests Per User"
-        >
-          <Input
-            className="sm:max-w-28"
-            defaultValue="10"
-            id="settings-max-requests-per-user"
-            placeholder="10"
-            type="number"
-          />
-        </SettingsRow>
-      </SettingsSection>
-
-      <SettingsSection description="Granular permissions for each role." title="Permissions">
-        <SettingsRow
-          controlId="settings-submit-requests"
-          description="Allow users to submit new content requests."
-          label="Submit Requests"
-        >
-          <Switch defaultChecked id="settings-submit-requests" />
-        </SettingsRow>
-        <SettingsRow
-          controlId="settings-manage-own-requests"
-          description="Allow users to manage their own requests."
-          label="Manage Own Requests"
-        >
-          <Switch defaultChecked id="settings-manage-own-requests" />
-        </SettingsRow>
-        <SettingsRow
-          controlId="settings-admin-access"
-          description="Allow users to view the admin panel."
-          label="Admin Access"
-        >
-          <Switch id="settings-admin-access" />
-        </SettingsRow>
-        <SettingsRow
-          controlId="settings-user-management"
-          description="Allow users to manage other users."
-          label="User Management"
-        >
-          <Switch id="settings-user-management" />
         </SettingsRow>
       </SettingsSection>
 
@@ -694,7 +617,7 @@ type SettingsComponent = () => ReactElement;
 const pageComponents: Record<AdminSettingsPage, SettingsComponent> = {
   general: GeneralSettings,
   library: LibrarySettings,
-  users: UsersSettings,
+  users: AdminUsersSettings,
   import: ImportSettings,
   notifications: NotificationsSettings,
   services: ServicesSettings,

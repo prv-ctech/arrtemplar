@@ -1,18 +1,28 @@
-import type {
-  ApiErrorResponse,
-  ChangePasswordRequest,
-  ChangePasswordResponse,
-  CreateAdminRequest,
-  CreateLocalUserRequest,
-  LoginRequest,
-  PublicUser,
-  UpdateUserProfileRequest,
-  UserRole,
+import {
+  type AdminChangeUserPasswordRequest,
+  type AdminChangeUserPasswordResponse,
+  type AdminChangeUserRoleRequest,
+  type AdminDisableUserRequest,
+  type AdminUpdateUserPermissionsRequest,
+  type AdminUpdateUserStatusRequest,
+  type AdminUserSummary,
+  type ApiErrorResponse,
+  type ChangePasswordRequest,
+  type ChangePasswordResponse,
+  type CreateAdminRequest,
+  type CreateLocalUserRequest,
+  type LoginRequest,
+  type PublicUser,
+  type UpdateUserProfileRequest,
+  USER_PERMISSION_VALUES,
+  type UserPermission,
+  type UserRole,
 } from "@arrtemplar/shared";
-import { eq, or, sql } from "drizzle-orm";
+import { and, eq, ne, or, sql } from "drizzle-orm";
 import type { DatabaseClient } from "../db/client";
-import { auditLogs, sessions, type User, users } from "../db/schema";
+import { auditLogs, sessions, type User, userPermissionGrants, users } from "../db/schema";
 import { hashPassword, verifyPassword } from "./password";
+import { generatePublicUserId } from "./public-user-id";
 import { LoginRateLimiter } from "./rate-limit";
 import { createSessionExpiresAt, generateSessionToken, hashSessionToken } from "./session-token";
 
@@ -58,7 +68,7 @@ type CreateLocalUserSuccess = {
 
 type CreateLocalUserFailure = {
   ok: false;
-  status: 409;
+  status: 401 | 403 | 409;
   body: ApiErrorResponse;
 };
 
@@ -97,6 +107,36 @@ type ChangePasswordFailure = {
 };
 
 type ChangePasswordResult = ChangePasswordSuccess | ChangePasswordFailure;
+
+type AdminUsersListSuccess = {
+  ok: true;
+  users: AdminUserSummary[];
+};
+
+type AdminUserMutationSuccess = {
+  ok: true;
+  user: AdminUserSummary;
+};
+
+type AdminChangeUserPasswordSuccess = {
+  ok: true;
+  body: AdminChangeUserPasswordResponse;
+};
+
+type AdminUserMutationFailure = {
+  ok: false;
+  status: 401 | 403 | 404 | 409;
+  body: ApiErrorResponse;
+};
+
+type AdminUsersListResult = AdminUsersListSuccess;
+type AdminUserMutationResult = AdminUserMutationSuccess | AdminUserMutationFailure;
+type AdminChangeUserPasswordResult = AdminChangeUserPasswordSuccess | AdminUserMutationFailure;
+
+type DatabaseTransaction = Parameters<Parameters<DatabaseClient["db"]["transaction"]>[0]>[0];
+type AdminUserUpdateValues = Partial<
+  Pick<User, "disabledAt" | "passwordHash" | "role" | "updatedAt">
+>;
 
 const invalidCredentialsError: ApiErrorResponse = {
   error: {
@@ -147,6 +187,24 @@ const invalidCurrentPasswordError: ApiErrorResponse = {
   },
 };
 
+const targetUserNotFoundError: ApiErrorResponse = {
+  error: {
+    code: "USER_NOT_FOUND",
+    message: "User account was not found.",
+  },
+};
+
+const invalidPermissionTargetError: ApiErrorResponse = {
+  error: {
+    code: "INVALID_PERMISSION_TARGET",
+    message: "Permissions can only be granted to mod accounts.",
+  },
+};
+
+const permissionOrder = new Map<UserPermission, number>(
+  USER_PERMISSION_VALUES.map((permission, index) => [permission, index]),
+);
+
 export class AuthService {
   constructor(
     private readonly database: DatabaseClient,
@@ -177,7 +235,7 @@ export class AuthService {
 
     return {
       ok: true,
-      user: toPublicUser(user),
+      user: toPublicUser(user, readEffectivePermissions(this.database.db, user)),
       sessionToken: session.sessionToken,
       expiresAt: session.expiresAt,
     };
@@ -188,15 +246,238 @@ export class AuthService {
     actor: PublicUser,
     context: AuthRequestContext,
   ): Promise<CreateLocalUserResult> {
+    const actorResult = this.readActiveAdminActor(actor);
+
+    if (!actorResult.ok) {
+      return actorResult;
+    }
+
     const now = new Date();
     const user = await createUserRecord(input, "user", now);
-    const created = this.insertLocalUser(user, actor, context, now);
+    const created = this.insertLocalUser(user, actorResult.actor, context, now);
 
     if (!created) {
       return { ok: false, status: 409, body: userAlreadyExistsError };
     }
 
-    return { ok: true, user: toPublicUser(user) };
+    return { ok: true, user: toPublicUser(user, readEffectivePermissions(this.database.db, user)) };
+  }
+
+  listAdminUsers(): AdminUsersListResult {
+    const userSummaries = this.database.db
+      .select({
+        internalId: users.id,
+        id: users.publicId,
+        username: users.username,
+        role: users.role,
+        disabledAt: users.disabledAt,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+      })
+      .from(users)
+      .where(ne(users.role, "admin"))
+      .all();
+    const permissionsByUserId = readPermissionGrantsByUserId(this.database.db);
+    const summaries = userSummaries
+      .map((user): AdminUserSummary => {
+        if (user.role === "admin") {
+          throw new Error("Admin accounts cannot be listed as managed users.");
+        }
+
+        return {
+          id: user.id,
+          username: user.username,
+          role: user.role,
+          disabledAt: user.disabledAt,
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt,
+          permissions: permissionsByUserId.get(user.internalId) ?? [],
+        };
+      })
+      .sort((left, right) => left.username.localeCompare(right.username));
+
+    return { ok: true, users: summaries };
+  }
+
+  async updateAdminManagedUserPermissions(
+    targetUserId: string,
+    input: AdminUpdateUserPermissionsRequest,
+    actor: PublicUser,
+    context: AuthRequestContext,
+  ): Promise<AdminUserMutationResult> {
+    return this.runConfirmedAdminUserMutation({
+      actor,
+      attemptedAction: "admin.users.permissions_update",
+      context,
+      currentAdminPassword: input.currentAdminPassword,
+      targetUserId,
+      mutate: (tx, targetUser, actorUser, now) => {
+        if (targetUser.role !== "mod") {
+          return { ok: false, status: 409, body: invalidPermissionTargetError };
+        }
+
+        const permissions = normalizePermissions(input.permissions);
+
+        tx.delete(userPermissionGrants).where(eq(userPermissionGrants.userId, targetUser.id)).run();
+
+        if (permissions.length > 0) {
+          tx.insert(userPermissionGrants)
+            .values(
+              permissions.map((permission) => ({
+                id: Bun.randomUUIDv7(),
+                userId: targetUser.id,
+                permission,
+                grantedByUserId: actorUser.id,
+                createdAt: now,
+                updatedAt: now,
+              })),
+            )
+            .run();
+        }
+
+        tx.update(users).set({ updatedAt: now }).where(eq(users.id, targetUser.id)).run();
+        revokeUserSessions(tx, targetUser.id);
+        writeAdminUserAuditLog(tx, {
+          action: "admin.users.permissions_changed",
+          actorUserId: actorUser.id,
+          context,
+          createdAt: now,
+          metadata: { permissions },
+          targetUser,
+        });
+
+        return readAdminUserMutationSuccess(tx, targetUserId);
+      },
+    });
+  }
+
+  async changeAdminManagedUserPassword(
+    targetUserId: string,
+    input: AdminChangeUserPasswordRequest,
+    actor: PublicUser,
+    context: AuthRequestContext,
+  ): Promise<AdminChangeUserPasswordResult> {
+    const passwordHash = await hashPassword(input.password);
+
+    return this.runConfirmedAdminUserMutation({
+      actor,
+      attemptedAction: "admin.users.password_change",
+      context,
+      currentAdminPassword: input.currentAdminPassword,
+      targetUserId,
+      mutate: (tx, targetUser, actorUser, now) => {
+        updateAdminUserAndRevokeSessions(
+          tx,
+          targetUser,
+          { passwordHash, updatedAt: now },
+          {
+            action: "admin.users.password_changed",
+            actorUserId: actorUser.id,
+            context,
+            createdAt: now,
+          },
+        );
+
+        return { ok: true, body: { status: "ok" } };
+      },
+    });
+  }
+
+  async changeAdminManagedUserRole(
+    targetUserId: string,
+    input: AdminChangeUserRoleRequest,
+    actor: PublicUser,
+    context: AuthRequestContext,
+  ): Promise<AdminUserMutationResult> {
+    return this.runConfirmedAdminUserMutation({
+      actor,
+      attemptedAction: "admin.users.role_change",
+      context,
+      currentAdminPassword: input.currentAdminPassword,
+      targetUserId,
+      mutate: (tx, targetUser, actorUser, now) => {
+        if (targetUser.role !== input.role) {
+          updateAdminUserAndRevokeSessions(
+            tx,
+            targetUser,
+            { role: input.role, updatedAt: now },
+            {
+              action: "admin.users.role_changed",
+              actorUserId: actorUser.id,
+              context,
+              createdAt: now,
+              metadata: { previousRole: targetUser.role, role: input.role },
+            },
+          );
+        }
+
+        return readAdminUserMutationSuccess(tx, targetUserId);
+      },
+    });
+  }
+
+  async disableAdminManagedUser(
+    targetUserId: string,
+    input: AdminDisableUserRequest,
+    actor: PublicUser,
+    context: AuthRequestContext,
+  ): Promise<AdminUserMutationResult> {
+    return this.runConfirmedAdminUserMutation({
+      actor,
+      attemptedAction: "admin.users.disable",
+      context,
+      currentAdminPassword: input.currentAdminPassword,
+      targetUserId,
+      mutate: (tx, targetUser, actorUser, now) => {
+        if (!targetUser.disabledAt) {
+          updateAdminUserAndRevokeSessions(
+            tx,
+            targetUser,
+            { disabledAt: now, updatedAt: now },
+            {
+              action: "admin.users.disabled",
+              actorUserId: actorUser.id,
+              context,
+              createdAt: now,
+            },
+          );
+        }
+
+        return readAdminUserMutationSuccess(tx, targetUserId);
+      },
+    });
+  }
+
+  async updateAdminManagedUserStatus(
+    targetUserId: string,
+    input: AdminUpdateUserStatusRequest,
+    actor: PublicUser,
+    context: AuthRequestContext,
+  ): Promise<AdminUserMutationResult> {
+    return this.runConfirmedAdminUserMutation({
+      actor,
+      attemptedAction: "admin.users.enable",
+      context,
+      currentAdminPassword: input.currentAdminPassword,
+      targetUserId,
+      mutate: (tx, targetUser, actorUser, now) => {
+        if (!input.disabled && targetUser.disabledAt) {
+          updateAdminUserAndRevokeSessions(
+            tx,
+            targetUser,
+            { disabledAt: null, updatedAt: now },
+            {
+              action: "admin.users.enabled",
+              actorUserId: actorUser.id,
+              context,
+              createdAt: now,
+            },
+          );
+        }
+
+        return readAdminUserMutationSuccess(tx, targetUserId);
+      },
+    });
   }
 
   async login(input: LoginRequest, context: AuthRequestContext): Promise<LoginResult> {
@@ -254,7 +535,7 @@ export class AuthService {
 
     return {
       ok: true,
-      user: toPublicUser(updatedUser),
+      user: toPublicUser(updatedUser, readEffectivePermissions(this.database.db, updatedUser)),
       sessionToken: session.sessionToken,
       expiresAt: session.expiresAt,
     };
@@ -281,7 +562,12 @@ export class AuthService {
   getCurrentUser(sessionToken: string | null): PublicUser | null {
     const currentSession = this.findSession(sessionToken);
 
-    return currentSession ? toPublicUser(currentSession.user) : null;
+    return currentSession
+      ? toPublicUser(
+          currentSession.user,
+          readEffectivePermissions(this.database.db, currentSession.user),
+        )
+      : null;
   }
 
   getUserProfile(sessionToken: string | null): UserProfileResult {
@@ -314,7 +600,13 @@ export class AuthService {
     }
 
     if (!username && !email) {
-      return { ok: true, user: toPublicUser(currentSession.user) };
+      return {
+        ok: true,
+        user: toPublicUser(
+          currentSession.user,
+          readEffectivePermissions(this.database.db, currentSession.user),
+        ),
+      };
     }
 
     const now = new Date().toISOString();
@@ -347,7 +639,10 @@ export class AuthService {
       ipAddress: context.ipAddress,
     });
 
-    return { ok: true, user: toPublicUser(updatedUser) };
+    return {
+      ok: true,
+      user: toPublicUser(updatedUser, readEffectivePermissions(this.database.db, updatedUser)),
+    };
   }
 
   async changePassword(
@@ -396,32 +691,20 @@ export class AuthService {
     return { ok: true, body: { status: "ok" } };
   }
 
-  requireUser(
-    sessionToken: string | null,
-  ): { ok: true; user: PublicUser } | { ok: false; body: ApiErrorResponse } {
-    const user = this.getCurrentUser(sessionToken);
-
-    if (!user) {
-      return { ok: false, body: unauthenticatedError };
-    }
-
-    return { ok: true, user };
-  }
-
   requireRole(
     sessionToken: string | null,
     role: UserRole,
   ): { ok: true; user: PublicUser } | { ok: false; status: 401 | 403; body: ApiErrorResponse } {
-    const userResult = this.requireUser(sessionToken);
+    const currentSession = this.findSession(sessionToken);
 
-    if (!userResult.ok) {
-      return { ok: false, status: 401, body: userResult.body };
+    if (!currentSession) {
+      return { ok: false, status: 401, body: unauthenticatedError };
     }
 
-    if (userResult.user.role !== role) {
+    if (currentSession.user.role !== role) {
       this.writeAuditLog({
         action: "admin.auth.denied",
-        actorUserId: userResult.user.id,
+        actorUserId: currentSession.user.id,
         targetType: "role",
         targetId: role,
       });
@@ -429,16 +712,113 @@ export class AuthService {
       return { ok: false, status: 403, body: forbiddenError };
     }
 
-    return { ok: true, user: userResult.user };
+    return {
+      ok: true,
+      user: toPublicUser(
+        currentSession.user,
+        readEffectivePermissions(this.database.db, currentSession.user),
+      ),
+    };
   }
 
   recordAdminAuthCheck(user: PublicUser, context: AuthRequestContext): void {
+    const actorUser = this.findUserByPublicId(user.id);
+
     this.writeAuditLog({
       action: "admin.auth.check",
-      actorUserId: user.id,
+      actorUserId: actorUser?.id ?? null,
       targetType: "user",
-      targetId: user.id,
+      targetId: actorUser?.id ?? null,
       ipAddress: context.ipAddress,
+    });
+  }
+
+  private async verifyActingAdminPassword(
+    actor: PublicUser,
+    currentAdminPassword: string,
+    attemptedAction: string,
+    targetUserId: string,
+    context: AuthRequestContext,
+  ): Promise<{ ok: true; actor: User } | AdminUserMutationFailure> {
+    const actorResult = this.readActiveAdminActor(actor);
+
+    if (!actorResult.ok) {
+      return actorResult;
+    }
+
+    const actorUser = actorResult.actor;
+
+    const passwordMatches = await verifyPassword(currentAdminPassword, actorUser.passwordHash);
+
+    if (!passwordMatches) {
+      this.writeAuditLog({
+        action: "admin.users.reauth_failed",
+        actorUserId: actorUser.id,
+        targetType: "user",
+        targetId: targetUserId,
+        metadata: { attemptedAction },
+        ipAddress: context.ipAddress,
+      });
+
+      return { ok: false, status: 401, body: invalidCurrentPasswordError };
+    }
+
+    return { ok: true, actor: actorUser };
+  }
+
+  private readActiveAdminActor(
+    actor: PublicUser,
+  ): { ok: true; actor: User } | { ok: false; status: 401 | 403; body: ApiErrorResponse } {
+    const actorUser = this.findUserByPublicId(actor.id);
+
+    if (!actorUser || actorUser.disabledAt) {
+      return { ok: false, status: 401, body: unauthenticatedError };
+    }
+
+    if (actorUser.role !== "admin") {
+      return { ok: false, status: 403, body: forbiddenError };
+    }
+
+    return { ok: true, actor: actorUser };
+  }
+
+  private async runConfirmedAdminUserMutation<
+    T extends AdminChangeUserPasswordSuccess | AdminUserMutationSuccess,
+  >(input: {
+    actor: PublicUser;
+    attemptedAction: string;
+    context: AuthRequestContext;
+    currentAdminPassword: string;
+    mutate: (
+      tx: DatabaseTransaction,
+      targetUser: User,
+      actorUser: User,
+      now: string,
+    ) => T | AdminUserMutationFailure;
+    targetUserId: string;
+  }): Promise<T | AdminUserMutationFailure> {
+    const adminPasswordResult = await this.verifyActingAdminPassword(
+      input.actor,
+      input.currentAdminPassword,
+      input.attemptedAction,
+      input.targetUserId,
+      input.context,
+    );
+
+    if (!adminPasswordResult.ok) {
+      return adminPasswordResult;
+    }
+
+    const now = new Date().toISOString();
+
+    return this.database.db.transaction((tx) => {
+      const targetUser = readManagedTargetUser(tx, input.targetUserId);
+
+      if (!targetUser) {
+        return { ok: false, status: 404, body: targetUserNotFoundError };
+      }
+
+      return input.mutate(tx, targetUser, adminPasswordResult.actor, now);
     });
   }
 
@@ -506,6 +886,10 @@ export class AuthService {
     return undefined;
   }
 
+  private findUserByPublicId(publicUserId: string): User | undefined {
+    return this.database.db.select().from(users).where(eq(users.publicId, publicUserId)).get();
+  }
+
   private insertInitialAdmin(user: User, context: AuthRequestContext, now: Date): boolean {
     return this.database.db.transaction((tx) => {
       const { count } = tx
@@ -537,7 +921,7 @@ export class AuthService {
 
   private insertLocalUser(
     user: User,
-    actor: PublicUser,
+    actor: User,
     context: AuthRequestContext,
     now: Date,
   ): boolean {
@@ -619,15 +1003,167 @@ export class AuthService {
   }
 }
 
-function toPublicUser(user: User): PublicUser {
+function toPublicUser(user: User, permissions: UserPermission[]): PublicUser {
   return {
-    id: user.id,
+    id: user.publicId,
     username: user.username,
     email: user.email,
     role: user.role,
+    permissions,
     createdAt: user.createdAt,
     lastLoginAt: user.lastLoginAt,
   };
+}
+
+function toAdminUserSummary(user: User): AdminUserSummary {
+  if (user.role === "admin") {
+    throw new Error("Admin accounts cannot be summarized as managed users.");
+  }
+
+  return {
+    id: user.publicId,
+    username: user.username,
+    role: user.role,
+    disabledAt: user.disabledAt,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+    permissions: [],
+  };
+}
+
+function readManagedTargetUser(tx: DatabaseTransaction, targetUserId: string): User | null {
+  return (
+    tx
+      .select()
+      .from(users)
+      .where(and(eq(users.publicId, targetUserId), ne(users.role, "admin")))
+      .get() ?? null
+  );
+}
+
+function readAdminUserMutationSuccess(
+  tx: DatabaseTransaction,
+  targetUserId: string,
+): AdminUserMutationResult {
+  const updatedUser = readManagedTargetUser(tx, targetUserId);
+
+  if (!updatedUser) {
+    return { ok: false, status: 404, body: targetUserNotFoundError };
+  }
+
+  return {
+    ok: true,
+    user: {
+      ...toAdminUserSummary(updatedUser),
+      permissions: readPermissionGrants(tx, updatedUser.id),
+    },
+  };
+}
+
+function readPermissionGrantsByUserId(
+  tx: DatabaseTransaction | DatabaseClient["db"],
+): Map<string, UserPermission[]> {
+  const permissionsByUserId = new Map<string, UserPermission[]>();
+
+  for (const grant of tx
+    .select({ permission: userPermissionGrants.permission, userId: userPermissionGrants.userId })
+    .from(userPermissionGrants)
+    .all()) {
+    permissionsByUserId.set(grant.userId, [
+      ...(permissionsByUserId.get(grant.userId) ?? []),
+      grant.permission,
+    ]);
+  }
+
+  for (const [userId, permissions] of permissionsByUserId) {
+    permissionsByUserId.set(userId, normalizePermissions(permissions));
+  }
+
+  return permissionsByUserId;
+}
+
+function readPermissionGrants(
+  tx: DatabaseTransaction | DatabaseClient["db"],
+  userId: string,
+): UserPermission[] {
+  return normalizePermissions(
+    tx
+      .select({ permission: userPermissionGrants.permission })
+      .from(userPermissionGrants)
+      .where(eq(userPermissionGrants.userId, userId))
+      .all()
+      .map((grant) => grant.permission),
+  );
+}
+
+function readEffectivePermissions(
+  tx: DatabaseTransaction | DatabaseClient["db"],
+  user: User,
+): UserPermission[] {
+  if (user.role === "admin") {
+    return [...USER_PERMISSION_VALUES];
+  }
+
+  if (user.role !== "mod") {
+    return [];
+  }
+
+  return readPermissionGrants(tx, user.id);
+}
+
+function normalizePermissions(permissions: UserPermission[]): UserPermission[] {
+  return [...new Set(permissions)].sort(
+    (left, right) => (permissionOrder.get(left) ?? 0) - (permissionOrder.get(right) ?? 0),
+  );
+}
+
+function updateAdminUserAndRevokeSessions(
+  tx: DatabaseTransaction,
+  targetUser: User,
+  values: AdminUserUpdateValues,
+  auditLog: {
+    action: string;
+    actorUserId: string;
+    context: AuthRequestContext;
+    createdAt: string;
+    metadata?: Record<string, unknown>;
+  },
+): void {
+  tx.update(users).set(values).where(eq(users.id, targetUser.id)).run();
+  revokeUserSessions(tx, targetUser.id);
+  writeAdminUserAuditLog(tx, { ...auditLog, targetUser });
+}
+
+function revokeUserSessions(tx: DatabaseTransaction, targetUserId: string): void {
+  tx.delete(sessions).where(eq(sessions.userId, targetUserId)).run();
+}
+
+function writeAdminUserAuditLog(
+  tx: DatabaseTransaction,
+  input: {
+    action: string;
+    actorUserId: string;
+    context: AuthRequestContext;
+    createdAt: string;
+    metadata?: Record<string, unknown>;
+    targetUser: User;
+  },
+): void {
+  tx.insert(auditLogs)
+    .values({
+      id: Bun.randomUUIDv7(),
+      actorUserId: input.actorUserId,
+      action: input.action,
+      targetType: "user",
+      targetId: input.targetUser.id,
+      metadataJson: JSON.stringify({
+        username: input.targetUser.username,
+        ...(input.metadata ?? {}),
+      }),
+      ipAddress: input.context.ipAddress,
+      createdAt: input.createdAt,
+    })
+    .run();
 }
 
 async function createUserRecord(
@@ -637,6 +1173,7 @@ async function createUserRecord(
 ): Promise<User> {
   return {
     id: Bun.randomUUIDv7(),
+    publicId: generatePublicUserId(),
     username: input.username.trim(),
     email: normalizeEmail(input.email),
     passwordHash: await hashPassword(input.password),

@@ -1,41 +1,99 @@
-import type { PublicUser } from "@arrtemplar/shared";
+import { ADMIN_PERMISSION_CATALOG, type PublicUser } from "@arrtemplar/shared";
 import { BellIcon, CheckCircleIcon, PaletteIcon, UserCircleIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { hasDelegatedAccountPermission } from "@/features/auth/auth-state";
 import { changePassword, getUserProfile, updateUserProfile } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { type SettingsEntry, SettingsNav } from "../settings/SettingsNav";
 import { SettingsPanel, SettingsRow, SettingsSection } from "../settings/SettingsPrimitives";
 import { useTheme } from "../theme/theme-state";
-import { syncUpdatedUserProfileCaches, userProfileQueryKey } from "./user-profile-cache";
+import { syncUpdatedUserProfileCaches, userProfileQueryKey } from "../user/user-profile-cache";
 
-type UserSettingsPage = "profile" | "theme" | "notifications";
+type DelegatedSettingsPage = (typeof ADMIN_PERMISSION_CATALOG)[number]["routeSlug"];
 
-const settingsEntries = [
-  {
-    id: "profile",
-    label: "Profile",
+export type AccountSettingsPage = "profile" | "theme" | "notifications" | DelegatedSettingsPage;
+type AccountSettingsRouteTarget =
+  | "/account"
+  | "/account/theme"
+  | "/account/notifications"
+  | "/account/general"
+  | "/account/library"
+  | "/account/users"
+  | "/account/import"
+  | "/account/services"
+  | "/account/logs"
+  | "/account/about";
+type AccountSettingsPath = "/account" | `/account/${Exclude<AccountSettingsPage, "profile">}`;
+
+type AccountSettingsEntry = SettingsEntry<AccountSettingsPage> & {
+  path: AccountSettingsPath;
+  to: AccountSettingsRouteTarget;
+};
+
+function createSettingsEntries(user: PublicUser) {
+  const profilePath = "/account";
+  const themePath = "/account/theme";
+  const notificationsPath = "/account/notifications";
+
+  const personalEntries = [
+    {
+      id: "profile",
+      label: "Profile",
+      icon: <UserCircleIcon aria-hidden="true" className="size-5" />,
+      description: "Account identity and password management",
+      path: profilePath,
+      to: "/account",
+    },
+    {
+      id: "theme",
+      label: "Theme",
+      icon: <PaletteIcon aria-hidden="true" className="size-5" />,
+      description: "Personal display theme for this browser",
+      path: themePath,
+      to: "/account/theme",
+    },
+    {
+      id: "notifications",
+      label: "Notifications",
+      icon: <BellIcon aria-hidden="true" className="size-5" />,
+      description: "Personal notification preferences",
+      path: notificationsPath,
+      to: "/account/notifications",
+    },
+  ] satisfies [AccountSettingsEntry, ...AccountSettingsEntry[]];
+  const delegatedEntries = ADMIN_PERMISSION_CATALOG.filter(
+    (entry) => !entry.augmentsPersonalRoute && canAccessAccountSettingsPage(user, entry.routeSlug),
+  ).map((entry) => ({
+    id: entry.routeSlug,
+    label: entry.label,
     icon: <UserCircleIcon aria-hidden="true" className="size-5" />,
-    description: "Account identity and password management",
-  },
-  {
-    id: "theme",
-    label: "Theme",
-    icon: <PaletteIcon aria-hidden="true" className="size-5" />,
-    description: "Personal display theme for this browser",
-  },
-  {
-    id: "notifications",
-    label: "Notifications",
-    icon: <BellIcon aria-hidden="true" className="size-5" />,
-    description: "Personal notification preferences",
-  },
-] satisfies [SettingsEntry<UserSettingsPage>, ...SettingsEntry<UserSettingsPage>[]];
+    description: entry.description,
+    path: `/account/${entry.routeSlug}`,
+    to: `/account/${entry.routeSlug}`,
+  })) satisfies AccountSettingsEntry[];
+
+  return [...personalEntries, ...delegatedEntries] satisfies [
+    AccountSettingsEntry,
+    ...AccountSettingsEntry[],
+  ];
+}
+
+export function canAccessAccountSettingsPage(user: PublicUser, page: AccountSettingsPage): boolean {
+  if (page === "profile" || page === "theme" || page === "notifications") {
+    return true;
+  }
+
+  const catalogEntry = ADMIN_PERMISSION_CATALOG.find((entry) => entry.routeSlug === page);
+
+  return catalogEntry ? hasDelegatedAccountPermission(user, catalogEntry.permission) : false;
+}
 
 function ProfileSettings({ user }: { user: PublicUser }) {
   const queryClient = useQueryClient();
@@ -113,28 +171,28 @@ function ProfileSettings({ user }: { user: PublicUser }) {
           title="Profile"
         >
           <SettingsRow
-            controlId="user-profile-username"
+            controlId="account-profile-username"
             description="Visible in account menus and audit trails."
             label="Username"
           >
             <Input
               autoComplete="username"
               className="sm:max-w-72"
-              id="user-profile-username"
+              id="account-profile-username"
               onChange={(event) => setUsername(event.target.value)}
               required
               value={username}
             />
           </SettingsRow>
           <SettingsRow
-            controlId="user-profile-email"
+            controlId="account-profile-email"
             description="Used for signing in and account recovery."
             label="Email"
           >
             <Input
               autoComplete="email"
               className="sm:max-w-72"
-              id="user-profile-email"
+              id="account-profile-email"
               onChange={(event) => setEmail(event.target.value)}
               required
               type="email"
@@ -161,33 +219,33 @@ function ProfileSettings({ user }: { user: PublicUser }) {
           description="Use your current password to protect account changes."
           title="Password"
         >
-          <SettingsRow controlId="user-current-password" label="Current password">
+          <SettingsRow controlId="account-current-password" label="Current password">
             <Input
               autoComplete="current-password"
               className="sm:max-w-72"
-              id="user-current-password"
+              id="account-current-password"
               onChange={(event) => setCurrentPassword(event.target.value)}
               required
               type="password"
               value={currentPassword}
             />
           </SettingsRow>
-          <SettingsRow controlId="user-new-password" label="New password">
+          <SettingsRow controlId="account-new-password" label="New password">
             <Input
               autoComplete="new-password"
               className="sm:max-w-72"
-              id="user-new-password"
+              id="account-new-password"
               onChange={(event) => setNewPassword(event.target.value)}
               required
               type="password"
               value={newPassword}
             />
           </SettingsRow>
-          <SettingsRow controlId="user-confirm-password" label="Confirm new password">
+          <SettingsRow controlId="account-confirm-password" label="Confirm new password">
             <Input
               autoComplete="new-password"
               className="sm:max-w-72"
-              id="user-confirm-password"
+              id="account-confirm-password"
               onChange={(event) => setConfirmPassword(event.target.value)}
               required
               type="password"
@@ -247,7 +305,12 @@ function ThemeSettings() {
   );
 }
 
-function NotificationSettings() {
+function NotificationSettings({ user }: { user: PublicUser }) {
+  const canManageDelegatedNotifications = hasDelegatedAccountPermission(
+    user,
+    "admin:notifications",
+  );
+
   return (
     <div className="space-y-6">
       <Card className="border-dashed bg-card/54 shadow-(--shadow-soft)">
@@ -257,7 +320,8 @@ function NotificationSettings() {
             Personal notifications
           </CardTitle>
           <CardDescription>
-            Per-user notification channels will live here once notification delivery is connected.
+            Per-account notification channels will live here once notification delivery is
+            connected.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -268,34 +332,106 @@ function NotificationSettings() {
           </p>
         </CardContent>
       </Card>
+      {canManageDelegatedNotifications ? (
+        <Card className="border-primary/25 bg-primary/8 shadow-(--shadow-soft)">
+          <CardHeader>
+            <CardTitle className="text-base">Delegated notification controls</CardTitle>
+            <CardDescription>
+              This section appears because an admin granted notification-settings access to your
+              account.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm leading-6 text-muted-foreground">
+              Instance-wide notification controls can be connected here without creating a separate
+              admin-notifications route.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }
 
-function renderActiveSettingsPage(activePage: UserSettingsPage, user: PublicUser) {
+function DelegatedAdminSettings({ page }: { page: DelegatedSettingsPage }) {
+  const catalogEntry = ADMIN_PERMISSION_CATALOG.find((entry) => entry.routeSlug === page);
+
+  return (
+    <Card className="border-dashed bg-card/54 shadow-(--shadow-soft)">
+      <CardHeader>
+        <CardTitle>{catalogEntry?.label ?? "Delegated settings"}</CardTitle>
+        <CardDescription>
+          {catalogEntry?.description ?? "This delegated settings section is unavailable."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm leading-6 text-muted-foreground">
+          This section is available because your account role and granted permissions allow it.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function renderActiveSettingsPage(activePage: AccountSettingsPage, user: PublicUser) {
   switch (activePage) {
     case "profile":
       return <ProfileSettings user={user} />;
     case "theme":
       return <ThemeSettings />;
     case "notifications":
-      return <NotificationSettings />;
+      return <NotificationSettings user={user} />;
+    case "general":
+    case "library":
+    case "users":
+    case "import":
+    case "services":
+    case "logs":
+    case "about":
+      return <DelegatedAdminSettings page={activePage} />;
   }
 }
 
-export function UserSettings({ user }: { user: PublicUser }) {
-  const [activePage, setActivePage] = useState<UserSettingsPage>("profile");
+export function AccountSettings({
+  activePage,
+  user,
+}: {
+  activePage: AccountSettingsPage;
+  user: PublicUser;
+}) {
+  const navigate = useNavigate();
+  const settingsEntries = createSettingsEntries(user);
   const activeEntry =
     settingsEntries.find((entry) => entry.id === activePage) ?? settingsEntries[0];
 
+  if (!canAccessAccountSettingsPage(user, activePage)) {
+    return (
+      <div className="flex flex-col items-center justify-center px-4 py-24 text-center">
+        <p className="text-5xl font-black tracking-tight text-muted-foreground">404</p>
+        <h2 className="mt-4 text-xl font-semibold text-foreground">Settings section not found</h2>
+        <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+          This settings section is not available for the signed-in account.
+        </p>
+      </div>
+    );
+  }
+
+  function handlePageChange(page: AccountSettingsPage) {
+    const entry = settingsEntries.find((currentEntry) => currentEntry.id === page);
+
+    if (entry) {
+      navigate({ to: entry.to });
+    }
+  }
+
   return (
     <div className="flex flex-col">
-      <h1 className="sr-only">User settings</h1>
+      <h1 className="sr-only">Account settings</h1>
       <SettingsNav
         active={activePage}
         entries={settingsEntries}
-        label="User settings"
-        onSelect={setActivePage}
+        label="Account settings"
+        onSelect={handlePageChange}
       />
 
       <SettingsPanel

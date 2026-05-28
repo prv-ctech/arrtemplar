@@ -16,9 +16,13 @@ import { getLandingPathForUser } from "@/features/auth/auth-navigation";
 import { useCurrentUserQuery } from "@/features/auth/auth-state";
 import { ThemeSwitcher } from "@/features/theme/ThemeSwitcher";
 import { useTheme } from "@/features/theme/theme-state";
+import {
+  AccountSettings,
+  type AccountSettingsPage,
+  canAccessAccountSettingsPage,
+} from "../features/account/AccountSettings";
 import { AdminSettings, type AdminSettingsPage } from "../features/admin/AdminSettings";
 import { DashboardPage } from "../features/dashboard/DashboardPage";
-import { UserSettings } from "../features/user/UserSettings";
 
 const loginMediaAssets = {
   backdrop: "https://picsum.photos/seed/arrtemplar-login-backdrop/1800/1200",
@@ -103,7 +107,7 @@ function AppRoute() {
   return (
     <AuthGate>
       {(user) => (
-        <AppShell section="Dashboard" user={user}>
+        <AppShell user={user}>
           <AuthenticatedUserContext.Provider value={user}>
             <Outlet />
           </AuthenticatedUserContext.Provider>
@@ -113,11 +117,23 @@ function AppRoute() {
   );
 }
 
-function UserRoute() {
+function AccountNotFound() {
+  return (
+    <div className="flex flex-col items-center justify-center px-4 py-24 text-center">
+      <p className="text-5xl font-black tracking-tight text-muted-foreground">404</p>
+      <h2 className="mt-4 text-xl font-semibold text-foreground">Account section not found</h2>
+      <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+        The requested account route is not available for the signed-in account.
+      </p>
+    </div>
+  );
+}
+
+function AccountRoute() {
   return (
     <AuthGate>
       {(user) => (
-        <AppShell section="Settings" user={user}>
+        <AppShell user={user}>
           <AuthenticatedUserContext.Provider value={user}>
             <Outlet />
           </AuthenticatedUserContext.Provider>
@@ -133,10 +149,36 @@ function DashboardRoute() {
   return <DashboardPage user={user} />;
 }
 
-function UserSettingsRoute() {
+function AccountProfileRoute() {
   const user = useAuthenticatedRouteUser();
 
-  return <UserSettings user={user} />;
+  return <AccountSettings activePage="profile" user={user} />;
+}
+
+function AccountThemeRoute() {
+  const user = useAuthenticatedRouteUser();
+
+  return <AccountSettings activePage="theme" user={user} />;
+}
+
+function AccountNotificationsRoute() {
+  const user = useAuthenticatedRouteUser();
+
+  return <AccountSettings activePage="notifications" user={user} />;
+}
+
+function createAccountDelegatedSection(page: AccountSettingsPage) {
+  const component = function AccountDelegatedSection() {
+    const user = useAuthenticatedRouteUser();
+
+    if (!canAccessAccountSettingsPage(user, page)) {
+      return <AccountNotFound />;
+    }
+
+    return <AccountSettings activePage={page} user={user} />;
+  };
+  component.displayName = `Account${page.charAt(0).toUpperCase() + page.slice(1)}Section`;
+  return component;
 }
 
 function AdminNotFound() {
@@ -161,7 +203,7 @@ function AdminLayout() {
   return (
     <AuthGate requiredRole="admin">
       {(user) => (
-        <AppShell section="Admin" user={user}>
+        <AppShell user={user}>
           <Outlet />
         </AppShell>
       )}
@@ -207,16 +249,71 @@ const dashboardRoute = createRoute({
   component: DashboardRoute,
 });
 
-const userRoute = createRoute({
+const accountRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "user",
-  component: UserRoute,
+  path: "account",
+  component: AccountRoute,
+  notFoundComponent: AccountNotFound,
 });
 
-const userSettingsRoute = createRoute({
-  getParentRoute: () => userRoute,
-  path: "settings",
-  component: UserSettingsRoute,
+const accountProfileRoute = createRoute({
+  getParentRoute: () => accountRoute,
+  path: "/",
+  component: AccountProfileRoute,
+});
+
+const accountThemeRoute = createRoute({
+  getParentRoute: () => accountRoute,
+  path: "theme",
+  component: AccountThemeRoute,
+});
+
+const accountNotificationsRoute = createRoute({
+  getParentRoute: () => accountRoute,
+  path: "notifications",
+  component: AccountNotificationsRoute,
+});
+
+const accountGeneralRoute = createRoute({
+  getParentRoute: () => accountRoute,
+  path: "general",
+  component: createAccountDelegatedSection("general"),
+});
+
+const accountLibraryRoute = createRoute({
+  getParentRoute: () => accountRoute,
+  path: "library",
+  component: createAccountDelegatedSection("library"),
+});
+
+const accountUsersRoute = createRoute({
+  getParentRoute: () => accountRoute,
+  path: "users",
+  component: createAccountDelegatedSection("users"),
+});
+
+const accountImportRoute = createRoute({
+  getParentRoute: () => accountRoute,
+  path: "import",
+  component: createAccountDelegatedSection("import"),
+});
+
+const accountServicesRoute = createRoute({
+  getParentRoute: () => accountRoute,
+  path: "services",
+  component: createAccountDelegatedSection("services"),
+});
+
+const accountLogsRoute = createRoute({
+  getParentRoute: () => accountRoute,
+  path: "logs",
+  component: createAccountDelegatedSection("logs"),
+});
+
+const accountAboutRoute = createRoute({
+  getParentRoute: () => accountRoute,
+  path: "about",
+  component: createAccountDelegatedSection("about"),
 });
 
 const adminLayoutRoute = createRoute({
@@ -284,7 +381,18 @@ const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
   appRoute.addChildren([dashboardRoute]),
-  userRoute.addChildren([userSettingsRoute]),
+  accountRoute.addChildren([
+    accountProfileRoute,
+    accountThemeRoute,
+    accountNotificationsRoute,
+    accountGeneralRoute,
+    accountLibraryRoute,
+    accountUsersRoute,
+    accountImportRoute,
+    accountServicesRoute,
+    accountLogsRoute,
+    accountAboutRoute,
+  ]),
   adminLayoutRoute.addChildren([
     adminIndexRoute,
     adminGeneralRoute,

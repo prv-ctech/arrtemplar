@@ -54,6 +54,7 @@ describe("createDatabase", () => {
       .insert(users)
       .values({
         id: userId,
+        publicId: "Abc123XyZ",
         username: "secret-user",
         email: "secret-user@example.local",
         passwordHash: "$argon2id$super-secret-password-hash",

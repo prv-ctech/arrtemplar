@@ -1,5 +1,6 @@
 CREATE TABLE `users` (
 	`id` text PRIMARY KEY NOT NULL,
+	`public_id` text NOT NULL,
 	`username` text NOT NULL,
 	`email` text NOT NULL,
 	`password_hash` text NOT NULL,
@@ -10,9 +11,24 @@ CREATE TABLE `users` (
 	`last_login_at` text
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX `users_public_id_unique` ON `users` (`public_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `users_username_unique` ON `users` (`username`);--> statement-breakpoint
 CREATE UNIQUE INDEX `users_email_unique` ON `users` (`email`);--> statement-breakpoint
 CREATE INDEX `users_role_idx` ON `users` (`role`);--> statement-breakpoint
+CREATE TABLE `user_permission_grants` (
+	`id` text PRIMARY KEY NOT NULL,
+	`user_id` text NOT NULL,
+	`permission` text NOT NULL,
+	`granted_by_user_id` text,
+	`created_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
+	`updated_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
+	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`granted_by_user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE set null
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `user_permission_grants_user_permission_unique` ON `user_permission_grants` (`user_id`,`permission`);--> statement-breakpoint
+CREATE INDEX `user_permission_grants_user_id_idx` ON `user_permission_grants` (`user_id`);--> statement-breakpoint
+CREATE INDEX `user_permission_grants_permission_idx` ON `user_permission_grants` (`permission`);--> statement-breakpoint
 CREATE TABLE `sessions` (
 	`id` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,

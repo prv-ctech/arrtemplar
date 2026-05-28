@@ -1,12 +1,28 @@
-export type UserRole = "admin" | "user";
+import type { AdminPermissionCatalogEntry, UserPermission } from "./permissions";
+
+export const USER_ROLES = ["user", "mod", "admin"] as const;
+
+export type UserRole = (typeof USER_ROLES)[number];
+export type ManagedUserRole = Extract<UserRole, "user" | "mod">;
 
 export type PublicUser = {
   id: string;
   username: string;
   email: string;
   role: UserRole;
+  permissions: UserPermission[];
   createdAt: string;
   lastLoginAt: string | null;
+};
+
+export type AdminUserSummary = {
+  id: string;
+  username: string;
+  role: ManagedUserRole;
+  disabledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  permissions: UserPermission[];
 };
 
 export type LoginRequest = {
@@ -36,6 +52,30 @@ export type ChangePasswordRequest = {
   newPassword: string;
 };
 
+export type AdminChangeUserPasswordRequest = {
+  password: string;
+  currentAdminPassword: string;
+};
+
+export type AdminChangeUserRoleRequest = {
+  role: ManagedUserRole;
+  currentAdminPassword: string;
+};
+
+export type AdminUpdateUserPermissionsRequest = {
+  permissions: UserPermission[];
+  currentAdminPassword: string;
+};
+
+export type AdminDisableUserRequest = {
+  currentAdminPassword: string;
+};
+
+export type AdminUpdateUserStatusRequest = {
+  disabled: false;
+  currentAdminPassword: string;
+};
+
 export type LoginResponse = {
   user: PublicUser;
 };
@@ -46,6 +86,22 @@ export type CreateAdminResponse = {
 
 export type CreateLocalUserResponse = {
   user: PublicUser;
+};
+
+export type AdminUsersListResponse = {
+  users: AdminUserSummary[];
+};
+
+export type AdminUserResponse = {
+  user: AdminUserSummary;
+};
+
+export type AdminPermissionCatalogResponse = {
+  permissions: readonly AdminPermissionCatalogEntry[];
+};
+
+export type AdminChangeUserPasswordResponse = {
+  status: "ok";
 };
 
 export type AuthSetupStatusResponse = {

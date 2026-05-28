@@ -28,12 +28,19 @@ import { logout } from "@/lib/api";
 import { queryClient } from "@/lib/query-client";
 import { cn } from "@/lib/utils";
 
-type ShellNavItem = {
+type ShellNavLinkItem = {
   label: string;
-  to?: "/app/dashboard" | "/user/settings" | "/admin";
+  to: "/app/dashboard" | "/account" | "/admin";
+  icon: ReactNode;
+};
+
+type ShellDisabledNavItem = {
+  label: string;
   icon: ReactNode;
   disabled?: boolean;
 };
+
+type ShellNavItem = ShellNavLinkItem | ShellDisabledNavItem;
 
 type AccountMenuSide = ComponentProps<typeof DropdownMenuContent>["side"];
 
@@ -92,15 +99,7 @@ function ShellActions({
   );
 }
 
-export function AppShell({
-  children,
-  section,
-  user,
-}: {
-  children: ReactNode;
-  section: string;
-  user: PublicUser;
-}) {
+export function AppShell({ children, user }: { children: ReactNode; user: PublicUser }) {
   const navigate = useNavigate();
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
   const mobileSearchInputRef = useRef<HTMLInputElement>(null);
@@ -121,7 +120,7 @@ export function AppShell({
     },
     {
       label: "Settings",
-      to: "/user/settings",
+      to: "/account",
       icon: <GearIcon aria-hidden="true" className="size-5" />,
     },
     { label: "Watch", icon: <CompassIcon aria-hidden="true" className="size-5" />, disabled: true },
@@ -157,7 +156,7 @@ export function AppShell({
 
   return (
     <main className="h-dvh w-full max-w-full overflow-hidden text-foreground">
-      <div className="mx-auto grid h-dvh max-w-420 grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[4.75rem_minmax(0,1fr)]">
+      <div className="grid h-dvh w-full grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[4.75rem_minmax(0,1fr)]">
         {/* ── Main header (mobile: top bar / desktop: sidebar) ── */}
         <aside className="sticky top-0 z-30 border-b border-border bg-[color-mix(in_srgb,var(--ctp-crust)_84%,transparent)] backdrop-blur-lg lg:h-dvh lg:border-r lg:border-b-0">
           <div className="flex items-center justify-between gap-1.5 px-3 py-3 lg:h-full lg:flex-col lg:justify-start lg:px-3 lg:py-4">
@@ -174,8 +173,21 @@ export function AppShell({
                 aria-label="Primary navigation"
                 className="flex min-w-0 flex-1 items-center justify-center gap-1.5 lg:mt-7 lg:flex-none lg:flex-col"
               >
-                {navItems.map((item) =>
-                  item.to ? (
+                {navItems.map((item) => {
+                  if (!("to" in item)) {
+                    return (
+                      <span
+                        aria-disabled={item.disabled}
+                        className="group relative grid size-10 place-items-center rounded-2xl border border-transparent text-muted-foreground/50"
+                        key={item.label}
+                        title={`${item.label} staged`}
+                      >
+                        {item.icon}
+                        <span className="sr-only">{item.label}</span>
+                      </span>
+                    );
+                  }
+                  return (
                     <Link
                       activeProps={{
                         className:
@@ -190,18 +202,8 @@ export function AppShell({
                       {item.icon}
                       <span className="sr-only">{item.label}</span>
                     </Link>
-                  ) : (
-                    <span
-                      aria-disabled={item.disabled}
-                      className="group relative grid size-10 place-items-center rounded-2xl border border-transparent text-muted-foreground/50"
-                      key={item.label}
-                      title={`${item.label} staged`}
-                    >
-                      {item.icon}
-                      <span className="sr-only">{item.label}</span>
-                    </span>
-                  ),
-                )}
+                  );
+                })}
                 <Button
                   aria-controls="mobile-shell-search"
                   aria-expanded={isMobileSearchOpen}
@@ -271,7 +273,7 @@ export function AppShell({
         <section className="min-w-0 min-h-0 overflow-y-auto lg:h-dvh overscroll-contain">
           {/* Desktop-only header with search and actions */}
           <header className="sticky top-0 z-20 hidden border-b border-border bg-background/92 backdrop-blur-lg lg:block">
-            <div className="mx-auto flex max-w-370 items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
+            <div className="flex w-full items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
               <search
                 aria-label="Search surface staged for upcoming modules"
                 className="flex min-w-0 flex-1 items-center gap-3 rounded-2xl border border-border bg-card/76 px-4 py-2.5 text-sm text-muted-foreground shadow-(--shadow-soft)"
@@ -292,14 +294,7 @@ export function AppShell({
               />
             </div>
           </header>
-          <div
-            className={cn(
-              "mx-auto max-w-370 px-4 py-5 sm:px-6 lg:px-8 lg:py-7",
-              section === "Admin" ? "max-w-370" : undefined,
-            )}
-          >
-            {children}
-          </div>
+          <div className="w-full px-4 py-5 sm:px-6 lg:px-8 lg:py-7">{children}</div>
         </section>
       </div>
     </main>

@@ -1,6 +1,7 @@
 <contextstream>
-<!-- contextstream-rules-hash: 083f9f5a265c49eb -->
+<!-- contextstream-rules-hash: 93f819eb8f7e1987 -->
 # Workspace: arrbit
+# Project: arrtemplar
 # Workspace ID: c19393a6-c2b7-402b-998e-ad4b5c571f70
 
 # ContextStream Rules
@@ -34,6 +35,7 @@
 - "find media" / "search photos/videos/audio/docs" / "what's in this PDF/video/audio?" → `media(action="search", query="...", content_types=["document"])` (use `image|video|audio|document` as needed)
 - "index media" / "upload asset" / "read this photo/video/audio/PDF" → `media(action="index", file_path="...", content_type="image")` or `media(action="index", external_url="...", content_type="document")`; use `image`, `video`, `audio`, or `document`, then check `media(action="status", content_id="...")`
 - "extract clip" / "trim video" / "clip audio" → `media(action="get_clip", content_id="...", start="1:34", end="2:15", output_format="raw")` (also supports `ffmpeg` and `remotion`)
+- "create diagram" / "save diagram" / "show diagrams" → `memory(action="create_diagram", diagram_type="flowchart|sequence|class|er|gantt|mindmap|pie|other", title="...", content="...")` or `memory(action="list_diagrams")`; use `sequence` for service/API handoffs, `er` for data models, `flowchart` for process flows.
 - "list skills" / "show my skills" → `skill(action="list")`
 - "create a skill" → `skill(action="create", name="...", instruction_body="...", project_id="<current_project_id>", trigger_patterns=[...])`
 - "update a skill" → `skill(action="update", name="...", instruction_body="...", change_summary="...")`
@@ -83,6 +85,14 @@ If the `instruct` tool is available, run `instruct(action="get", session_id="...
 
 **Auto-grounding:** Every `context(user_message="...")` call may include a `[GROUNDING]` block — pre-ranked prior work (transcripts, snapshots, docs, decisions, lessons) for **this** message. When you see it, read those hits **before** fanning out into code search; skipping search entirely is often correct. Outside `context()`, use `session(action="ground", user_message="...")` for the same one-shot bundle (recall + docs + decisions + lessons + skills + git).
 
+### Freshness Before Assumptions
+
+Grounding and memory are evidence, not permission to use stale facts as current truth. Before planning or implementing from prior work, inspect the hit kind and age:
+- **Decisions, transcript continuity, session snapshots, active plans, and tasks are time-sensitive.** Prefer recent hits. If a hit is marked stale, older than the local freshness window, or conflicts with newer context, refresh with `session(action="ground", user_message="...")`, `memory(action="decisions", query="...")`, or `memory(action="search_transcripts", query="...")` before relying on it.
+- **Lessons and preferences are durable but still age-stamped.** Follow them unless superseded, contradicted by newer surfaced context, or explicitly corrected by the user.
+- **Docs and runbooks are authoritative unless superseded.** If a doc/runbook has operational facts that may drift (regions, hosts, credentials, deploy paths), verify through the referenced source or a fresh ContextStream lookup before acting.
+- **LLM/Gemini-derived insights are advisory until captured as decisions.** Use `[INSIGHT]` or synthesized context to guide investigation, but do not treat it as a durable decision unless it is backed by a current decision/event/doc source.
+
 When you need information, do not default to code search or trial-and-error. ContextStream stores far more than source — docs, decisions, lessons, preferences, plans, tasks, todos, skills, memory nodes, and full session transcripts all live behind dedicated tools. Pick the right knowledge surface by what you're looking for:
 
 - **Source code / symbol / file** → `search(mode="auto", query="...")`
@@ -93,6 +103,7 @@ When you need information, do not default to code search or trial-and-error. Con
 - **Open work / tasks / todos** → `memory(action="list_tasks")` / `memory(action="list_todos")`
 - **Active or past plans** → `session(action="list_plans")` then `session(action="get_plan", plan_id="...")`
 - **Reusable workflows / skills** → `skill(action="list")` then `skill(action="run", name="...")`
+- **Diagrams / Mermaid-style architecture maps** → `memory(action="create_diagram", diagram_type="flowchart|sequence|class|er|gantt|mindmap|pie|other", title="...", content="...")`; diagram types are first-class and queryable with `memory(action="list_diagrams")`
 - **Media assets (photos/images, video, audio, documents/PDFs)** → `media(action="search", query="...", content_types=["image"])`, `media(action="list")`, or `media(action="status", content_id="...")`. Use `image`, `video`, `audio`, or `document` in `content_types`. To make a local/URL asset readable by ContextStream, use `media(action="index", file_path="...", content_type="image")`; friendly words like photos/images map to `image`, docs/PDFs/slides map to `document`.
 - **Tickets / bugs / features / chores / incidents / epics** → `entity(kind="ticket", action="list", query={...})` then `entity(kind="ticket", action="get", id="...")`
 - **Handoffs (context bundles between sessions/agents/teammates)** → `entity(kind="handoff", action="list")` — pair with `capsule(...)` for the artefact bundle
@@ -125,6 +136,8 @@ Before guessing, improvising, or struggling through a workflow you don't fully k
 ### Auto-Grounding (in `context()`)
 
 When `context()` returns `[GROUNDING]`, those lines are **pre-ranked prior work for your current message** — read them first (transcript/snapshot/doc/decision/lesson entry points). Skipping code search is often correct. For the same bundle **outside** `context()`, call `session(action="ground", user_message="...")`.
+
+Freshness matters: when grounding includes old decisions, transcript continuity, snapshots, plans, or tasks, refresh before using them to choose an implementation path. Recent decisions beat older decisions; superseded or stale hits are leads to verify, not assumptions to carry forward.
 
 Transcripts for every turn of every session are captured and indexed automatically. Session snapshots bookmark turning points. **Before asking the user what you did last time, or re-deriving context you built together previously, check the transcript + snapshot layer.** It's fast, it's complete, and the user is paying for it.
 
@@ -177,8 +190,8 @@ Use the returned `recommendations` field and text summary to propose next steps.
 
 ## Response to Notices
 
-- `[GROUNDING]` → Read ranked prior-work hits (from `context()`) before broad code search; optional one-shot: `session(action="ground", user_message="...")`
-- `[GROUNDING_AVAILABLE]` → Your editor may remind you when unread grounding exists — advisory only
+- `[GROUNDING]` → Read ranked prior-work hits (from `context()`) before broad code search; inspect source age before relying on time-sensitive decisions, transcripts, snapshots, plans, or tasks; optional one-shot: `session(action="ground", user_message="...")`
+- `[GROUNDING_AVAILABLE]` → Your editor may remind you when unread grounding exists; inspect freshness metadata and refresh stale hits before planning or implementation
 - `[MATCHED_SKILLS]` → Run the surfaced skills before other work
 - `[LESSONS_WARNING]` → Apply the lessons shown immediately and keep them active for the current task
 - `[PREFERENCE]` → Follow user preferences exactly

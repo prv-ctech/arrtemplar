@@ -11,6 +11,7 @@ const oldUser = {
   username: "old-name",
   email: "old@example.local",
   role: "admin",
+  permissions: ["admin:general"],
   createdAt: "2026-05-22T00:00:00.000Z",
   lastLoginAt: null,
 } satisfies PublicUser;
