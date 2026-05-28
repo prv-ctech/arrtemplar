@@ -73,19 +73,9 @@ export function AdminUsersSettings() {
 
   return (
     <div className="flex min-h-[calc(100dvh-8rem)] flex-col gap-4 overflow-hidden">
-      <section className="shrink-0 rounded-3xl border border-border bg-card/70 p-4 shadow-(--shadow-soft) sm:p-5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-2">
-            <h2 className="text-lg font-semibold tracking-tight text-foreground">Local accounts</h2>
-            <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-              Create managed non-admin local accounts, rotate passwords, grant mod permissions, and
-              remove access by disabling accounts. Admin accounts manage their own profile in
-              Account settings.
-            </p>
-          </div>
-          <CreateUserDialog />
-        </div>
-      </section>
+      <div className="flex shrink-0 justify-end">
+        <CreateUserDialog />
+      </div>
 
       {usersQuery.isPending ? <UsersTableSkeleton /> : null}
       {usersQuery.isError ? <UsersErrorState onRetry={() => usersQuery.refetch()} /> : null}

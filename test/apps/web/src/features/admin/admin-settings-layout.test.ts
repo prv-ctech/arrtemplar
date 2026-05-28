@@ -112,7 +112,9 @@ describe("admin settings layout", () => {
     expect(usersSource).toContain("<Table");
     expect(usersSource).toContain("<Dialog");
     expect(usersSource).toContain("<AlertDialog");
-    expect(usersSource).toContain("managed non-admin local accounts");
+    expect(usersSource).toContain('className="flex shrink-0 justify-end"');
+    expect(usersSource).not.toContain("Local accounts</h2>");
+    expect(usersSource).not.toContain("Create managed non-admin local accounts");
     expect(usersSource).toContain("No managed local accounts yet");
     expect(usersSource).not.toContain("currentAdminPassword");
     expect(usersSource).not.toContain("Your admin password");
