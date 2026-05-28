@@ -299,17 +299,15 @@ export class AuthService {
     return { ok: true, users: summaries };
   }
 
-  async updateAdminManagedUserPermissions(
+  updateAdminManagedUserPermissions(
     targetUserId: string,
     input: AdminUpdateUserPermissionsRequest,
     actor: PublicUser,
     context: AuthRequestContext,
-  ): Promise<AdminUserMutationResult> {
-    return this.runConfirmedAdminUserMutation({
+  ): AdminUserMutationResult {
+    return this.runAdminUserMutation({
       actor,
-      attemptedAction: "admin.users.permissions_update",
       context,
-      currentAdminPassword: input.currentAdminPassword,
       targetUserId,
       mutate: (tx, targetUser, actorUser, now) => {
         if (targetUser.role !== "mod") {
@@ -359,11 +357,9 @@ export class AuthService {
   ): Promise<AdminChangeUserPasswordResult> {
     const passwordHash = await hashPassword(input.password);
 
-    return this.runConfirmedAdminUserMutation({
+    return this.runAdminUserMutation({
       actor,
-      attemptedAction: "admin.users.password_change",
       context,
-      currentAdminPassword: input.currentAdminPassword,
       targetUserId,
       mutate: (tx, targetUser, actorUser, now) => {
         updateAdminUserAndRevokeSessions(
@@ -383,17 +379,15 @@ export class AuthService {
     });
   }
 
-  async changeAdminManagedUserRole(
+  changeAdminManagedUserRole(
     targetUserId: string,
     input: AdminChangeUserRoleRequest,
     actor: PublicUser,
     context: AuthRequestContext,
-  ): Promise<AdminUserMutationResult> {
-    return this.runConfirmedAdminUserMutation({
+  ): AdminUserMutationResult {
+    return this.runAdminUserMutation({
       actor,
-      attemptedAction: "admin.users.role_change",
       context,
-      currentAdminPassword: input.currentAdminPassword,
       targetUserId,
       mutate: (tx, targetUser, actorUser, now) => {
         if (targetUser.role !== input.role) {
@@ -416,17 +410,15 @@ export class AuthService {
     });
   }
 
-  async disableAdminManagedUser(
+  disableAdminManagedUser(
     targetUserId: string,
-    input: AdminDisableUserRequest,
+    _input: AdminDisableUserRequest,
     actor: PublicUser,
     context: AuthRequestContext,
-  ): Promise<AdminUserMutationResult> {
-    return this.runConfirmedAdminUserMutation({
+  ): AdminUserMutationResult {
+    return this.runAdminUserMutation({
       actor,
-      attemptedAction: "admin.users.disable",
       context,
-      currentAdminPassword: input.currentAdminPassword,
       targetUserId,
       mutate: (tx, targetUser, actorUser, now) => {
         if (!targetUser.disabledAt) {
@@ -448,17 +440,15 @@ export class AuthService {
     });
   }
 
-  async updateAdminManagedUserStatus(
+  updateAdminManagedUserStatus(
     targetUserId: string,
     input: AdminUpdateUserStatusRequest,
     actor: PublicUser,
     context: AuthRequestContext,
-  ): Promise<AdminUserMutationResult> {
-    return this.runConfirmedAdminUserMutation({
+  ): AdminUserMutationResult {
+    return this.runAdminUserMutation({
       actor,
-      attemptedAction: "admin.users.enable",
       context,
-      currentAdminPassword: input.currentAdminPassword,
       targetUserId,
       mutate: (tx, targetUser, actorUser, now) => {
         if (!input.disabled && targetUser.disabledAt) {
@@ -733,39 +723,6 @@ export class AuthService {
     });
   }
 
-  private async verifyActingAdminPassword(
-    actor: PublicUser,
-    currentAdminPassword: string,
-    attemptedAction: string,
-    targetUserId: string,
-    context: AuthRequestContext,
-  ): Promise<{ ok: true; actor: User } | AdminUserMutationFailure> {
-    const actorResult = this.readActiveAdminActor(actor);
-
-    if (!actorResult.ok) {
-      return actorResult;
-    }
-
-    const actorUser = actorResult.actor;
-
-    const passwordMatches = await verifyPassword(currentAdminPassword, actorUser.passwordHash);
-
-    if (!passwordMatches) {
-      this.writeAuditLog({
-        action: "admin.users.reauth_failed",
-        actorUserId: actorUser.id,
-        targetType: "user",
-        targetId: targetUserId,
-        metadata: { attemptedAction },
-        ipAddress: context.ipAddress,
-      });
-
-      return { ok: false, status: 401, body: invalidCurrentPasswordError };
-    }
-
-    return { ok: true, actor: actorUser };
-  }
-
   private readActiveAdminActor(
     actor: PublicUser,
   ): { ok: true; actor: User } | { ok: false; status: 401 | 403; body: ApiErrorResponse } {
@@ -782,13 +739,11 @@ export class AuthService {
     return { ok: true, actor: actorUser };
   }
 
-  private async runConfirmedAdminUserMutation<
+  private runAdminUserMutation<
     T extends AdminChangeUserPasswordSuccess | AdminUserMutationSuccess,
   >(input: {
     actor: PublicUser;
-    attemptedAction: string;
     context: AuthRequestContext;
-    currentAdminPassword: string;
     mutate: (
       tx: DatabaseTransaction,
       targetUser: User,
@@ -796,17 +751,11 @@ export class AuthService {
       now: string,
     ) => T | AdminUserMutationFailure;
     targetUserId: string;
-  }): Promise<T | AdminUserMutationFailure> {
-    const adminPasswordResult = await this.verifyActingAdminPassword(
-      input.actor,
-      input.currentAdminPassword,
-      input.attemptedAction,
-      input.targetUserId,
-      input.context,
-    );
+  }): T | AdminUserMutationFailure {
+    const actorResult = this.readActiveAdminActor(input.actor);
 
-    if (!adminPasswordResult.ok) {
-      return adminPasswordResult;
+    if (!actorResult.ok) {
+      return actorResult;
     }
 
     const now = new Date().toISOString();
@@ -818,7 +767,7 @@ export class AuthService {
         return { ok: false, status: 404, body: targetUserNotFoundError };
       }
 
-      return input.mutate(tx, targetUser, adminPasswordResult.actor, now);
+      return input.mutate(tx, targetUser, actorResult.actor, now);
     });
   }
 

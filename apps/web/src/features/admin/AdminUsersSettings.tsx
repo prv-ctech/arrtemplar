@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -71,9 +72,9 @@ export function AdminUsersSettings() {
   const [enableTarget, setEnableTarget] = useState<AdminUserSummary | null>(null);
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-4xl border border-border bg-card/70 p-5 shadow-(--shadow-soft)">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <div className="flex min-h-[calc(100dvh-8rem)] flex-col gap-4 overflow-hidden">
+      <section className="shrink-0 rounded-3xl border border-border bg-card/70 p-4 shadow-(--shadow-soft) sm:p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-2">
             <h2 className="text-lg font-semibold tracking-tight text-foreground">Local accounts</h2>
             <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
@@ -133,58 +134,81 @@ function AdminUsersTable({
   users: AdminUserSummary[];
 }) {
   return (
-    <Table aria-label="Local user accounts">
-      <TableHeader>
-        <TableRow>
-          <TableHead>User</TableHead>
-          <TableHead>Role</TableHead>
-          <TableHead>Permission grants</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Created</TableHead>
-          <TableHead>Updated</TableHead>
-          <TableHead className="w-16 text-right">Actions</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {users.map((user) => (
-          <TableRow key={user.id}>
-            <TableCell>
-              <div className="flex flex-col gap-1">
-                <span className="font-medium text-foreground">{user.username}</span>
-                <span className="font-mono text-xs text-muted-foreground">{user.id}</span>
-              </div>
-            </TableCell>
-            <TableCell>
-              <RoleBadge role={user.role} />
-            </TableCell>
-            <TableCell>
-              <PermissionsCell onManagePermissions={() => onManagePermissions(user)} user={user} />
-            </TableCell>
-            <TableCell>
-              <StatusBadge disabledAt={user.disabledAt} />
-            </TableCell>
-            <TableCell className="text-muted-foreground">
-              {formatTimestamp(user.createdAt)}
-            </TableCell>
-            <TableCell className="text-muted-foreground">
-              {formatTimestamp(user.updatedAt)}
-            </TableCell>
-            <TableCell className="text-right">
-              <AdminUserActionMenu
-                disabled={Boolean(user.disabledAt)}
-                onChangePassword={() => onChangePassword(user)}
-                onChangeRole={() => onChangeRole(user)}
-                onManagePermissions={() => onManagePermissions(user)}
-                onDisable={() => onDisable(user)}
-                onEnable={() => onEnable(user)}
-                canManagePermissions={user.role === "mod" && !user.disabledAt}
-                username={user.username}
-              />
-            </TableCell>
+    <div className="min-h-0 flex-1">
+      <Table
+        aria-label="Local user accounts"
+        className="min-w-full table-fixed"
+        containerClassName="h-full min-h-[22rem] overflow-auto rounded-3xl bg-card/55"
+      >
+        <TableHeader className="sticky top-0 z-10 bg-card/95 backdrop-blur">
+          <TableRow>
+            <TableHead className="w-[min(18rem,70vw)]">User</TableHead>
+            <TableHead className="hidden w-24 sm:table-cell">Role</TableHead>
+            <TableHead className="hidden md:table-cell">Permission grants</TableHead>
+            <TableHead className="hidden w-28 lg:table-cell">Status</TableHead>
+            <TableHead className="hidden w-44 xl:table-cell">Created</TableHead>
+            <TableHead className="hidden w-44 xl:table-cell">Updated</TableHead>
+            <TableHead className="w-14 text-right">Actions</TableHead>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {users.map((user) => (
+            <TableRow key={user.id}>
+              <TableCell className="max-w-0 align-top sm:align-middle">
+                <div className="min-w-0 space-y-2">
+                  <span className="block truncate font-medium text-foreground">
+                    {user.username}
+                  </span>
+                  <span className="block break-all font-mono text-xs text-muted-foreground">
+                    {user.id}
+                  </span>
+                  <div className="flex flex-wrap gap-1.5 lg:hidden">
+                    <span className="sm:hidden">
+                      <RoleBadge role={user.role} />
+                    </span>
+                    <StatusBadge disabledAt={user.disabledAt} />
+                  </div>
+                  <PermissionBadges className="md:hidden" limit={3} user={user} />
+                  <p className="text-xs leading-5 text-muted-foreground xl:hidden">
+                    Updated {formatTimestamp(user.updatedAt)}
+                  </p>
+                </div>
+              </TableCell>
+              <TableCell className="hidden sm:table-cell">
+                <RoleBadge role={user.role} />
+              </TableCell>
+              <TableCell className="hidden md:table-cell">
+                <PermissionsCell
+                  onManagePermissions={() => onManagePermissions(user)}
+                  user={user}
+                />
+              </TableCell>
+              <TableCell className="hidden lg:table-cell">
+                <StatusBadge disabledAt={user.disabledAt} />
+              </TableCell>
+              <TableCell className="hidden text-muted-foreground xl:table-cell">
+                {formatTimestamp(user.createdAt)}
+              </TableCell>
+              <TableCell className="hidden text-muted-foreground xl:table-cell">
+                {formatTimestamp(user.updatedAt)}
+              </TableCell>
+              <TableCell className="text-right align-top sm:align-middle">
+                <AdminUserActionMenu
+                  disabled={Boolean(user.disabledAt)}
+                  onChangePassword={() => onChangePassword(user)}
+                  onChangeRole={() => onChangeRole(user)}
+                  onManagePermissions={() => onManagePermissions(user)}
+                  onDisable={() => onDisable(user)}
+                  onEnable={() => onEnable(user)}
+                  canManagePermissions={user.role === "mod" && !user.disabledAt}
+                  username={user.username}
+                />
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }
 
@@ -342,7 +366,6 @@ function PasswordDialog({ onClose, user }: { onClose: () => void; user: AdminUse
   const mutation = useChangeAdminUserPasswordMutation();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [currentAdminPassword, setCurrentAdminPassword] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -355,7 +378,7 @@ function PasswordDialog({ onClose, user }: { onClose: () => void; user: AdminUse
     }
 
     mutation.mutate(
-      { userId: user.id, input: { password, currentAdminPassword } },
+      { userId: user.id, input: { password } },
       {
         onSuccess: () => {
           toast.success(`Password updated for ${user.username}.`);
@@ -367,7 +390,7 @@ function PasswordDialog({ onClose, user }: { onClose: () => void; user: AdminUse
 
   return (
     <AdminUserDialogFrame
-      description="This revokes existing sessions for the target user. Confirm with your admin password."
+      description="This revokes existing sessions for the target user."
       onClose={onClose}
       title={`Change ${user.username}'s password`}
     >
@@ -392,7 +415,6 @@ function PasswordDialog({ onClose, user }: { onClose: () => void; user: AdminUse
             value={confirmPassword}
           />
         </FormField>
-        <AdminPasswordField onChange={setCurrentAdminPassword} value={currentAdminPassword} />
         <InlineErrorMessage message={formError} />
         <MutationErrorMessage
           error={mutation.error}
@@ -414,13 +436,12 @@ function PasswordDialog({ onClose, user }: { onClose: () => void; user: AdminUse
 function RoleDialog({ onClose, user }: { onClose: () => void; user: AdminUserSummary }) {
   const mutation = useChangeAdminUserRoleMutation();
   const [role, setRole] = useState<ManagedUserRole>(user.role);
-  const [currentAdminPassword, setCurrentAdminPassword] = useState("");
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     mutation.mutate(
-      { userId: user.id, input: { role, currentAdminPassword } },
+      { userId: user.id, input: { role } },
       {
         onSuccess: (updatedUser) => {
           toast.success(`${updatedUser.username} is now ${updatedUser.role}.`);
@@ -432,7 +453,7 @@ function RoleDialog({ onClose, user }: { onClose: () => void; user: AdminUserSum
 
   return (
     <AdminUserDialogFrame
-      description="Role changes revoke the target user's active sessions and require your admin password."
+      description="Role changes revoke the target user's active sessions."
       onClose={onClose}
       title={`Change ${user.username}'s role`}
     >
@@ -446,7 +467,6 @@ function RoleDialog({ onClose, user }: { onClose: () => void; user: AdminUserSum
             <option value="mod">Mod</option>
           </NativeSelect>
         </FormField>
-        <AdminPasswordField onChange={setCurrentAdminPassword} value={currentAdminPassword} />
         <MutationErrorMessage error={mutation.error} fallback="Could not update the role." />
         <DialogFooter>
           <Button onClick={onClose} type="button" variant="outline">
@@ -467,7 +487,6 @@ function PermissionsDialog({ onClose, user }: { onClose: () => void; user: Admin
   const [selectedPermissions, setSelectedPermissions] = useState<Set<UserPermission>>(
     () => new Set(user.permissions),
   );
-  const [currentAdminPassword, setCurrentAdminPassword] = useState("");
 
   function togglePermission(permission: UserPermission) {
     setSelectedPermissions((currentPermissions) => {
@@ -490,7 +509,6 @@ function PermissionsDialog({ onClose, user }: { onClose: () => void; user: Admin
         userId: user.id,
         input: {
           permissions: [...selectedPermissions],
-          currentAdminPassword,
         },
       },
       {
@@ -504,30 +522,37 @@ function PermissionsDialog({ onClose, user }: { onClose: () => void; user: Admin
 
   return (
     <AdminUserDialogFrame
-      description="Permission changes revoke the target user's active sessions and require your admin password. Grants apply only to mod accounts."
+      contentClassName="grid max-h-[calc(100dvh-1rem)] grid-rows-[auto_minmax(0,1fr)] gap-4 overflow-hidden p-0 sm:max-h-[calc(100dvh-2rem)]"
+      description="Select the admin areas this mod can access. Saving revokes their active sessions."
+      headerClassName="px-5 pt-5 sm:px-6 sm:pt-6"
       onClose={onClose}
       title={`Permission grants for ${user.username}`}
     >
-      <form className="space-y-4" onSubmit={handleSubmit}>
-        <div className="space-y-3 rounded-3xl border border-border bg-background/35 p-3">
-          {catalogQuery.isPending ? (
-            <p className="text-sm text-muted-foreground">Loading permission catalog…</p>
-          ) : null}
-          {catalogQuery.isError ? (
-            <p className="text-sm text-destructive">Could not load permission catalog.</p>
-          ) : null}
-          {catalogQuery.data?.map((entry) => (
-            <PermissionOption
-              entry={entry}
-              key={entry.permission}
-              onToggle={() => togglePermission(entry.permission)}
-              selected={selectedPermissions.has(entry.permission)}
-            />
-          ))}
-        </div>
-        <AdminPasswordField onChange={setCurrentAdminPassword} value={currentAdminPassword} />
+      <form
+        className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto_auto] gap-4 px-5 pb-5 sm:px-6 sm:pb-6"
+        onSubmit={handleSubmit}
+      >
+        <fieldset className="min-h-0 overflow-y-auto rounded-3xl border border-border bg-background/35 p-2">
+          <legend className="sr-only">Available permission grants</legend>
+          <div className="grid gap-2">
+            {catalogQuery.isPending ? (
+              <p className="text-sm text-muted-foreground">Loading permission catalog…</p>
+            ) : null}
+            {catalogQuery.isError ? (
+              <p className="text-sm text-destructive">Could not load permission catalog.</p>
+            ) : null}
+            {catalogQuery.data?.map((entry) => (
+              <PermissionOption
+                entry={entry}
+                key={entry.permission}
+                onToggle={() => togglePermission(entry.permission)}
+                selected={selectedPermissions.has(entry.permission)}
+              />
+            ))}
+          </div>
+        </fieldset>
         <MutationErrorMessage error={mutation.error} fallback="Could not update permissions." />
-        <DialogFooter>
+        <DialogFooter className="border-t border-border pt-3 sm:pt-0">
           <Button onClick={onClose} type="button" variant="outline">
             Cancel
           </Button>
@@ -549,35 +574,49 @@ function PermissionOption({
   onToggle: () => void;
   selected: boolean;
 }) {
+  const optionId = `permission-${entry.permission.replace(/[^a-z0-9]+/gi, "-")}`;
+  const descriptionId = `${optionId}-description`;
+
   return (
-    <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border bg-card/60 p-3 text-sm">
-      <input
+    <div
+      className={cn(
+        "grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-2xl border p-3 text-sm transition-[background,border-color] duration-200",
+        selected
+          ? "border-primary/45 bg-primary/10"
+          : "border-border bg-card/55 hover:border-primary/35 hover:bg-accent/45",
+      )}
+    >
+      <Checkbox
+        aria-describedby={descriptionId}
         checked={selected}
-        className="mt-1 size-4 accent-primary"
+        className="mt-0.5"
+        id={optionId}
         onChange={onToggle}
-        type="checkbox"
       />
-      <span className="space-y-1">
-        <span className="flex flex-wrap items-center gap-2 font-medium text-foreground">
+      <div className="min-w-0 space-y-1.5">
+        <Label
+          className="inline-flex cursor-pointer flex-wrap items-center gap-2 text-sm font-medium leading-5 text-foreground"
+          htmlFor={optionId}
+        >
           {entry.label}
           {entry.risk === "high" ? <Badge variant="destructive">High risk</Badge> : null}
-        </span>
-        <span className="block text-muted-foreground">{entry.description}</span>
-        <span className="block font-mono text-xs text-muted-foreground">{entry.permission}</span>
-      </span>
-    </label>
+        </Label>
+        <p className="text-sm leading-5 text-muted-foreground" id={descriptionId}>
+          {entry.description}
+        </p>
+      </div>
+    </div>
   );
 }
 
 function DisableUserAlert({ onClose, user }: { onClose: () => void; user: AdminUserSummary }) {
   const mutation = useDisableAdminUserMutation();
-  const [currentAdminPassword, setCurrentAdminPassword] = useState("");
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     mutation.mutate(
-      { userId: user.id, input: { currentAdminPassword } },
+      { userId: user.id, input: {} },
       {
         onSuccess: (updatedUser) => {
           toast.success(`Removed access for ${updatedUser.username}.`);
@@ -598,7 +637,6 @@ function DisableUserAlert({ onClose, user }: { onClose: () => void; user: AdminU
           </AlertDialogDescription>
         </AlertDialogHeader>
         <form className="space-y-4" id="admin-disable-user-form" onSubmit={handleSubmit}>
-          <AdminPasswordField onChange={setCurrentAdminPassword} value={currentAdminPassword} />
           <MutationErrorMessage error={mutation.error} fallback="Could not remove access." />
         </form>
         <AlertDialogFooter>
@@ -618,12 +656,11 @@ function DisableUserAlert({ onClose, user }: { onClose: () => void; user: AdminU
 
 function EnableUserDialog({ onClose, user }: { onClose: () => void; user: AdminUserSummary }) {
   const mutation = useEnableAdminUserMutation();
-  const [currentAdminPassword, setCurrentAdminPassword] = useState("");
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     mutation.mutate(
-      { userId: user.id, input: { disabled: false, currentAdminPassword } },
+      { userId: user.id, input: { disabled: false } },
       {
         onSuccess: (updatedUser) => {
           toast.success(`Restored access for ${updatedUser.username}.`);
@@ -640,7 +677,6 @@ function EnableUserDialog({ onClose, user }: { onClose: () => void; user: AdminU
       title={`Restore access for ${user.username}`}
     >
       <form className="space-y-4" onSubmit={handleSubmit}>
-        <AdminPasswordField onChange={setCurrentAdminPassword} value={currentAdminPassword} />
         <MutationErrorMessage error={mutation.error} fallback="Could not restore access." />
         <DialogFooter>
           <Button onClick={onClose} type="button" variant="outline">
@@ -667,19 +703,23 @@ function UsersTableSkeleton() {
 
 function AdminUserDialogFrame({
   children,
+  contentClassName,
   description,
+  headerClassName,
   onClose,
   title,
 }: {
   children: ReactNode;
+  contentClassName?: string;
   description: string;
+  headerClassName?: string;
   onClose: () => void;
   title: string;
 }) {
   return (
     <Dialog onOpenChange={(open) => !open && onClose()} open>
-      <DialogContent>
-        <DialogHeader>
+      <DialogContent className={contentClassName}>
+        <DialogHeader className={headerClassName}>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
@@ -728,8 +768,8 @@ function PermissionsCell({
   const canManagePermissions = user.role === "mod" && !user.disabledAt;
 
   return (
-    <div className="flex items-center justify-between gap-2">
-      <PermissionBadges user={user} />
+    <div className="flex min-w-0 items-center justify-between gap-2">
+      <PermissionBadges className="min-w-0" limit={4} user={user} />
       <Button
         aria-label={`Manage permissions for ${user.username}`}
         disabled={!canManagePermissions}
@@ -745,18 +785,30 @@ function PermissionsCell({
   );
 }
 
-function PermissionBadges({ user }: { user: AdminUserSummary }) {
+function PermissionBadges({
+  className,
+  limit,
+  user,
+}: {
+  className?: string;
+  limit?: number;
+  user: AdminUserSummary;
+}) {
   if (user.permissions.length === 0) {
-    return <span className="text-sm text-muted-foreground">No grants</span>;
+    return <span className={cn("text-sm text-muted-foreground", className)}>No grants</span>;
   }
 
+  const visiblePermissions = limit ? user.permissions.slice(0, limit) : user.permissions;
+  const remainingCount = limit ? Math.max(user.permissions.length - limit, 0) : 0;
+
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {user.permissions.map((permission) => (
+    <div className={cn("flex min-w-0 flex-wrap gap-1.5", className)}>
+      {visiblePermissions.map((permission) => (
         <Badge key={permission} variant="outline">
           {getPermissionLabel(permission)}
         </Badge>
       ))}
+      {remainingCount > 0 ? <Badge variant="secondary">+{remainingCount}</Badge> : null}
     </div>
   );
 }
@@ -782,26 +834,6 @@ function FormField({ children, label }: { children: ReactNode; label: string }) 
       <span>{label}</span>
       {children}
     </Label>
-  );
-}
-
-function AdminPasswordField({
-  onChange,
-  value,
-}: {
-  onChange: (value: string) => void;
-  value: string;
-}) {
-  return (
-    <FormField label="Your admin password">
-      <Input
-        autoComplete="current-password"
-        onChange={(event) => onChange(event.target.value)}
-        required
-        type="password"
-        value={value}
-      />
-    </FormField>
   );
 }
 

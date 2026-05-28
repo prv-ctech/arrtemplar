@@ -3,7 +3,9 @@ import { readWorkspaceSource } from "./admin-settings-test-sources";
 
 const adminSettingsSourcePath = "apps/web/src/features/admin/AdminSettings.tsx";
 const adminUsersSettingsSourcePath = "apps/web/src/features/admin/AdminUsersSettings.tsx";
+const alertDialogSourcePath = "apps/web/src/components/ui/alert-dialog.tsx";
 const appShellSourcePath = "apps/web/src/components/layout/AppShell.tsx";
+const dialogSourcePath = "apps/web/src/components/ui/dialog.tsx";
 const settingsNavSourcePath = "apps/web/src/features/settings/SettingsNav.tsx";
 const switchSourcePath = "apps/web/src/components/ui/switch.tsx";
 const stylesSourcePath = "apps/web/src/styles.css";
@@ -112,7 +114,8 @@ describe("admin settings layout", () => {
     expect(usersSource).toContain("<AlertDialog");
     expect(usersSource).toContain("managed non-admin local accounts");
     expect(usersSource).toContain("No managed local accounts yet");
-    expect(usersSource).toContain("currentAdminPassword");
+    expect(usersSource).not.toContain("currentAdminPassword");
+    expect(usersSource).not.toContain("Your admin password");
     expect(usersSource).toContain("Permission grants");
     expect(usersSource).toContain("function PermissionsCell");
     expect(usersSource).toContain("Manage permissions");
@@ -133,6 +136,21 @@ describe("admin settings layout", () => {
     expect(usersSource).not.toContain("isActiveAdmin");
     expect(source).not.toContain("Allow Registration");
     expect(source).not.toContain("Default role assigned to newly registered users.");
+  });
+
+  it("keeps dialogs and permission grants viewport-safe on phones", async () => {
+    const alertDialogSource = await readWorkspaceSource(alertDialogSourcePath);
+    const dialogSource = await readWorkspaceSource(dialogSourcePath);
+    const usersSource = await readWorkspaceSource(adminUsersSettingsSourcePath);
+
+    expect(dialogSource).toContain("max-h-[calc(100dvh-2rem)]");
+    expect(dialogSource).toContain("overflow-y-auto overscroll-contain");
+    expect(alertDialogSource).toContain("max-h-[calc(100dvh-2rem)]");
+    expect(alertDialogSource).toContain("overflow-y-auto overscroll-contain");
+    expect(usersSource).toContain("grid-rows-[auto_minmax(0,1fr)]");
+    expect(usersSource).toContain("grid-rows-[minmax(0,1fr)_auto_auto]");
+    expect(usersSource).toContain("Available permission grants</legend>");
+    expect(usersSource).not.toContain("{entry.permission}</span>");
   });
 });
 

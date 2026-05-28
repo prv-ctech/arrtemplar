@@ -212,7 +212,7 @@ describe("auth routes", () => {
     }
   });
 
-  it("lets admins inspect the grant catalog and replace mod permissions after reauth", async () => {
+  it("lets authenticated admins inspect the grant catalog and replace mod permissions", async () => {
     const { admin, adminCookie, app, database, viewer, viewerCookie } =
       await createAdminViewerTestContext();
 
@@ -250,7 +250,7 @@ describe("auth routes", () => {
     const grantUserPermissionsResponse = await adminPatch(
       app,
       `/api/admin/users/${viewer.publicId}/permissions`,
-      { permissions: ["admin:import"], currentAdminPassword: "correct-horse-battery-staple" },
+      { permissions: ["admin:import"] },
       adminCookie,
     );
     const grantUserPermissionsBody = await grantUserPermissionsResponse.json();
@@ -261,7 +261,7 @@ describe("auth routes", () => {
     const promoteResponse = await adminPatch(
       app,
       `/api/admin/users/${viewer.publicId}/role`,
-      { role: "mod", currentAdminPassword: "correct-horse-battery-staple" },
+      { role: "mod" },
       adminCookie,
     );
 
@@ -271,23 +271,13 @@ describe("auth routes", () => {
     const modGrantResponse = await adminPatch(
       app,
       `/api/admin/users/${viewer.publicId}/permissions`,
-      { permissions: ["admin:import"], currentAdminPassword: "correct-horse-battery-staple" },
+      { permissions: ["admin:import"] },
       modCookie,
     );
     const invalidPermissionResponse = await adminPatch(
       app,
       `/api/admin/users/${viewer.publicId}/permissions`,
-      {
-        permissions: ["admin:logs", "admin:unknown"],
-        currentAdminPassword: "correct-horse-battery-staple",
-      },
-      adminCookie,
-    );
-    await expectAdminConfirmationValidation(
-      app,
-      `/api/admin/users/${viewer.publicId}/permissions`,
-      { permissions: ["admin:import"] },
-      { permissions: ["admin:import"], currentAdminPassword: "wrong-password" },
+      { permissions: ["admin:logs", "admin:unknown"] },
       adminCookie,
     );
 
@@ -297,10 +287,7 @@ describe("auth routes", () => {
     const grantResponse = await adminPatch(
       app,
       `/api/admin/users/${viewer.publicId}/permissions`,
-      {
-        permissions: ["admin:logs", "admin:import", "admin:logs"],
-        currentAdminPassword: "correct-horse-battery-staple",
-      },
+      { permissions: ["admin:logs", "admin:import", "admin:logs"] },
       adminCookie,
     );
     const grantBody = await grantResponse.json();
@@ -356,7 +343,7 @@ describe("auth routes", () => {
     const revokeResponse = await adminPatch(
       app,
       `/api/admin/users/${viewer.publicId}/permissions`,
-      { permissions: [], currentAdminPassword: "correct-horse-battery-staple" },
+      { permissions: [] },
       adminCookie,
     );
     const revokeBody = await revokeResponse.json();
@@ -366,34 +353,22 @@ describe("auth routes", () => {
     expect(database.db.select().from(userPermissionGrants).all()).toHaveLength(0);
   });
 
-  it("lets admins change target passwords after reauth and revokes target sessions", async () => {
+  it("lets authenticated admins change target passwords and revokes target sessions", async () => {
     const { adminCookie, app, database, viewer, viewerCookie } =
       await createAdminViewerTestContext();
     const newPassword = "updated-correct-horse-battery-staple";
 
     const passwordPath = `/api/admin/users/${viewer.publicId}/password`;
-    await expectAdminConfirmationValidation(
-      app,
-      passwordPath,
-      { password: newPassword },
-      { password: newPassword, currentAdminPassword: "wrong-password" },
-      adminCookie,
-    );
     const tooShortPasswordResponse = await adminPatch(
       app,
       passwordPath,
-      { password: "short", currentAdminPassword: "correct-horse-battery-staple" },
+      { password: "short" },
       adminCookie,
     );
 
     expect(tooShortPasswordResponse.status).toBe(422);
 
-    const response = await adminPatch(
-      app,
-      passwordPath,
-      { password: newPassword, currentAdminPassword: "correct-horse-battery-staple" },
-      adminCookie,
-    );
+    const response = await adminPatch(app, passwordPath, { password: newPassword }, adminCookie);
     const body = await response.json();
     const storedViewer = requireStoredUserByEmail(database, "viewer@example.local");
 
@@ -409,32 +384,14 @@ describe("auth routes", () => {
     expect(auditJson).not.toContain("correct-horse-battery-staple");
   });
 
-  it("changes managed account roles only between user and mod after reauth", async () => {
+  it("changes managed account roles only between user and mod for authenticated admins", async () => {
     const { adminCookie, app, viewer, viewerCookie } = await createAdminViewerTestContext();
 
     const rolePath = `/api/admin/users/${viewer.publicId}/role`;
-    await expectAdminConfirmationValidation(
-      app,
-      rolePath,
-      { role: "mod" },
-      { role: "mod", currentAdminPassword: "wrong-password" },
-      adminCookie,
-    );
-
-    const adminPromotionResponse = await adminPatch(
-      app,
-      rolePath,
-      { role: "admin", currentAdminPassword: "correct-horse-battery-staple" },
-      adminCookie,
-    );
+    const adminPromotionResponse = await adminPatch(app, rolePath, { role: "admin" }, adminCookie);
     expect(adminPromotionResponse.status).toBe(422);
 
-    const promoteResponse = await adminPatch(
-      app,
-      rolePath,
-      { role: "mod", currentAdminPassword: "correct-horse-battery-staple" },
-      adminCookie,
-    );
+    const promoteResponse = await adminPatch(app, rolePath, { role: "mod" }, adminCookie);
     const promoteBody = await promoteResponse.json();
 
     expect(promoteResponse.status).toBe(200);
@@ -448,12 +405,7 @@ describe("auth routes", () => {
 
     const promotedViewerCookie = await loginAndReadCookie(app, "viewer@example.local");
 
-    const demoteViewerResponse = await adminPatch(
-      app,
-      rolePath,
-      { role: "user", currentAdminPassword: "correct-horse-battery-staple" },
-      adminCookie,
-    );
+    const demoteViewerResponse = await adminPatch(app, rolePath, { role: "user" }, adminCookie);
     const demoteViewerBody = await demoteViewerResponse.json();
 
     expect(demoteViewerResponse.status).toBe(200);
@@ -464,27 +416,21 @@ describe("auth routes", () => {
   it("does not manage admin targets through admin users endpoints", async () => {
     const { admin, adminCookie, app } = await createAdminViewerTestContext();
     const adminPath = `/api/admin/users/${admin.publicId}`;
-    const confirmation = { currentAdminPassword: "correct-horse-battery-staple" };
 
-    const roleResponse = await adminPatch(
-      app,
-      `${adminPath}/role`,
-      { ...confirmation, role: "mod" },
-      adminCookie,
-    );
+    const roleResponse = await adminPatch(app, `${adminPath}/role`, { role: "mod" }, adminCookie);
     const passwordResponse = await adminPatch(
       app,
       `${adminPath}/password`,
-      { ...confirmation, password: "updated-correct-horse-battery-staple" },
+      { password: "updated-correct-horse-battery-staple" },
       adminCookie,
     );
     const permissionsResponse = await adminPatch(
       app,
       `${adminPath}/permissions`,
-      { ...confirmation, permissions: ["admin:logs"] },
+      { permissions: ["admin:logs"] },
       adminCookie,
     );
-    const disableResponse = await adminDelete(app, adminPath, confirmation, adminCookie);
+    const disableResponse = await adminDelete(app, adminPath, {}, adminCookie);
 
     expect(roleResponse.status).toBe(404);
     expect(passwordResponse.status).toBe(404);
@@ -497,27 +443,13 @@ describe("auth routes", () => {
       await createAdminViewerTestContext();
 
     const missingCsrfResponse = await app.handle(
-      jsonDeleteRequest(`/api/admin/users/${viewer.id}`, {
-        currentAdminPassword: "correct-horse-battery-staple",
-      }),
+      jsonDeleteRequest(`/api/admin/users/${viewer.id}`, {}),
     );
     const viewerPath = `/api/admin/users/${viewer.publicId}`;
-    const wrongConfirmationResponse = await adminDelete(
-      app,
-      viewerPath,
-      { currentAdminPassword: "wrong-password" },
-      adminCookie,
-    );
 
     expect(missingCsrfResponse.status).toBe(403);
-    expect(wrongConfirmationResponse.status).toBe(401);
 
-    const disableResponse = await adminDelete(
-      app,
-      viewerPath,
-      { currentAdminPassword: "correct-horse-battery-staple" },
-      adminCookie,
-    );
+    const disableResponse = await adminDelete(app, viewerPath, {}, adminCookie);
     const disableBody = await disableResponse.json();
     const disabledViewer = requireStoredUserByEmail(database, "viewer@example.local");
 
@@ -543,7 +475,7 @@ describe("auth routes", () => {
     const enableResponse = await adminPatch(
       app,
       `${viewerPath}/status`,
-      { disabled: false, currentAdminPassword: "correct-horse-battery-staple" },
+      { disabled: false },
       adminCookie,
     );
     const enableBody = await enableResponse.json();
@@ -562,7 +494,7 @@ describe("auth routes", () => {
     const disableAdminResponse = await adminDelete(
       app,
       `/api/admin/users/${admin.publicId}`,
-      { currentAdminPassword: "correct-horse-battery-staple" },
+      {},
       adminCookie,
     );
 
@@ -594,14 +526,14 @@ describe("auth routes", () => {
     const invalidPathResponse = await app.handle(
       csrfJsonPatchRequest(
         "/api/admin/users/not-a-uuid/role",
-        { role: "admin", currentAdminPassword: "correct-horse-battery-staple" },
+        { role: "admin" },
         { cookie: adminCookie },
       ),
     );
     const invalidRoleResponse = await app.handle(
       csrfJsonPatchRequest(
         `/api/admin/users/${crypto.randomUUID()}/role`,
-        { role: "owner", currentAdminPassword: "correct-horse-battery-staple" },
+        { role: "owner" },
         { cookie: adminCookie },
       ),
     );
@@ -1079,20 +1011,6 @@ async function adminPatch(
   cookie: string,
 ): Promise<Response> {
   return app.handle(csrfJsonPatchRequest(path, body, { cookie }));
-}
-
-async function expectAdminConfirmationValidation(
-  app: TestAppContext["app"],
-  path: string,
-  missingConfirmationBody: unknown,
-  wrongConfirmationBody: unknown,
-  cookie: string,
-): Promise<void> {
-  const missingConfirmationResponse = await adminPatch(app, path, missingConfirmationBody, cookie);
-  const wrongConfirmationResponse = await adminPatch(app, path, wrongConfirmationBody, cookie);
-
-  expect(missingConfirmationResponse.status).toBe(422);
-  expect(wrongConfirmationResponse.status).toBe(401);
 }
 
 async function adminDelete(

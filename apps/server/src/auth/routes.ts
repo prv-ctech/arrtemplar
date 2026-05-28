@@ -104,26 +104,20 @@ const adminUserParamsSchema = t.Object({
 
 const adminChangeUserPasswordRequestSchema = t.Object({
   password: t.String({ minLength: MIN_PASSWORD_LENGTH, maxLength: 1024 }),
-  currentAdminPassword: t.String({ minLength: 1, maxLength: 1024 }),
 });
 
 const adminChangeUserRoleRequestSchema = t.Object({
   role: managedUserRoleSchema,
-  currentAdminPassword: t.String({ minLength: 1, maxLength: 1024 }),
 });
 
-const adminDisableUserRequestSchema = t.Object({
-  currentAdminPassword: t.String({ minLength: 1, maxLength: 1024 }),
-});
+const adminDisableUserRequestSchema = t.Object({});
 
 const adminUpdateUserStatusRequestSchema = t.Object({
   disabled: t.Literal(false),
-  currentAdminPassword: t.String({ minLength: 1, maxLength: 1024 }),
 });
 
 const adminUpdateUserPermissionsRequestSchema = t.Object({
   permissions: t.Array(userPermissionSchema),
-  currentAdminPassword: t.String({ minLength: 1, maxLength: 1024 }),
 });
 
 const loginResponseSchema = t.Object({ user: publicUserSchema });
@@ -587,7 +581,7 @@ function createAdminRoutes(authService: AuthService) {
         detail: {
           summary: "Change a local account password",
           description:
-            "Admin-only high-risk endpoint that requires acting-admin password confirmation and revokes the target user's sessions.",
+            "Admin-only high-risk endpoint that revokes the target user's sessions after changing their password.",
           tags: ["Auth"],
         },
       },
@@ -611,7 +605,7 @@ function createAdminRoutes(authService: AuthService) {
         detail: {
           summary: "Change a local account role",
           description:
-            "Admin-only high-risk endpoint that requires acting-admin password confirmation, revokes target sessions, and protects the last active admin.",
+            "Admin-only high-risk endpoint that revokes target sessions and protects admin accounts from managed-user changes.",
           tags: ["Auth"],
         },
       },
@@ -659,7 +653,7 @@ function createAdminRoutes(authService: AuthService) {
         detail: {
           summary: "Replace local account permission grants",
           description:
-            "Admin-only high-risk endpoint that requires acting-admin password confirmation, validates grants against the shared catalog, and revokes target sessions.",
+            "Admin-only high-risk endpoint that validates grants against the shared catalog and revokes target sessions.",
           tags: ["Auth"],
         },
       },
@@ -682,8 +676,7 @@ function createAdminRoutes(authService: AuthService) {
         body: adminUpdateUserStatusRequestSchema,
         detail: {
           summary: "Restore local account access",
-          description:
-            "Admin-only high-risk endpoint that requires acting-admin password confirmation before re-enabling a disabled local account.",
+          description: "Admin-only high-risk endpoint that re-enables a disabled local account.",
           tags: ["Auth"],
         },
       },

@@ -1,9 +1,18 @@
 import type { ComponentProps } from "react";
 import { cn } from "@/lib/utils";
 
-export function Table({ className, ...props }: ComponentProps<"table">) {
+type TableProps = ComponentProps<"table"> & {
+  containerClassName?: string;
+};
+
+export function Table({ className, containerClassName, ...props }: TableProps) {
   return (
-    <div className="relative w-full overflow-x-auto rounded-3xl border border-border bg-card/60">
+    <div
+      className={cn(
+        "relative w-full overflow-x-auto rounded-3xl border border-border bg-card/60",
+        containerClassName,
+      )}
+    >
       <table
         className={cn("w-full caption-bottom text-sm", className)}
         data-slot="table"

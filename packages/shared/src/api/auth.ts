@@ -54,26 +54,20 @@ export type ChangePasswordRequest = {
 
 export type AdminChangeUserPasswordRequest = {
   password: string;
-  currentAdminPassword: string;
 };
 
 export type AdminChangeUserRoleRequest = {
   role: ManagedUserRole;
-  currentAdminPassword: string;
 };
 
 export type AdminUpdateUserPermissionsRequest = {
   permissions: UserPermission[];
-  currentAdminPassword: string;
 };
 
-export type AdminDisableUserRequest = {
-  currentAdminPassword: string;
-};
+export type AdminDisableUserRequest = Record<string, never>;
 
 export type AdminUpdateUserStatusRequest = {
   disabled: false;
-  currentAdminPassword: string;
 };
 
 export type LoginResponse = {

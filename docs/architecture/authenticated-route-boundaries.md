@@ -3,7 +3,7 @@
 Status: Accepted  
 Date: 2026-05-23  
 Implementation: `689b097` (`Implement authenticated routing restructure`)  
-Updated: 2026-05-27 (`Account and admin route separation`)
+Updated: 2026-05-28 (`Session-based admin user-management mutations`)
 
 ## Purpose
 
@@ -99,17 +99,17 @@ Authenticated user APIs are grouped separately from admin APIs in `apps/server/s
 - `GET /api/admin/permission-catalog` returns the shared grant catalog for admins only.
 - `GET /api/admin/users` lists managed non-admin local account summaries for admins only. The response uses public account IDs and includes active permission grants. It intentionally omits admin accounts, email, password hashes, session IDs, session token hashes, and internal UUIDs.
 - `POST /api/admin/users` creates a local account with the `user` role only.
-- `PATCH /api/admin/users/:id/password` changes a managed non-admin account password after verifying `currentAdminPassword` for the acting admin and revokes all target sessions.
-- `PATCH /api/admin/users/:id/role` changes a managed non-admin account role between `user` and `mod` after verifying `currentAdminPassword` and revokes all target sessions. It does not accept `admin` as a target role.
-- `PATCH /api/admin/users/:id/permissions` replaces a mod account's grant list after verifying `currentAdminPassword`, validates grants against the shared catalog, revokes all target sessions, and rejects non-mod targets.
+- `PATCH /api/admin/users/:id/password` changes a managed non-admin account password for the authenticated admin session and revokes all target sessions.
+- `PATCH /api/admin/users/:id/role` changes a managed non-admin account role between `user` and `mod` for the authenticated admin session and revokes all target sessions. It does not accept `admin` as a target role.
+- `PATCH /api/admin/users/:id/permissions` replaces a mod account's grant list for the authenticated admin session, validates grants against the shared catalog, revokes all target sessions, and rejects non-mod targets.
 - `DELETE /api/admin/users/:id` soft-deletes managed non-admin account access by setting `disabledAt` and revokes all target sessions.
-- `PATCH /api/admin/users/:id/status` currently supports `{ disabled: false }` to restore a disabled managed non-admin account after verifying `currentAdminPassword`.
+- `PATCH /api/admin/users/:id/status` currently supports `{ disabled: false }` to restore a disabled managed non-admin account for the authenticated admin session.
 - Admin targets are not manageable through `/api/admin/users/:id/*` endpoints; they return safe not-found responses from that managed-account boundary.
 - `/api/admin/*` routes remain exact-admin-only unless a handler is explicitly permission-gated for a granted mod section. The current user-management and permission-grant APIs are exact-admin-only. Do not rely on frontend route guards for API protection.
 
 Never expose `passwordHash`, internal UUID primary keys, session IDs, token hashes, or other private database fields from user/profile/admin summary endpoints. Shared request/response contracts live in `packages/shared/src/api/auth.ts`.
 
-High-risk admin user-management operations require acting-admin password confirmation even when the session is already authenticated. Unsafe admin requests continue to use the shared CSRF proof header path.
+High-risk admin user-management operations rely on the authenticated exact-admin session instead of repeated password confirmation. Unsafe `/api/*` requests continue to require the shared CSRF proof header. The service re-reads the active admin actor, rejects disabled or non-admin actors, validates that targets are managed non-admin accounts, writes audit logs, and revokes target sessions when privilege or authenticator state changes.
 
 `disabledAt` is the account-removal mechanism for managed local users. User rows are preserved for auditability, disabled users cannot log in, and any existing session is treated as anonymous during current-user/admin checks. Session revocation is mandatory after password changes, role changes, permission changes, and access removal/restoration because privileges or authenticator state changed.
 
