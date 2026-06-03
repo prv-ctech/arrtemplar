@@ -45,10 +45,10 @@ function HealthLoading() {
   return (
     <div
       aria-busy="true"
-      aria-label="Checking API status"
+      aria-live="polite"
       className="space-y-3 rounded-3xl border border-border bg-background/48 p-4"
-      role="status"
     >
+      <span className="sr-only">Checking API status</span>
       <Skeleton className="h-4 w-2/3" />
       <Skeleton className="h-4 w-1/2" />
       <Skeleton className="h-12 w-full" />

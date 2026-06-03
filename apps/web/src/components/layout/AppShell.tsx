@@ -11,7 +11,7 @@ import {
 } from "@phosphor-icons/react";
 import { useMutation } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { type ComponentProps, type ReactNode, useEffect, useRef, useState } from "react";
+import { type ComponentProps, type ReactNode, useCallback, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -102,7 +102,9 @@ function ShellActions({
 export function AppShell({ children, user }: { children: ReactNode; user: PublicUser }) {
   const navigate = useNavigate();
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
-  const mobileSearchInputRef = useRef<HTMLInputElement>(null);
+  const focusMobileSearchInput = useCallback((node: HTMLInputElement | null) => {
+    node?.focus();
+  }, []);
   const logoutMutation = useMutation({
     mutationFn: logout,
     onSettled: () => {
@@ -139,12 +141,6 @@ export function AppShell({ children, user }: { children: ReactNode; user: Public
         ]
       : []),
   ];
-
-  useEffect(() => {
-    if (isMobileSearchOpen) {
-      mobileSearchInputRef.current?.focus();
-    }
-  }, [isMobileSearchOpen]);
 
   const handleMobileSearchToggle = () => {
     setIsMobileSearchOpen((currentValue) => !currentValue);
@@ -251,7 +247,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Public
                     className="min-w-0 flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
                     id="mobile-shell-search-input"
                     placeholder="Search titles, requests, import notes"
-                    ref={mobileSearchInputRef}
+                    ref={focusMobileSearchInput}
                     type="search"
                   />
                 </div>

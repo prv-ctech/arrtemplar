@@ -31,8 +31,8 @@ export function LoginForm() {
           </div>
         ) : (
           <div
+            aria-live="polite"
             className="mt-7 rounded-2xl border border-border bg-secondary/45 px-4 py-3 text-center text-sm leading-6 text-muted-foreground [@media(max-height:640px)]:mt-5 [@media(max-height:640px)]:py-2"
-            role="status"
           >
             Checking setup status…
           </div>

@@ -62,14 +62,24 @@ import {
 import { ApiClientError } from "@/lib/api-error";
 import { cn } from "@/lib/utils";
 
+const adminUserTimestampFormatter = new Intl.DateTimeFormat(undefined, {
+  dateStyle: "medium",
+  timeStyle: "short",
+});
+
+type AdminUserDialogState =
+  | { type: "none" }
+  | { type: "password"; user: AdminUserSummary }
+  | { type: "role"; user: AdminUserSummary }
+  | { type: "permissions"; user: AdminUserSummary }
+  | { type: "disable"; user: AdminUserSummary }
+  | { type: "enable"; user: AdminUserSummary };
+
 export function AdminUsersSettings() {
   const usersQuery = useAdminUsersQuery();
   const users = usersQuery.data ?? [];
-  const [passwordTarget, setPasswordTarget] = useState<AdminUserSummary | null>(null);
-  const [roleTarget, setRoleTarget] = useState<AdminUserSummary | null>(null);
-  const [permissionsTarget, setPermissionsTarget] = useState<AdminUserSummary | null>(null);
-  const [disableTarget, setDisableTarget] = useState<AdminUserSummary | null>(null);
-  const [enableTarget, setEnableTarget] = useState<AdminUserSummary | null>(null);
+  const [dialogState, setDialogState] = useState<AdminUserDialogState>({ type: "none" });
+  const closeDialog = () => setDialogState({ type: "none" });
 
   return (
     <div className="flex min-h-[calc(100dvh-8rem)] flex-col gap-4 overflow-hidden">
@@ -82,27 +92,29 @@ export function AdminUsersSettings() {
       {usersQuery.isSuccess && users.length === 0 ? <UsersEmptyState /> : null}
       {usersQuery.isSuccess && users.length > 0 ? (
         <AdminUsersTable
-          onChangePassword={setPasswordTarget}
-          onChangeRole={setRoleTarget}
-          onManagePermissions={setPermissionsTarget}
-          onDisable={setDisableTarget}
-          onEnable={setEnableTarget}
+          onChangePassword={(user) => setDialogState({ type: "password", user })}
+          onChangeRole={(user) => setDialogState({ type: "role", user })}
+          onManagePermissions={(user) => setDialogState({ type: "permissions", user })}
+          onDisable={(user) => setDialogState({ type: "disable", user })}
+          onEnable={(user) => setDialogState({ type: "enable", user })}
           users={users}
         />
       ) : null}
 
-      {passwordTarget ? (
-        <PasswordDialog onClose={() => setPasswordTarget(null)} user={passwordTarget} />
+      {dialogState.type === "password" ? (
+        <PasswordDialog onClose={closeDialog} user={dialogState.user} />
       ) : null}
-      {roleTarget ? <RoleDialog onClose={() => setRoleTarget(null)} user={roleTarget} /> : null}
-      {permissionsTarget ? (
-        <PermissionsDialog onClose={() => setPermissionsTarget(null)} user={permissionsTarget} />
+      {dialogState.type === "role" ? (
+        <RoleDialog onClose={closeDialog} user={dialogState.user} />
       ) : null}
-      {disableTarget ? (
-        <DisableUserAlert onClose={() => setDisableTarget(null)} user={disableTarget} />
+      {dialogState.type === "permissions" ? (
+        <PermissionsDialog onClose={closeDialog} user={dialogState.user} />
       ) : null}
-      {enableTarget ? (
-        <EnableUserDialog onClose={() => setEnableTarget(null)} user={enableTarget} />
+      {dialogState.type === "disable" ? (
+        <DisableUserAlert onClose={closeDialog} user={dialogState.user} />
+      ) : null}
+      {dialogState.type === "enable" ? (
+        <EnableUserDialog onClose={closeDialog} user={dialogState.user} />
       ) : null}
     </div>
   );
@@ -425,10 +437,16 @@ function PasswordDialog({ onClose, user }: { onClose: () => void; user: AdminUse
 
 function RoleDialog({ onClose, user }: { onClose: () => void; user: AdminUserSummary }) {
   const mutation = useChangeAdminUserRoleMutation();
-  const [role, setRole] = useState<ManagedUserRole>(user.role);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const role = formData.get("role");
+
+    if (role !== "user" && role !== "mod") {
+      toast.error("Choose a valid role.");
+      return;
+    }
 
     mutation.mutate(
       { userId: user.id, input: { role } },
@@ -449,10 +467,7 @@ function RoleDialog({ onClose, user }: { onClose: () => void; user: AdminUserSum
     >
       <form className="space-y-4" onSubmit={handleSubmit}>
         <FormField label="Role">
-          <NativeSelect
-            onChange={(event) => setRole(event.target.value as ManagedUserRole)}
-            value={role}
-          >
+          <NativeSelect defaultValue={user.role} name="role">
             <option value="user">User</option>
             <option value="mod">Mod</option>
           </NativeSelect>
@@ -683,7 +698,8 @@ function EnableUserDialog({ onClose, user }: { onClose: () => void; user: AdminU
 
 function UsersTableSkeleton() {
   return (
-    <div aria-busy="true" aria-label="Loading local accounts" className="space-y-3" role="status">
+    <div aria-busy="true" className="space-y-3">
+      <span className="sr-only">Loading local accounts</span>
       {Array.from({ length: 4 }, (_, index) => (
         <Skeleton className="h-16" key={`admin-user-skeleton-${index}`} />
       ))}
@@ -863,8 +879,5 @@ function readMutationError(error: Error | null, fallback: string): string | null
 }
 
 function formatTimestamp(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
+  return adminUserTimestampFormatter.format(new Date(value));
 }

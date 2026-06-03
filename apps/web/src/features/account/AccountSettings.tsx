@@ -2,23 +2,22 @@ import { ADMIN_PERMISSION_CATALOG, type PublicUser } from "@arrtemplar/shared";
 import { BellIcon, CheckCircleIcon, PaletteIcon, UserCircleIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useRef } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { hasDelegatedAccountPermission } from "@/features/auth/auth-state";
+import { authQueryKey, hasDelegatedAccountPermission } from "@/features/auth/auth-state";
 import { changePassword, getUserProfile, updateUserProfile } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { type SettingsEntry, SettingsNav } from "../settings/SettingsNav";
 import { SettingsPanel, SettingsRow, SettingsSection } from "../settings/SettingsPrimitives";
 import { useTheme } from "../theme/theme-state";
 import { syncUpdatedUserProfileCaches, userProfileQueryKey } from "../user/user-profile-cache";
+import { canAccessAccountSettingsPage } from "./account-settings-access";
+import type { AccountSettingsPage, DelegatedSettingsPage } from "./account-settings-types";
 
-type DelegatedSettingsPage = (typeof ADMIN_PERMISSION_CATALOG)[number]["routeSlug"];
-
-export type AccountSettingsPage = "profile" | "theme" | "notifications" | DelegatedSettingsPage;
 type AccountSettingsRouteTarget =
   | "/account"
   | "/account/theme"
@@ -68,16 +67,22 @@ function createSettingsEntries(user: PublicUser) {
       to: "/account/notifications",
     },
   ] satisfies [AccountSettingsEntry, ...AccountSettingsEntry[]];
-  const delegatedEntries = ADMIN_PERMISSION_CATALOG.filter(
-    (entry) => !entry.augmentsPersonalRoute && canAccessAccountSettingsPage(user, entry.routeSlug),
-  ).map((entry) => ({
-    id: entry.routeSlug,
-    label: entry.label,
-    icon: <UserCircleIcon aria-hidden="true" className="size-5" />,
-    description: entry.description,
-    path: `/account/${entry.routeSlug}`,
-    to: `/account/${entry.routeSlug}`,
-  })) satisfies AccountSettingsEntry[];
+  const delegatedEntries: AccountSettingsEntry[] = [];
+
+  for (const entry of ADMIN_PERMISSION_CATALOG) {
+    if (entry.augmentsPersonalRoute || !canAccessAccountSettingsPage(user, entry.routeSlug)) {
+      continue;
+    }
+
+    delegatedEntries.push({
+      id: entry.routeSlug,
+      label: entry.label,
+      icon: <UserCircleIcon aria-hidden="true" className="size-5" />,
+      description: entry.description,
+      path: `/account/${entry.routeSlug}`,
+      to: `/account/${entry.routeSlug}`,
+    });
+  }
 
   return [...personalEntries, ...delegatedEntries] satisfies [
     AccountSettingsEntry,
@@ -85,35 +90,23 @@ function createSettingsEntries(user: PublicUser) {
   ];
 }
 
-export function canAccessAccountSettingsPage(user: PublicUser, page: AccountSettingsPage): boolean {
-  if (page === "profile" || page === "theme" || page === "notifications") {
-    return true;
-  }
-
-  const catalogEntry = ADMIN_PERMISSION_CATALOG.find((entry) => entry.routeSlug === page);
-
-  return catalogEntry ? hasDelegatedAccountPermission(user, catalogEntry.permission) : false;
-}
-
 function ProfileSettings({ user }: { user: PublicUser }) {
   const queryClient = useQueryClient();
+  const passwordFormRef = useRef<HTMLFormElement>(null);
   const profileQuery = useQuery({
     queryKey: userProfileQueryKey,
     queryFn: getUserProfile,
     initialData: user,
   });
   const profile = profileQuery.data;
-  const [username, setUsername] = useState(profile.username);
-  const [email, setEmail] = useState(profile.email);
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const profileMutation = useMutation({
     mutationFn: updateUserProfile,
-    onSuccess: (updatedProfile) => {
+    onSuccess: async (updatedProfile) => {
       syncUpdatedUserProfileCaches(queryClient, updatedProfile);
-      setUsername(updatedProfile.username);
-      setEmail(updatedProfile.email);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: userProfileQueryKey }),
+        queryClient.invalidateQueries({ queryKey: authQueryKey }),
+      ]);
       toast.success("Profile updated.");
     },
     onError: (error) => {
@@ -122,10 +115,9 @@ function ProfileSettings({ user }: { user: PublicUser }) {
   });
   const passwordMutation = useMutation({
     mutationFn: changePassword,
-    onSuccess: () => {
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: authQueryKey });
+      passwordFormRef.current?.reset();
       toast.success("Password updated.");
     },
     onError: (error) => {
@@ -133,14 +125,12 @@ function ProfileSettings({ user }: { user: PublicUser }) {
     },
   });
 
-  useEffect(() => {
-    setUsername(profile.username);
-    setEmail(profile.email);
-  }, [profile.email, profile.username]);
-
   function handleProfileSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    const formData = new FormData(event.currentTarget);
+    const username = String(formData.get("username") ?? "");
+    const email = String(formData.get("email") ?? "");
     const trimmedUsername = username.trim();
     const trimmedEmail = email.trim();
 
@@ -155,6 +145,11 @@ function ProfileSettings({ user }: { user: PublicUser }) {
   function handlePasswordSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    const formData = new FormData(event.currentTarget);
+    const currentPassword = String(formData.get("currentPassword") ?? "");
+    const newPassword = String(formData.get("newPassword") ?? "");
+    const confirmPassword = String(formData.get("confirmPassword") ?? "");
+
     if (newPassword !== confirmPassword) {
       toast.error("New password and confirmation do not match.");
       return;
@@ -165,7 +160,11 @@ function ProfileSettings({ user }: { user: PublicUser }) {
 
   return (
     <div className="space-y-10">
-      <form className="space-y-5" onSubmit={handleProfileSubmit}>
+      <form
+        className="space-y-5"
+        key={`${profile.id}:${profile.username}:${profile.email}`}
+        onSubmit={handleProfileSubmit}
+      >
         <SettingsSection
           description="Your account identity is shown across the app."
           title="Profile"
@@ -178,10 +177,10 @@ function ProfileSettings({ user }: { user: PublicUser }) {
             <Input
               autoComplete="username"
               className="sm:max-w-72"
+              defaultValue={profile.username}
               id="account-profile-username"
-              onChange={(event) => setUsername(event.target.value)}
+              name="username"
               required
-              value={username}
             />
           </SettingsRow>
           <SettingsRow
@@ -192,11 +191,11 @@ function ProfileSettings({ user }: { user: PublicUser }) {
             <Input
               autoComplete="email"
               className="sm:max-w-72"
+              defaultValue={profile.email}
               id="account-profile-email"
-              onChange={(event) => setEmail(event.target.value)}
+              name="email"
               required
               type="email"
-              value={email}
             />
           </SettingsRow>
           <SettingsRow description="Current authorization level for this account." label="Role">
@@ -214,7 +213,7 @@ function ProfileSettings({ user }: { user: PublicUser }) {
         </div>
       </form>
 
-      <form className="space-y-5" onSubmit={handlePasswordSubmit}>
+      <form className="space-y-5" onSubmit={handlePasswordSubmit} ref={passwordFormRef}>
         <SettingsSection
           description="Use your current password to protect account changes."
           title="Password"
@@ -224,10 +223,9 @@ function ProfileSettings({ user }: { user: PublicUser }) {
               autoComplete="current-password"
               className="sm:max-w-72"
               id="account-current-password"
-              onChange={(event) => setCurrentPassword(event.target.value)}
+              name="currentPassword"
               required
               type="password"
-              value={currentPassword}
             />
           </SettingsRow>
           <SettingsRow controlId="account-new-password" label="New password">
@@ -235,10 +233,9 @@ function ProfileSettings({ user }: { user: PublicUser }) {
               autoComplete="new-password"
               className="sm:max-w-72"
               id="account-new-password"
-              onChange={(event) => setNewPassword(event.target.value)}
+              name="newPassword"
               required
               type="password"
-              value={newPassword}
             />
           </SettingsRow>
           <SettingsRow controlId="account-confirm-password" label="Confirm new password">
@@ -246,10 +243,9 @@ function ProfileSettings({ user }: { user: PublicUser }) {
               autoComplete="new-password"
               className="sm:max-w-72"
               id="account-confirm-password"
-              onChange={(event) => setConfirmPassword(event.target.value)}
+              name="confirmPassword"
               required
               type="password"
-              value={confirmPassword}
             />
           </SettingsRow>
         </SettingsSection>
@@ -373,7 +369,13 @@ function DelegatedAdminSettings({ page }: { page: DelegatedSettingsPage }) {
   );
 }
 
-function renderActiveSettingsPage(activePage: AccountSettingsPage, user: PublicUser) {
+function ActiveSettingsPage({
+  activePage,
+  user,
+}: {
+  activePage: AccountSettingsPage;
+  user: PublicUser;
+}) {
   switch (activePage) {
     case "profile":
       return <ProfileSettings user={user} />;
@@ -439,7 +441,7 @@ export function AccountSettings({
         description={activeEntry.description}
         title={activeEntry.label}
       >
-        {renderActiveSettingsPage(activePage, user)}
+        <ActiveSettingsPage activePage={activePage} user={user} />
       </SettingsPanel>
     </div>
   );
