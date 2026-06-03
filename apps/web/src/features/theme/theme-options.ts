@@ -5,7 +5,7 @@ export type CatppuccinThemeOption = {
   label: string;
   description: string;
   dark: boolean;
-  swatches: readonly [string, string, string];
+  swatches: readonly string[];
 };
 
 export const DEFAULT_CATPPUCCIN_THEME: CatppuccinTheme = "mocha";
@@ -16,28 +16,52 @@ export const CATPPUCCIN_THEMES = [
     label: "Latte",
     description: "Bright panels with mauve command accents.",
     dark: false,
-    swatches: ["#eff1f5", "#8839ef", "#fe640b"],
+    swatches: [
+      "#e6e9ef",
+      "#eff1f5",
+      "#ccd0da",
+      "#8839ef",
+      "#fe640b",
+    ],
   },
   {
     value: "frappe",
     label: "Frappé",
     description: "Muted dusk surfaces with lavender and peach.",
     dark: true,
-    swatches: ["#303446", "#ca9ee6", "#ef9f76"],
+    swatches: [
+      "#292c3c",
+      "#303446",
+      "#414559",
+      "#ca9ee6",
+      "#ef9f76",
+    ],
   },
   {
     value: "macchiato",
     label: "Macchiato",
     description: "Medium contrast with mauve and warm peach.",
     dark: true,
-    swatches: ["#24273a", "#c6a0f6", "#f5a97f"],
+    swatches: [
+      "#1e2030",
+      "#24273a",
+      "#363a4f",
+      "#c6a0f6",
+      "#f5a97f",
+    ],
   },
   {
     value: "mocha",
     label: "Mocha",
     description: "Deep theater mode with mauve and amber contrast.",
     dark: true,
-    swatches: ["#1e1e2e", "#cba6f7", "#fab387"],
+    swatches: [
+      "#181825",
+      "#1e1e2e",
+      "#313244",
+      "#cba6f7",
+      "#fab387",
+    ],
   },
 ] as const satisfies readonly CatppuccinThemeOption[];
 

@@ -13,6 +13,7 @@ import { changePassword, getUserProfile, updateUserProfile } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { type SettingsEntry, SettingsNav } from "../settings/SettingsNav";
 import { SettingsPanel, SettingsRow, SettingsSection } from "../settings/SettingsPrimitives";
+import { ThemePreviewStrip } from "../theme/ThemePreviewStrip";
 import { useTheme } from "../theme/theme-state";
 import { syncUpdatedUserProfileCaches, userProfileQueryKey } from "../user/user-profile-cache";
 import { canAccessAccountSettingsPage } from "./account-settings-access";
@@ -281,14 +282,7 @@ function ThemeSettings() {
               onClick={() => setTheme(option.value)}
               type="button"
             >
-              <span
-                aria-hidden="true"
-                className="grid size-8 shrink-0 grid-cols-3 overflow-hidden rounded-xl border border-border"
-              >
-                {option.swatches.map((swatch) => (
-                  <span key={swatch} style={{ backgroundColor: swatch }} />
-                ))}
-              </span>
+              <ThemePreviewStrip className="h-8 w-20" swatches={option.swatches} />
               <span className="min-w-0 flex-1 font-medium">{option.label}</span>
               {isSelected ? (
                 <CheckCircleIcon aria-hidden="true" className="size-4 text-primary" weight="fill" />

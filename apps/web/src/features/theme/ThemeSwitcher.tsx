@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { ThemePreviewStrip } from "./ThemePreviewStrip";
 import { useTheme } from "./theme-state";
 
 export function ThemeSwitcher({ compact = false }: { compact?: boolean }) {
@@ -42,14 +43,10 @@ export function ThemeSwitcher({ compact = false }: { compact?: boolean }) {
             key={option.value}
             onSelect={() => setTheme(option.value)}
           >
-            <span
-              aria-hidden="true"
-              className="mt-0.5 grid size-9 shrink-0 grid-cols-3 overflow-hidden rounded-xl border border-border shadow-[inset_0_1px_0_color-mix(in_srgb,var(--ctp-base)_70%,transparent)]"
-            >
-              {option.swatches.map((swatch) => (
-                <span key={swatch} style={{ backgroundColor: swatch }} />
-              ))}
-            </span>
+            <ThemePreviewStrip
+              className="mt-0.5 h-9 w-24 shadow-[inset_0_1px_0_color-mix(in_srgb,var(--ctp-base)_70%,transparent)]"
+              swatches={option.swatches}
+            />
             <span className="min-w-0 flex-1">
               <span className="flex items-center justify-between gap-3 text-sm font-medium text-foreground">
                 {option.label}
