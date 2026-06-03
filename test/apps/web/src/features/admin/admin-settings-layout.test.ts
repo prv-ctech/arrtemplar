@@ -70,6 +70,17 @@ describe("admin settings layout", () => {
     expect(source).toContain('accountMenuSide="right"');
   });
 
+  it("removes staged watch and requests placeholders from the primary shell navigation", async () => {
+    const source = await readWorkspaceSource(appShellSourcePath);
+
+    expect(source).not.toContain('label: "Watch"');
+    expect(source).not.toContain('label: "Requests"');
+    expect(source).not.toContain("Watch staged");
+    expect(source).not.toContain("Requests staged");
+    expect(source).not.toContain("ShellDisabledNavItem");
+    expect(source).not.toContain("\"to\" in item");
+  });
+
   it("uses a desktop-only search header without adding a mobile header", async () => {
     const source = await readWorkspaceSource(appShellSourcePath);
 
@@ -112,9 +123,8 @@ describe("admin settings layout", () => {
     expect(usersSource).toContain("<Table");
     expect(usersSource).toContain("<Dialog");
     expect(usersSource).toContain("<AlertDialog");
-    expect(usersSource).toContain('className="flex shrink-0 justify-end"');
     expect(usersSource).not.toContain("Local accounts</h2>");
-    expect(usersSource).not.toContain("Create managed non-admin local accounts");
+    expect(usersSource).toContain('className="flex shrink-0 justify-start sm:justify-end"');
     expect(usersSource).toContain("No managed local accounts yet");
     expect(usersSource).not.toContain("currentAdminPassword");
     expect(usersSource).not.toContain("Your admin password");
@@ -171,6 +181,35 @@ describe("admin settings navigation", () => {
     expect(source).toContain("ArrowLeft");
     expect(source).toContain("Home");
     expect(source).toContain("End");
+  });
+
+  it("keeps the mobile tab rail swipeable and touch-friendly without clipping labels", async () => {
+    const source = await readWorkspaceSource(settingsNavSourcePath);
+
+    expect(source).toContain("overflow-x-auto");
+    expect(source).toContain("touch-pan-x");
+    expect(source).toContain("scroll-px-4");
+    expect(source).toContain("snap-x");
+    expect(source).toContain("snap-start");
+    expect(source).toContain("min-h-11");
+    expect(source).toContain("relative z-10 w-full bg-background/95 backdrop-blur-sm");
+    expect(source).toContain("relative z-10 flex gap-0 overflow-x-auto");
+    expect(source).toContain("pr-4 pl-0");
+    expect(source).not.toContain("border-border px-4 scroll-px-4");
+  });
+
+  it("persists horizontal tab scroll position when route changes remount the settings page", async () => {
+    const source = await readWorkspaceSource(settingsNavSourcePath);
+
+    expect(source).toContain("settingsNavScrollLeftByKey");
+    expect(source).toContain("useLayoutEffect");
+    expect(source).toContain("useMemo");
+    expect(source).toContain("useRef");
+    expect(source).toContain("scrollLeft");
+    expect(source).toContain("onScroll={handleScroll}");
+    expect(source).toContain("tablistRef.current");
+    expect(source).toContain("settingsNavScrollLeftByKey.set");
+    expect(source).toContain("settingsNavScrollLeftByKey.get");
   });
 });
 

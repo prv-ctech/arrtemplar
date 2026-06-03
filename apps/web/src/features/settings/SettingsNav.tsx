@@ -1,4 +1,6 @@
-import type { KeyboardEvent, ReactNode } from "react";
+import { type KeyboardEvent, type ReactNode, useLayoutEffect, useMemo, useRef } from "react";
+
+const settingsNavScrollLeftByKey = new Map<string, number>();
 
 export type SettingsEntry<TPage extends string = string> = {
   id: TPage;
@@ -18,9 +20,46 @@ export function SettingsNav<TPage extends string>({
   label: string;
   onSelect: (id: TPage) => void;
 }) {
+  const tablistRef = useRef<HTMLDivElement | null>(null);
+  const scrollStateKey = useMemo(
+    () => `${label}:${entries.map((entry) => entry.id).join("|")}`,
+    [entries, label],
+  );
+
+  useLayoutEffect(() => {
+    const tablist = tablistRef.current;
+
+    if (!tablist) {
+      return;
+    }
+
+    const savedScrollLeft = settingsNavScrollLeftByKey.get(scrollStateKey);
+
+    if (savedScrollLeft === undefined) {
+      return;
+    }
+
+    tablist.scrollLeft = savedScrollLeft;
+  }, [scrollStateKey, active]);
+
+  function persistScrollPosition() {
+    const tablist = tablistRef.current;
+
+    if (!tablist) {
+      return;
+    }
+
+    settingsNavScrollLeftByKey.set(scrollStateKey, tablist.scrollLeft);
+  }
+
   function selectAndFocus(entry: SettingsEntry<TPage>) {
+    persistScrollPosition();
     onSelect(entry.id);
     document.getElementById(`${entry.id}-settings-tab`)?.focus();
+  }
+
+  function handleScroll() {
+    persistScrollPosition();
   }
 
   function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
@@ -42,10 +81,12 @@ export function SettingsNav<TPage extends string>({
   }
 
   return (
-    <nav aria-label={label} className="w-full">
+    <nav aria-label={label} className="relative z-10 w-full bg-background/95 backdrop-blur-sm">
       <div
         aria-label="Settings categories"
-        className="scrollbar-hidden flex gap-0 overflow-x-auto border-b border-border"
+        className="scrollbar-hidden relative z-10 flex gap-0 overflow-x-auto overscroll-x-contain border-b border-border pr-4 pl-0 scroll-px-4 touch-pan-x snap-x"
+        onScroll={handleScroll}
+        ref={tablistRef}
         role="tablist"
       >
         {entries.map((entry, index) => {
@@ -55,13 +96,16 @@ export function SettingsNav<TPage extends string>({
               aria-controls={`${entry.id}-settings-panel`}
               aria-selected={isActive}
               className={[
-                "relative flex shrink-0 items-center gap-2 px-3 py-3 text-sm font-medium whitespace-nowrap transition-colors duration-300",
+                "relative flex min-h-11 shrink-0 snap-start items-center gap-2 px-3 py-3 text-sm font-medium whitespace-nowrap transition-colors duration-300 touch-manipulation",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                 isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground",
               ].join(" ")}
               id={`${entry.id}-settings-tab`}
               key={entry.id}
-              onClick={() => onSelect(entry.id)}
+              onClick={() => {
+                persistScrollPosition();
+                onSelect(entry.id);
+              }}
               onKeyDown={(event) => handleTabKeyDown(event, index)}
               role="tab"
               tabIndex={isActive ? 0 : -1}

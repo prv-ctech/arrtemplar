@@ -83,7 +83,7 @@ export function AdminUsersSettings() {
 
   return (
     <div className="flex min-h-[calc(100dvh-8rem)] flex-col gap-4 overflow-hidden">
-      <div className="flex shrink-0 justify-end">
+      <div className="flex shrink-0 justify-start sm:justify-end">
         <CreateUserDialog />
       </div>
 
@@ -305,7 +305,7 @@ function CreateUserDialog() {
 
   return (
     <Dialog onOpenChange={handleOpenChange} open={open}>
-      <Button onClick={() => setOpen(true)} type="button">
+      <Button className="touch-manipulation" onClick={() => setOpen(true)} type="button">
         Create user
       </Button>
       <DialogContent>
