@@ -1,6 +1,5 @@
 import type {
   AdminChangeUserPasswordRequest,
-  AdminChangeUserRoleRequest,
   AdminDisableUserRequest,
   AdminUpdateUserPermissionsRequest,
   AdminUpdateUserStatusRequest,
@@ -8,102 +7,88 @@ import type {
 } from "@arrtemplar/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  changeAdminUserPassword,
-  changeAdminUserRole,
-  createAdminUser,
-  disableAdminUser,
-  enableAdminUser,
-  getAdminPermissionCatalog,
-  listAdminUsers,
-  updateAdminUserPermissions,
+  changeManagedUserPassword,
+  createUser,
+  getPermissionCatalog,
+  listUsers,
+  updateManagedUserPermissions,
+  updateManagedUserStatus,
 } from "@/lib/api";
 
-const adminUsersQueryKey = ["admin", "users"] as const;
-const adminPermissionCatalogQueryKey = ["admin", "permission-catalog"] as const;
+const usersQueryKey = ["users", "directory"] as const;
+const permissionCatalogQueryKey = ["permissions", "catalog"] as const;
 
-export function useAdminUsersQuery() {
+export function useUsersQuery() {
   return useQuery({
-    queryKey: adminUsersQueryKey,
-    queryFn: listAdminUsers,
+    queryKey: usersQueryKey,
+    queryFn: listUsers,
     staleTime: 15_000,
   });
 }
 
-export function useAdminPermissionCatalogQuery() {
+export function usePermissionCatalogQuery() {
   return useQuery({
-    queryKey: adminPermissionCatalogQueryKey,
-    queryFn: getAdminPermissionCatalog,
+    queryKey: permissionCatalogQueryKey,
+    queryFn: getPermissionCatalog,
     staleTime: 60_000,
   });
 }
 
-export function useCreateAdminUserMutation() {
+export function useCreateUserMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: CreateLocalUserRequest) => createAdminUser(input),
+    mutationFn: (input: CreateLocalUserRequest) => createUser(input),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: adminUsersQueryKey });
+      await queryClient.invalidateQueries({ queryKey: usersQueryKey });
     },
   });
 }
 
-export function useChangeAdminUserPasswordMutation() {
+export function useChangeManagedUserPasswordMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({ userId, input }: { userId: string; input: AdminChangeUserPasswordRequest }) =>
-      changeAdminUserPassword(userId, input),
+      changeManagedUserPassword(userId, input),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: adminUsersQueryKey });
+      await queryClient.invalidateQueries({ queryKey: usersQueryKey });
     },
   });
 }
 
-export function useChangeAdminUserRoleMutation() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({ userId, input }: { userId: string; input: AdminChangeUserRoleRequest }) =>
-      changeAdminUserRole(userId, input),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: adminUsersQueryKey });
-    },
-  });
-}
-
-export function useUpdateAdminUserPermissionsMutation() {
+export function useUpdateManagedUserPermissionsMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({ input, userId }: { userId: string; input: AdminUpdateUserPermissionsRequest }) =>
-      updateAdminUserPermissions(userId, input),
+      updateManagedUserPermissions(userId, input),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: adminUsersQueryKey });
+      await queryClient.invalidateQueries({ queryKey: usersQueryKey });
     },
   });
 }
 
-export function useDisableAdminUserMutation() {
+export function useDisableManagedUserMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({ userId, input }: { userId: string; input: AdminDisableUserRequest }) =>
-      disableAdminUser(userId, input),
+      updateManagedUserStatus(userId, { disabled: true, ...input }),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: adminUsersQueryKey });
+      await queryClient.invalidateQueries({ queryKey: usersQueryKey });
     },
   });
 }
 
-export function useEnableAdminUserMutation() {
+export function useUpdateManagedUserStatusMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({ userId, input }: { userId: string; input: AdminUpdateUserStatusRequest }) =>
-      enableAdminUser(userId, input),
+      updateManagedUserStatus(userId, input),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: adminUsersQueryKey });
+      await queryClient.invalidateQueries({ queryKey: usersQueryKey });
     },
   });
 }

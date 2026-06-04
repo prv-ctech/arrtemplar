@@ -27,38 +27,49 @@ describe("user profile api client", () => {
     expect(source).toContain("UpdateUserProfileRequest");
     expect(source).toContain("ChangePasswordRequest");
     expect(source).toContain("export async function getUserProfile()");
-    expect(source).toContain("api.api.user.profile.get()");
+    expect(source).toContain("api.api.profile.get()");
     expect(source).toContain("export async function updateUserProfile");
-    expect(source).toContain("api.api.user.profile.put(input)");
+    expect(source).toContain("api.api.profile.put(input)");
     expect(source).toContain("export async function changePassword");
-    expect(source).toContain("api.api.user.password.put(input)");
+    expect(source).toContain("api.api.profile.password.put(input)");
   });
 });
 
-describe("admin permission api client", () => {
-  it("exposes typed client functions for permission catalog and public-id grant updates", async () => {
+describe("permission api client", () => {
+  it("exposes typed client functions for permission catalog and managed-user grant updates", async () => {
     const source = await Bun.file(apiSourcePath).text();
 
-    expect(source).toContain("AdminPermissionCatalogResponse");
+    expect(source).toContain("PermissionCatalogEntry");
     expect(source).toContain("AdminUpdateUserPermissionsRequest");
-    expect(source).toContain("export async function getAdminPermissionCatalog");
-    expect(source).toContain('api.api.admin["permission-catalog"].get()');
-    expect(source).toContain("export async function updateAdminUserPermissions");
-    expect(source).toContain("api.api.admin.users({ id: userId }).permissions.patch(input)");
+    expect(source).toContain("export async function getPermissionCatalog");
+    expect(source).toContain("api.api.permissions.catalog.get()");
+    expect(source).toContain("PERMISSION_CATALOG_BY_PERMISSION");
+    expect(source).toContain("export async function updateManagedUserPermissions");
+    expect(source).toContain(
+      "api.api.users({ publicUserId: userId }).settings.permissions.put(input)",
+    );
   });
 });
 
-describe("admin users api client", () => {
-  it("uses typed managed-account endpoints for user/mod local accounts", async () => {
+describe("users api client", () => {
+  it("uses typed managed-user endpoints with public user ids", async () => {
     const source = await Bun.file(apiSourcePath).text();
 
-    expect(source).toContain("AdminUsersListResponse");
-    expect(source).toContain("AdminUserSummary");
-    expect(source).toContain("AdminChangeUserRoleRequest");
-    expect(source).toContain("export async function listAdminUsers");
-    expect(source).toContain("api.api.admin.users.get()");
-    expect(source).toContain("export async function changeAdminUserRole");
-    expect(source).toContain("api.api.admin.users({ id: userId }).role.patch(input)");
+    expect(source).toContain("normalizeManagedUserSummary");
+    expect(source).toContain("normalizeManagedUserProfile");
+    expect(source).toContain("export async function listUsers");
+    expect(source).toContain("api.api.users.get()");
+    expect(source).toContain("export async function getManagedUserProfile");
+    expect(source).toContain("api.api.users({ publicUserId: userId }).get()");
+    expect(source).toContain("export async function updateManagedUserProfile");
+    expect(source).toContain("api.api.users({ publicUserId: userId }).settings.main.put(input)");
+    expect(source).toContain("export async function changeManagedUserPassword");
+    expect(source).toContain(
+      "api.api.users({ publicUserId: userId }).settings.password.put(input)",
+    );
+    expect(source).toContain("export async function updateManagedUserStatus");
+    expect(source).toContain("api.api.users({ publicUserId: userId }).status.patch(input)");
     expect(source).toContain("CreateLocalUserRequest");
+    expect(source).not.toContain("api.api.admin");
   });
 });

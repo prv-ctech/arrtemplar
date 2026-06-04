@@ -1,17 +1,9 @@
 import type { PublicUser } from "@arrtemplar/shared";
-import {
-  GearIcon,
-  HouseIcon,
-  MagnifyingGlassIcon,
-  SignOutIcon,
-  SlidersHorizontalIcon,
-  UserCircleIcon,
-} from "@phosphor-icons/react";
+import { HouseIcon, MagnifyingGlassIcon, SignOutIcon, UserCircleIcon } from "@phosphor-icons/react";
 import { useMutation } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { type ComponentProps, type ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { authQueryKey } from "@/features/auth/auth-state";
+import { authQueryKey, canAccessSettings, canManageUsers } from "@/features/auth/auth-state";
 import { ThemeSwitcher } from "@/features/theme/ThemeSwitcher";
 import { logout } from "@/lib/api";
 import { queryClient } from "@/lib/query-client";
@@ -28,7 +20,7 @@ import { cn } from "@/lib/utils";
 
 type ShellNavLinkItem = {
   label: string;
-  to: "/app/dashboard" | "/account" | "/admin";
+  to: "/dashboard" | "/users";
   icon: ReactNode;
 };
 
@@ -72,12 +64,14 @@ function ShellActions({
             </span>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem className="justify-between" disabled>
-            Role
-            <span className="rounded-lg border border-border bg-secondary px-2 py-1 text-xs text-secondary-foreground">
-              {user.role}
-            </span>
+          <DropdownMenuItem asChild>
+            <Link to="/profile">My Profile</Link>
           </DropdownMenuItem>
+          {canAccessSettings(user) ? (
+            <DropdownMenuItem asChild>
+              <Link to="/settings">Settings</Link>
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuSeparator />
           <DropdownMenuItem disabled={isSigningOut} onSelect={onSignOut}>
             <SignOutIcon aria-hidden="true" className="size-4" />
@@ -103,20 +97,15 @@ export function AppShell({ children, user }: { children: ReactNode; user: Public
   const navItems: ShellNavLinkItem[] = [
     {
       label: "Dashboard",
-      to: "/app/dashboard",
+      to: "/dashboard",
       icon: <HouseIcon aria-hidden="true" className="size-5" />,
     },
-    {
-      label: "Settings",
-      to: "/account",
-      icon: <GearIcon aria-hidden="true" className="size-5" />,
-    },
-    ...(user.role === "admin"
+    ...(canManageUsers(user)
       ? [
           {
-            label: "Admin",
-            to: "/admin" as const,
-            icon: <SlidersHorizontalIcon aria-hidden="true" className="size-5" />,
+            label: "Users",
+            to: "/users" as const,
+            icon: <UserCircleIcon aria-hidden="true" className="size-5" />,
           },
         ]
       : []),
@@ -129,15 +118,13 @@ export function AppShell({ children, user }: { children: ReactNode; user: Public
   return (
     <main className="h-dvh w-full max-w-full overflow-hidden text-foreground">
       <div className="grid h-dvh w-full grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[4.75rem_minmax(0,1fr)]">
-        {/* ── Main header (mobile: top bar / desktop: sidebar) ── */}
         <aside className="sticky top-0 z-30 border-b border-border bg-[color-mix(in_srgb,var(--ctp-crust)_84%,transparent)] backdrop-blur-lg lg:h-dvh lg:border-r lg:border-b-0">
           <div className="flex items-center justify-between gap-1.5 px-3 py-3 lg:h-full lg:flex-col lg:justify-start lg:px-3 lg:py-4">
-            {/* Top: logo + nav */}
             <div className="flex items-center gap-1.5 lg:flex-col">
               <Link
                 aria-label="Open dashboard"
                 className="group grid size-11 shrink-0 place-items-center rounded-[1.15rem] bg-primary text-primary-foreground shadow-(--shadow-button) transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 active:translate-y-px"
-                to="/app/dashboard"
+                to="/dashboard"
               >
                 <span className="text-sm font-black tracking-[-0.08em]">AW</span>
               </Link>
@@ -166,7 +153,6 @@ export function AppShell({ children, user }: { children: ReactNode; user: Public
               </nav>
             </div>
 
-            {/* End actions: mobile shell header only */}
             <ShellActions
               accountMenuSide="right"
               className="lg:hidden"
@@ -177,9 +163,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Public
           </div>
         </aside>
 
-        {/* ── Content area ── */}
         <section className="min-w-0 min-h-0 overflow-y-auto lg:h-dvh overscroll-contain">
-          {/* Desktop-only header with search and actions */}
           <header className="sticky top-0 z-20 hidden border-b border-border bg-background/92 backdrop-blur-lg lg:block">
             <div className="flex w-full items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
               <search

@@ -5,52 +5,39 @@ import { fileURLToPath } from "node:url";
 const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../../../");
 const accountSettingsSourcePath = `${workspaceRoot}/apps/web/src/features/account/AccountSettings.tsx`;
 
-describe("account settings layout", () => {
-  it("keeps self-service account settings separate from admin settings", async () => {
+describe("profile self-service settings layout", () => {
+  it("keeps profile settings focused on self-service pages and moves theme to top-level settings", async () => {
     const source = await Bun.file(accountSettingsSourcePath).text();
 
-    expect(source).toContain('<h1 className="sr-only">Account settings</h1>');
-    expect(source).toContain('label: "Profile"');
-    expect(source).toContain('label: "Theme"');
-    expect(source).toContain('label: "Notifications"');
-    expect(source).toContain("activePage");
-    expect(source).toContain("navigate({ to: entry.to })");
-    expect(source).toContain('const profilePath = "/account"');
-    expect(source).toContain('const themePath = "/account/theme"');
-    expect(source).toContain('const notificationsPath = "/account/notifications"');
-    expect(source).toContain('to: "/account"');
-    expect(source).toContain('to: "/account/theme"');
-    expect(source).toContain('to: "/account/notifications"');
-    expect(source).not.toContain("$publicUserId");
-    expect(source).not.toContain("publicUserId");
-    expect(source).not.toContain('"/user/');
-    expect(source).not.toContain("`/user/");
-    expect(source).toContain("ADMIN_PERMISSION_CATALOG");
-    expect(source).toContain("canAccessAccountSettingsPage");
-    expect(source).toContain("hasDelegatedAccountPermission");
-    expect(source).toContain("SettingsNav");
-    expect(source).toContain("SettingsPanel");
+    expect(source).toContain('"/profile/settings/main"');
+    expect(source).toContain('"/profile/settings/password"');
+    expect(source).toContain('"/profile/settings/notifications"');
+    expect(source).not.toContain('"/settings/theme"');
+    expect(source).not.toContain('"/account"');
+    expect(source).not.toContain('"/account/theme"');
+    expect(source).not.toContain('"/profile/settings/theme"');
+    expect(source).not.toContain("ADMIN_PERMISSION_CATALOG");
+    expect(source).not.toContain("hasDelegatedAccountPermission");
     expect(source).not.toContain('label: "Users"');
     expect(source).not.toContain('label: "Import"');
     expect(source).not.toContain('label: "Logs"');
   });
 
-  it("renders profile identity, password, theme, and mod-only notification sections", async () => {
+  it("keeps profile identity and password forms plus a dedicated profile overview", async () => {
     const source = await Bun.file(accountSettingsSourcePath).text();
 
-    expect(source).toContain("initialData: user");
-    expect(source).toContain("profile.username");
-    expect(source).toContain("profile.email");
     expect(source).toContain("getUserProfile");
     expect(source).toContain("updateUserProfile");
+    expect(source).toContain("changePassword");
     expect(source).toContain("currentPassword");
     expect(source).toContain("newPassword");
     expect(source).toContain("confirmPassword");
-    expect(source).toContain("useTheme()");
-    expect(source).toContain("Personal notifications");
-    expect(source).toContain("hasDelegatedAccountPermission(");
-    expect(source).toContain('"admin:notifications"');
-    expect(source).toContain("Delegated notification controls");
-    expect(source).toContain("without creating a separate");
+    expect(source).toContain("Profile overview");
+    expect(source).toContain("Profile Settings");
+    expect(source).toContain("ThemeSettings");
+    expect(source).not.toContain("Theme settings");
+    expect(source).not.toContain("Personal theme preference");
+    expect(source).not.toContain("Theme settings affect only the signed-in user.");
+    expect(source).not.toContain("profile.role");
   });
 });

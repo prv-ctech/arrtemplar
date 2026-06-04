@@ -58,7 +58,6 @@ describe("createDatabase", () => {
         username: "secret-user",
         email: "secret-user@example.local",
         passwordHash: "$argon2id$super-secret-password-hash",
-        role: "admin",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       })

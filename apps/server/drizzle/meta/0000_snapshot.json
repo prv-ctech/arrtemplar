@@ -315,14 +315,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "role": {
-          "name": "role",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'user'"
-        },
         "disabled_at": {
           "name": "disabled_at",
           "type": "text",
@@ -369,11 +361,6 @@
           "name": "users_email_unique",
           "columns": ["email"],
           "isUnique": true
-        },
-        "users_role_idx": {
-          "name": "users_role_idx",
-          "columns": ["role"],
-          "isUnique": false
         }
       },
       "foreignKeys": {},

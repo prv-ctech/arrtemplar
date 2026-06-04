@@ -1,5 +1,5 @@
-import { ADMIN_PERMISSION_CATALOG, type PublicUser } from "@arrtemplar/shared";
-import { BellIcon, CheckCircleIcon, PaletteIcon, UserCircleIcon } from "@phosphor-icons/react";
+import type { PublicUser } from "@arrtemplar/shared";
+import { BellIcon, CheckCircleIcon, LockIcon, UserCircleIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useRef } from "react";
@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { authQueryKey, hasDelegatedAccountPermission } from "@/features/auth/auth-state";
+import { authQueryKey } from "@/features/auth/auth-state";
 import { changePassword, getUserProfile, updateUserProfile } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { type SettingsEntry, SettingsNav } from "../settings/SettingsNav";
@@ -17,83 +17,101 @@ import { ThemePreviewStrip } from "../theme/ThemePreviewStrip";
 import { useTheme } from "../theme/theme-state";
 import { syncUpdatedUserProfileCaches, userProfileQueryKey } from "../user/user-profile-cache";
 import { canAccessAccountSettingsPage } from "./account-settings-access";
-import type { AccountSettingsPage, DelegatedSettingsPage } from "./account-settings-types";
+import type { AccountSettingsPage } from "./account-settings-types";
 
 type AccountSettingsRouteTarget =
-  | "/account"
-  | "/account/theme"
-  | "/account/notifications"
-  | "/account/general"
-  | "/account/library"
-  | "/account/users"
-  | "/account/import"
-  | "/account/services"
-  | "/account/logs"
-  | "/account/about";
-type AccountSettingsPath = "/account" | `/account/${Exclude<AccountSettingsPage, "profile">}`;
+  | "/profile"
+  | "/profile/settings/main"
+  | "/profile/settings/password"
+  | "/profile/settings/notifications";
 
-type AccountSettingsEntry = SettingsEntry<AccountSettingsPage> & {
-  path: AccountSettingsPath;
+type ProfileSettingsPage = Exclude<AccountSettingsPage, "theme">;
+
+type AccountSettingsEntry = SettingsEntry<ProfileSettingsPage> & {
+  path: AccountSettingsRouteTarget;
   to: AccountSettingsRouteTarget;
 };
 
-function createSettingsEntries(user: PublicUser) {
-  const profilePath = "/account";
-  const themePath = "/account/theme";
-  const notificationsPath = "/account/notifications";
-
-  const personalEntries = [
+function createSettingsEntries() {
+  return [
     {
-      id: "profile",
-      label: "Profile",
+      id: "main",
+      label: "Main",
       icon: <UserCircleIcon aria-hidden="true" className="size-5" />,
-      description: "Account identity and password management",
-      path: profilePath,
-      to: "/account",
+      description: "Profile identity and contact details.",
+      path: "/profile/settings/main",
+      to: "/profile/settings/main",
     },
     {
-      id: "theme",
-      label: "Theme",
-      icon: <PaletteIcon aria-hidden="true" className="size-5" />,
-      description: "Personal display theme for this browser",
-      path: themePath,
-      to: "/account/theme",
+      id: "password",
+      label: "Password",
+      icon: <LockIcon aria-hidden="true" className="size-5" />,
+      description: "Change your password for this account.",
+      path: "/profile/settings/password",
+      to: "/profile/settings/password",
     },
     {
       id: "notifications",
       label: "Notifications",
       icon: <BellIcon aria-hidden="true" className="size-5" />,
-      description: "Personal notification preferences",
-      path: notificationsPath,
-      to: "/account/notifications",
+      description: "Personal notification preferences.",
+      path: "/profile/settings/notifications",
+      to: "/profile/settings/notifications",
     },
   ] satisfies [AccountSettingsEntry, ...AccountSettingsEntry[]];
-  const delegatedEntries: AccountSettingsEntry[] = [];
-
-  for (const entry of ADMIN_PERMISSION_CATALOG) {
-    if (entry.augmentsPersonalRoute || !canAccessAccountSettingsPage(user, entry.routeSlug)) {
-      continue;
-    }
-
-    delegatedEntries.push({
-      id: entry.routeSlug,
-      label: entry.label,
-      icon: <UserCircleIcon aria-hidden="true" className="size-5" />,
-      description: entry.description,
-      path: `/account/${entry.routeSlug}`,
-      to: `/account/${entry.routeSlug}`,
-    });
-  }
-
-  return [...personalEntries, ...delegatedEntries] satisfies [
-    AccountSettingsEntry,
-    ...AccountSettingsEntry[],
-  ];
 }
 
-function ProfileSettings({ user }: { user: PublicUser }) {
+function ProfileOverview({ user }: { user: PublicUser }) {
+  const navigate = useNavigate();
+
+  return (
+    <Card className="shadow-(--shadow-panel)">
+      <CardHeader>
+        <CardTitle>Profile overview</CardTitle>
+        <CardDescription>
+          Your self-service profile stays separate from application and service settings.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="min-w-0 rounded-2xl border border-border bg-card/72 p-4">
+            <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+              Username
+            </p>
+            <p className="mt-2 truncate text-sm font-semibold text-foreground">{user.username}</p>
+          </div>
+          <div className="min-w-0 rounded-2xl border border-border bg-card/72 p-4">
+            <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+              Email
+            </p>
+            <p className="mt-2 truncate text-sm font-semibold text-foreground">{user.email}</p>
+          </div>
+          <div className="min-w-0 rounded-2xl border border-border bg-card/72 p-4">
+            <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+              Public ID
+            </p>
+            <p className="mt-2 truncate font-mono text-sm text-foreground">{user.id}</p>
+          </div>
+          <div className="min-w-0 rounded-2xl border border-border bg-card/72 p-4">
+            <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+              Permissions
+            </p>
+            <p className="mt-2 text-sm text-foreground">{user.permissions.length} active</p>
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <Badge variant="outline">Joined {new Date(user.createdAt).toLocaleDateString()}</Badge>
+          <Button onClick={() => navigate({ to: "/profile/settings/main" })} type="button">
+            Profile Settings
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function MainSettings({ user }: { user: PublicUser }) {
   const queryClient = useQueryClient();
-  const passwordFormRef = useRef<HTMLFormElement>(null);
   const profileQuery = useQuery({
     queryKey: userProfileQueryKey,
     queryFn: getUserProfile,
@@ -114,6 +132,78 @@ function ProfileSettings({ user }: { user: PublicUser }) {
       toast.error(error instanceof Error ? error.message : "Profile update failed.");
     },
   });
+
+  function handleProfileSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const formData = new FormData(event.currentTarget);
+    const username = String(formData.get("username") ?? "").trim();
+    const email = String(formData.get("email") ?? "").trim();
+
+    if (username === profile.username && email === profile.email) {
+      toast.message("Profile is already up to date.");
+      return;
+    }
+
+    profileMutation.mutate({ username, email });
+  }
+
+  return (
+    <form
+      className="space-y-5"
+      key={`${profile.id}:${profile.username}:${profile.email}`}
+      onSubmit={handleProfileSubmit}
+    >
+      <SettingsSection
+        description="Update the identity shown across the app."
+        title="Profile Settings"
+      >
+        <SettingsRow
+          controlId="profile-settings-username"
+          description="Visible in profile headers and activity history."
+          label="Username"
+        >
+          <Input
+            autoComplete="username"
+            className="sm:max-w-72"
+            defaultValue={profile.username}
+            id="profile-settings-username"
+            name="username"
+            required
+          />
+        </SettingsRow>
+        <SettingsRow
+          controlId="profile-settings-email"
+          description="Used for sign-in and account recovery."
+          label="Email"
+        >
+          <Input
+            autoComplete="email"
+            className="sm:max-w-72"
+            defaultValue={profile.email}
+            id="profile-settings-email"
+            name="email"
+            required
+            type="email"
+          />
+        </SettingsRow>
+      </SettingsSection>
+
+      <div className="flex items-center justify-end gap-3">
+        {profileQuery.isFetching ? (
+          <span className="text-xs text-muted-foreground">Refreshing profile</span>
+        ) : null}
+        <Button disabled={profileMutation.isPending} type="submit">
+          {profileMutation.isPending ? "Saving profile" : "Save profile"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function PasswordSettings() {
+  const queryClient = useQueryClient();
+  const passwordFormRef = useRef<HTMLFormElement>(null);
   const passwordMutation = useMutation({
     mutationFn: changePassword,
     onSuccess: async () => {
@@ -125,23 +215,6 @@ function ProfileSettings({ user }: { user: PublicUser }) {
       toast.error(error instanceof Error ? error.message : "Password update failed.");
     },
   });
-
-  function handleProfileSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const formData = new FormData(event.currentTarget);
-    const username = String(formData.get("username") ?? "");
-    const email = String(formData.get("email") ?? "");
-    const trimmedUsername = username.trim();
-    const trimmedEmail = email.trim();
-
-    if (trimmedUsername === profile.username && trimmedEmail === profile.email) {
-      toast.message("Profile is already up to date.");
-      return;
-    }
-
-    profileMutation.mutate({ username: trimmedUsername, email: trimmedEmail });
-  }
 
   function handlePasswordSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -160,112 +233,76 @@ function ProfileSettings({ user }: { user: PublicUser }) {
   }
 
   return (
-    <div className="space-y-10">
-      <form
-        className="space-y-5"
-        key={`${profile.id}:${profile.username}:${profile.email}`}
-        onSubmit={handleProfileSubmit}
+    <form className="space-y-5" onSubmit={handlePasswordSubmit} ref={passwordFormRef}>
+      <SettingsSection
+        description="Use your current password to authorize password changes."
+        title="Password"
       >
-        <SettingsSection
-          description="Your account identity is shown across the app."
-          title="Profile"
-        >
-          <SettingsRow
-            controlId="account-profile-username"
-            description="Visible in account menus and audit trails."
-            label="Username"
-          >
-            <Input
-              autoComplete="username"
-              className="sm:max-w-72"
-              defaultValue={profile.username}
-              id="account-profile-username"
-              name="username"
-              required
-            />
-          </SettingsRow>
-          <SettingsRow
-            controlId="account-profile-email"
-            description="Used for signing in and account recovery."
-            label="Email"
-          >
-            <Input
-              autoComplete="email"
-              className="sm:max-w-72"
-              defaultValue={profile.email}
-              id="account-profile-email"
-              name="email"
-              required
-              type="email"
-            />
-          </SettingsRow>
-          <SettingsRow description="Current authorization level for this account." label="Role">
-            <Badge variant="outline">{profile.role}</Badge>
-          </SettingsRow>
-        </SettingsSection>
+        <SettingsRow controlId="profile-current-password" label="Current password">
+          <Input
+            autoComplete="current-password"
+            className="sm:max-w-72"
+            id="profile-current-password"
+            name="currentPassword"
+            required
+            type="password"
+          />
+        </SettingsRow>
+        <SettingsRow controlId="profile-new-password" label="New password">
+          <Input
+            autoComplete="new-password"
+            className="sm:max-w-72"
+            id="profile-new-password"
+            name="newPassword"
+            required
+            type="password"
+          />
+        </SettingsRow>
+        <SettingsRow controlId="profile-confirm-password" label="Confirm new password">
+          <Input
+            autoComplete="new-password"
+            className="sm:max-w-72"
+            id="profile-confirm-password"
+            name="confirmPassword"
+            required
+            type="password"
+          />
+        </SettingsRow>
+      </SettingsSection>
 
-        <div className="flex items-center justify-end gap-3">
-          {profileQuery.isFetching ? (
-            <span className="text-xs text-muted-foreground">Refreshing profile</span>
-          ) : null}
-          <Button disabled={profileMutation.isPending} type="submit">
-            {profileMutation.isPending ? "Saving profile" : "Save profile"}
-          </Button>
-        </div>
-      </form>
-
-      <form className="space-y-5" onSubmit={handlePasswordSubmit} ref={passwordFormRef}>
-        <SettingsSection
-          description="Use your current password to protect account changes."
-          title="Password"
-        >
-          <SettingsRow controlId="account-current-password" label="Current password">
-            <Input
-              autoComplete="current-password"
-              className="sm:max-w-72"
-              id="account-current-password"
-              name="currentPassword"
-              required
-              type="password"
-            />
-          </SettingsRow>
-          <SettingsRow controlId="account-new-password" label="New password">
-            <Input
-              autoComplete="new-password"
-              className="sm:max-w-72"
-              id="account-new-password"
-              name="newPassword"
-              required
-              type="password"
-            />
-          </SettingsRow>
-          <SettingsRow controlId="account-confirm-password" label="Confirm new password">
-            <Input
-              autoComplete="new-password"
-              className="sm:max-w-72"
-              id="account-confirm-password"
-              name="confirmPassword"
-              required
-              type="password"
-            />
-          </SettingsRow>
-        </SettingsSection>
-
-        <div className="flex justify-end">
-          <Button disabled={passwordMutation.isPending} type="submit">
-            {passwordMutation.isPending ? "Updating password" : "Update password"}
-          </Button>
-        </div>
-      </form>
-    </div>
+      <div className="flex justify-end">
+        <Button disabled={passwordMutation.isPending} type="submit">
+          {passwordMutation.isPending ? "Updating password" : "Update password"}
+        </Button>
+      </div>
+    </form>
   );
 }
 
-function ThemeSettings() {
+function NotificationSettings() {
+  return (
+    <Card className="border-dashed bg-card/54 shadow-(--shadow-soft)">
+      <CardHeader>
+        <CardTitle>Personal notifications</CardTitle>
+        <CardDescription>
+          Notification delivery preferences for the signed-in user will live here.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm leading-6 text-muted-foreground">
+          App-wide notification channels belong under top-level settings. This page is reserved for
+          self-service notification preferences.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function ThemeSettings() {
   const { setTheme, theme, themes } = useTheme();
 
   return (
-    <SettingsSection description="Theme choice is stored locally for this browser." title="Theme">
+    <div className="divide-y divide-border rounded-3xl border border-border bg-card/50">
       {themes.map((option) => {
         const isSelected = option.value === theme;
         return (
@@ -291,75 +328,7 @@ function ThemeSettings() {
           </SettingsRow>
         );
       })}
-    </SettingsSection>
-  );
-}
-
-function NotificationSettings({ user }: { user: PublicUser }) {
-  const canManageDelegatedNotifications = hasDelegatedAccountPermission(
-    user,
-    "admin:notifications",
-  );
-
-  return (
-    <div className="space-y-6">
-      <Card className="border-dashed bg-card/54 shadow-(--shadow-soft)">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <BellIcon aria-hidden="true" className="size-5 text-primary" weight="duotone" />
-            Personal notifications
-          </CardTitle>
-          <CardDescription>
-            Per-account notification channels will live here once notification delivery is
-            connected.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm leading-6 text-muted-foreground">
-            Instance-wide webhook and service settings stay in the admin area. This page is reserved
-            for account-owned notification preferences such as watchlist updates, request activity,
-            and personal delivery channels.
-          </p>
-        </CardContent>
-      </Card>
-      {canManageDelegatedNotifications ? (
-        <Card className="border-primary/25 bg-primary/8 shadow-(--shadow-soft)">
-          <CardHeader>
-            <CardTitle className="text-base">Delegated notification controls</CardTitle>
-            <CardDescription>
-              This section appears because an admin granted notification-settings access to your
-              account.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm leading-6 text-muted-foreground">
-              Instance-wide notification controls can be connected here without creating a separate
-              admin-notifications route.
-            </p>
-          </CardContent>
-        </Card>
-      ) : null}
     </div>
-  );
-}
-
-function DelegatedAdminSettings({ page }: { page: DelegatedSettingsPage }) {
-  const catalogEntry = ADMIN_PERMISSION_CATALOG.find((entry) => entry.routeSlug === page);
-
-  return (
-    <Card className="border-dashed bg-card/54 shadow-(--shadow-soft)">
-      <CardHeader>
-        <CardTitle>{catalogEntry?.label ?? "Delegated settings"}</CardTitle>
-        <CardDescription>
-          {catalogEntry?.description ?? "This delegated settings section is unavailable."}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm leading-6 text-muted-foreground">
-          This section is available because your account role and granted permissions allow it.
-        </p>
-      </CardContent>
-    </Card>
   );
 }
 
@@ -367,24 +336,18 @@ function ActiveSettingsPage({
   activePage,
   user,
 }: {
-  activePage: AccountSettingsPage;
+  activePage: ProfileSettingsPage;
   user: PublicUser;
 }) {
   switch (activePage) {
     case "profile":
-      return <ProfileSettings user={user} />;
-    case "theme":
-      return <ThemeSettings />;
+      return <ProfileOverview user={user} />;
+    case "main":
+      return <MainSettings user={user} />;
+    case "password":
+      return <PasswordSettings />;
     case "notifications":
-      return <NotificationSettings user={user} />;
-    case "general":
-    case "library":
-    case "users":
-    case "import":
-    case "services":
-    case "logs":
-    case "about":
-      return <DelegatedAdminSettings page={activePage} />;
+      return <NotificationSettings />;
   }
 }
 
@@ -396,9 +359,6 @@ export function AccountSettings({
   user: PublicUser;
 }) {
   const navigate = useNavigate();
-  const settingsEntries = createSettingsEntries(user);
-  const activeEntry =
-    settingsEntries.find((entry) => entry.id === activePage) ?? settingsEntries[0];
 
   if (!canAccessAccountSettingsPage(user, activePage)) {
     return (
@@ -412,7 +372,13 @@ export function AccountSettings({
     );
   }
 
-  function handlePageChange(page: AccountSettingsPage) {
+  if (activePage === "theme") {
+    return <ThemeSettings />;
+  }
+
+  const settingsEntries = createSettingsEntries();
+
+  function handlePageChange(page: ProfileSettingsPage) {
     const entry = settingsEntries.find((currentEntry) => currentEntry.id === page);
 
     if (entry) {
@@ -420,13 +386,17 @@ export function AccountSettings({
     }
   }
 
+  const heading = activePage === "profile" ? "Profile" : "Profile Settings";
+  const activeEntry =
+    settingsEntries.find((entry) => entry.id === activePage) ?? settingsEntries[0];
+
   return (
     <div className="flex flex-col">
-      <h1 className="sr-only">Account settings</h1>
+      <h1 className="sr-only">{heading}</h1>
       <SettingsNav
         active={activePage}
         entries={settingsEntries}
-        label="Account settings"
+        label="Profile Settings"
         onSelect={handlePageChange}
       />
 

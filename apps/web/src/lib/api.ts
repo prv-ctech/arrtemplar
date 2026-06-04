@@ -1,34 +1,32 @@
 import type { App } from "@arrtemplar/server";
 import type {
   AdminChangeUserPasswordRequest,
-  AdminChangeUserPasswordResponse,
-  AdminChangeUserRoleRequest,
-  AdminDisableUserRequest,
-  AdminPermissionCatalogEntry,
-  AdminPermissionCatalogResponse,
   AdminUpdateUserPermissionsRequest,
   AdminUpdateUserStatusRequest,
-  AdminUserResponse,
   AdminUserSummary,
-  AdminUsersListResponse,
   AuthSetupStatusResponse,
-  AuthUserResponse,
   ChangePasswordRequest,
   ChangePasswordResponse,
   CreateAdminRequest,
   CreateAdminResponse,
   CreateLocalUserRequest,
-  CreateLocalUserResponse,
   HealthResponse,
   LoginRequest,
   LoginResponse,
   LogoutResponse,
+  ManagedUserProfile,
+  PermissionCatalogEntry,
   PublicUser,
+  UpdateManagedUserProfileRequest,
   UpdateUserProfileRequest,
-  UpdateUserProfileResponse,
-  UserProfileResponse,
+  UserPermission,
 } from "@arrtemplar/shared";
-import { CSRF_HEADER_NAME, CSRF_HEADER_VALUE } from "@arrtemplar/shared";
+import {
+  CSRF_HEADER_NAME,
+  CSRF_HEADER_VALUE,
+  isUserPermission,
+  PERMISSION_CATALOG_BY_PERMISSION,
+} from "@arrtemplar/shared";
 import { treaty } from "@elysia/eden";
 import { resolveApiBaseUrl } from "./api-base-url";
 import { ApiClientError, getApiErrorCode, getApiErrorMessage } from "./api-error";
@@ -58,7 +56,9 @@ export async function getHealth(): Promise<HealthResponse> {
 }
 
 export async function login(input: LoginRequest): Promise<LoginResponse> {
-  return unwrapData(await api.api.auth.login.post(input), "Login failed.");
+  const response = unwrapData(await api.api.auth.login.post(input), "Login failed.");
+
+  return { user: normalizePublicUser(response.user) };
 }
 
 export async function getAuthSetupStatus(): Promise<AuthSetupStatusResponse> {
@@ -66,7 +66,9 @@ export async function getAuthSetupStatus(): Promise<AuthSetupStatusResponse> {
 }
 
 export async function createInitialAdmin(input: CreateAdminRequest): Promise<CreateAdminResponse> {
-  return unwrapData(await api.api.auth.setup.post(input), "Admin setup failed.");
+  const response = unwrapData(await api.api.auth.setup.post(input), "Admin setup failed.");
+
+  return { user: normalizePublicUser(response.user) };
 }
 
 export async function logout(): Promise<LogoutResponse> {
@@ -74,118 +76,111 @@ export async function logout(): Promise<LogoutResponse> {
 }
 
 export async function getCurrentUser(): Promise<PublicUser | null> {
-  const response = unwrapData<AuthUserResponse>(await api.api.auth.me.get(), "Auth check failed.");
+  const response = unwrapData(await api.api.auth.me.get(), "Auth check failed.");
 
-  return response.user;
+  return response.user ? normalizePublicUser(response.user) : null;
 }
 
 export async function getUserProfile(): Promise<PublicUser> {
-  const response = unwrapData<UserProfileResponse>(
-    await api.api.user.profile.get(),
-    "Profile request failed.",
-  );
+  const response = unwrapData(await api.api.profile.get(), "Profile request failed.");
 
-  return response.user;
+  return normalizePublicUser(response.user);
 }
 
 export async function updateUserProfile(input: UpdateUserProfileRequest): Promise<PublicUser> {
-  const response = unwrapData<UpdateUserProfileResponse>(
-    await api.api.user.profile.put(input),
-    "Profile update failed.",
-  );
+  const response = unwrapData(await api.api.profile.put(input), "Profile update failed.");
 
-  return response.user;
+  return normalizePublicUser(response.user);
 }
 
 export async function changePassword(
   input: ChangePasswordRequest,
 ): Promise<ChangePasswordResponse> {
-  return unwrapData(await api.api.user.password.put(input), "Password update failed.");
+  return unwrapData(await api.api.profile.password.put(input), "Password update failed.");
 }
 
-export async function listAdminUsers(): Promise<AdminUserSummary[]> {
-  const response = unwrapData<AdminUsersListResponse>(
-    await api.api.admin.users.get(),
-    "Admin users request failed.",
+export async function listUsers(): Promise<AdminUserSummary[]> {
+  const response = unwrapData(await api.api.users.get(), "Users request failed.");
+
+  return response.users.map(normalizeManagedUserSummary);
+}
+
+export async function getPermissionCatalog(): Promise<readonly PermissionCatalogEntry[]> {
+  const response = unwrapData(
+    await api.api.permissions.catalog.get(),
+    "Permission catalog request failed.",
   );
 
-  return response.users;
+  return response.permissions
+    .map((entry) => {
+      if (typeof entry.permission !== "string" || !isUserPermission(entry.permission)) {
+        return undefined;
+      }
+
+      return PERMISSION_CATALOG_BY_PERMISSION.get(entry.permission);
+    })
+    .filter((entry): entry is PermissionCatalogEntry => Boolean(entry));
 }
 
-export async function getAdminPermissionCatalog(): Promise<readonly AdminPermissionCatalogEntry[]> {
-  const response = unwrapData<AdminPermissionCatalogResponse>(
-    await api.api.admin["permission-catalog"].get(),
-    "Admin permission catalog request failed.",
+export async function createUser(input: CreateLocalUserRequest): Promise<AdminUserSummary> {
+  const response = unwrapData(await api.api.users.post(input), "User creation failed.");
+
+  return normalizeManagedUserSummary(response.user);
+}
+
+export async function getManagedUserProfile(userId: string): Promise<ManagedUserProfile> {
+  const response = unwrapData(
+    await api.api.users({ publicUserId: userId }).get(),
+    "Managed user profile request failed.",
   );
 
-  return response.permissions;
+  return normalizeManagedUserProfile(response.user);
 }
 
-export async function createAdminUser(input: CreateLocalUserRequest): Promise<PublicUser> {
-  const response = unwrapData<CreateLocalUserResponse>(
-    await api.api.admin.users.post(input),
-    "Admin user creation failed.",
+export async function updateManagedUserProfile(
+  userId: string,
+  input: UpdateManagedUserProfileRequest,
+): Promise<ManagedUserProfile> {
+  const response = unwrapData(
+    await api.api.users({ publicUserId: userId }).settings.main.put(input),
+    "Managed user profile update failed.",
   );
 
-  return response.user;
+  return normalizeManagedUserProfile(response.user);
 }
 
-export async function changeAdminUserPassword(
+export async function changeManagedUserPassword(
   userId: string,
   input: AdminChangeUserPasswordRequest,
-): Promise<AdminChangeUserPasswordResponse> {
+): Promise<ChangePasswordResponse> {
   return unwrapData(
-    await api.api.admin.users({ id: userId }).password.patch(input),
-    "Admin password update failed.",
+    await api.api.users({ publicUserId: userId }).settings.password.put(input),
+    "Managed user password update failed.",
   );
 }
 
-export async function changeAdminUserRole(
-  userId: string,
-  input: AdminChangeUserRoleRequest,
-): Promise<AdminUserSummary> {
-  const response = unwrapData<AdminUserResponse>(
-    await api.api.admin.users({ id: userId }).role.patch(input),
-    "Admin role update failed.",
-  );
-
-  return response.user;
-}
-
-export async function updateAdminUserPermissions(
+export async function updateManagedUserPermissions(
   userId: string,
   input: AdminUpdateUserPermissionsRequest,
 ): Promise<AdminUserSummary> {
-  const response = unwrapData<AdminUserResponse>(
-    await api.api.admin.users({ id: userId }).permissions.patch(input),
-    "Admin permission update failed.",
+  const response = unwrapData(
+    await api.api.users({ publicUserId: userId }).settings.permissions.put(input),
+    "Managed user permission update failed.",
   );
 
-  return response.user;
+  return normalizeManagedUserSummary(response.user);
 }
 
-export async function disableAdminUser(
-  userId: string,
-  input: AdminDisableUserRequest,
-): Promise<AdminUserSummary> {
-  const response = unwrapData<AdminUserResponse>(
-    await api.api.admin.users({ id: userId }).delete(input),
-    "Admin user removal failed.",
-  );
-
-  return response.user;
-}
-
-export async function enableAdminUser(
+export async function updateManagedUserStatus(
   userId: string,
   input: AdminUpdateUserStatusRequest,
 ): Promise<AdminUserSummary> {
-  const response = unwrapData<AdminUserResponse>(
-    await api.api.admin.users({ id: userId }).status.patch(input),
-    "Admin user restore failed.",
+  const response = unwrapData(
+    await api.api.users({ publicUserId: userId }).status.patch(input),
+    "Managed user status update failed.",
   );
 
-  return response.user;
+  return normalizeManagedUserSummary(response.user);
 }
 
 export function createApiRequestHeaders(
@@ -208,4 +203,59 @@ function unwrapData<T>({ data, error, status }: EdenResult<T>, fallback: string)
   }
 
   return data;
+}
+
+function normalizePermissions(permissions: unknown): UserPermission[] {
+  if (!Array.isArray(permissions)) {
+    return [];
+  }
+
+  return permissions.filter(
+    (permission): permission is UserPermission =>
+      typeof permission === "string" && isUserPermission(permission),
+  );
+}
+
+function normalizePublicUser(user: {
+  id: string;
+  username: string;
+  email: string;
+  createdAt: string;
+  lastLoginAt: string | null;
+  permissions: unknown;
+}): PublicUser {
+  return {
+    ...user,
+    permissions: normalizePermissions(user.permissions),
+  };
+}
+
+function normalizeManagedUserSummary(user: {
+  id: string;
+  username: string;
+  disabledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  permissions: unknown;
+}): AdminUserSummary {
+  return {
+    ...user,
+    permissions: normalizePermissions(user.permissions),
+  };
+}
+
+function normalizeManagedUserProfile(user: {
+  id: string;
+  username: string;
+  email: string;
+  disabledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lastLoginAt: string | null;
+  permissions: unknown;
+}): ManagedUserProfile {
+  return {
+    ...user,
+    permissions: normalizePermissions(user.permissions),
+  };
 }

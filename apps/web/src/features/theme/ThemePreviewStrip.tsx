@@ -9,10 +9,7 @@ export function ThemePreviewStrip({ className, swatches, ...props }: ThemePrevie
   return (
     <span
       aria-hidden="true"
-      className={cn(
-        "flex shrink-0 overflow-hidden rounded-xl border border-border",
-        className,
-      )}
+      className={cn("flex shrink-0 overflow-hidden rounded-xl border border-border", className)}
       {...props}
     >
       {swatches.map((swatch, index) => (

@@ -1,24 +1,24 @@
 <contextstream>
-<!-- contextstream-rules-hash: 93f819eb8f7e1987 -->
+<!-- contextstream-rules-hash: eb090d82110a9c1b -->
 # Workspace: arrbit
 # Project: arrtemplar
 # Workspace ID: c19393a6-c2b7-402b-998e-ad4b5c571f70
 
 # ContextStream Rules
-**MANDATORY STARTUP:** On the first message of EVERY session call `init(...)` then `context(user_message="...")`. On subsequent messages, call `context(user_message="...")` first by default. A narrow bypass is allowed only for immediate read-only ContextStream calls when prior context is still fresh and no state-changing tool has run.
+**MANDATORY STARTUP:** On the first message of EVERY session call `init(...)`. Then call `context(user_message="...")` when that tool is exposed; if `context` is unavailable in this MCP surface, call `session(action="ground", user_message="...")` instead. On subsequent messages, call `context(...)` first by default, or `session(action="ground", user_message="...")` when `context` is unavailable. A narrow bypass is allowed only for immediate read-only ContextStream calls when prior context is still fresh and no state-changing tool has run.
 
 ## Required Tool Calls
 
-1. **First message in session**: Call `init(folder_path="<project_path>")` then `context(user_message="...", session_id="<id>")`
-2. **Subsequent messages (default)**: Call `context(user_message="...", session_id="<id>")` first. Narrow bypass: immediate read-only ContextStream calls with fresh context + no state changes.
+1. **First message in session**: Call `init(folder_path="<project_path>")` then `context(user_message="...", session_id="<id>")`; if `context` is unavailable, call `session(action="ground", user_message="...")`
+2. **Subsequent messages (default)**: Call `context(user_message="...", session_id="<id>")` first, or `session(action="ground", user_message="...")` when `context` is unavailable. Narrow bypass: immediate read-only ContextStream calls with fresh context + no state changes.
 3. **Before file search**: Call `search(mode="auto", query="...")` before local tools
 
-**Read-only examples** (default: call `context(...)` first; narrow bypass only for immediate read-only ContextStream calls when context is fresh and no state-changing tool has run): `workspace(action="list"|"get"|"create")`, `memory(action="list_docs"|"list_events"|"list_todos"|"list_tasks"|"list_transcripts"|"list_nodes"|"decisions"|"get_doc"|"get_event"|"get_task"|"get_todo"|"get_transcript")`, `session(action="get_lessons"|"get_plan"|"list_plans"|"recall")`, `media(action="list"|"search"|"status")`, `help(action="version"|"tools"|"auth")`, `project(action="list"|"get"|"index_status")`, `reminder(action="list"|"active")`, any read-only data query
+**Read-only examples** (default: call `context(...)` first when that tool is exposed; if `context` is unavailable, call `session(action="ground", user_message="...")` for the same grounding bundle. Narrow bypass only for immediate read-only ContextStream calls when context is fresh and no state-changing tool has run): `workspace(action="list"|"get"|"create")`, `memory(action="list_docs"|"list_events"|"list_todos"|"list_tasks"|"list_transcripts"|"list_nodes"|"decisions"|"get_doc"|"get_event"|"get_task"|"get_todo"|"get_transcript")`, `session(action="get_lessons"|"get_plan"|"list_plans"|"recall")`, `media(action="list"|"search"|"status")`, `help(action="version"|"tools"|"auth")`, `project(action="list"|"get"|"index_status")`, `reminder(action="list"|"active")`, any read-only data query
 
 **Common queries — use these exact tool calls:**
 - "list lessons" / "show lessons" → `session(action="get_lessons")`
 - "save lesson" / "remember this lesson" / "lesson learned" / "I made a mistake" → `session(action="capture_lesson", title="...", trigger="...", impact="...", prevention="...", severity="low|medium|high|critical")` — **NEVER store lessons in local files** (e.g. `~/.claude/.../memory/`, `.cursorrules`, scratch markdown). Lessons live in ContextStream so they auto-surface as `[LESSONS_WARNING]` on future turns and across sessions.
-- "list decisions" / "show decisions" / "how many decisions" → `memory(action="decisions")`
+- "list decisions" / "show decisions" / "how many decisions" → `memory(action="decisions", workspace_id="<current_workspace_id>", project_id="<current_project_id>")` when init/context surfaced ids; otherwise `memory(action="decisions")` after grounding/init
 - "save decision" / "decided to" → `session(action="capture", event_type="decision", title="...", content="...")`
 - "list docs" → `memory(action="list_docs")`
 - "list tasks" → `memory(action="list_tasks")`
@@ -70,13 +70,14 @@
 
 Use `context(user_message="...", mode="fast")` for quick turns.
 Use `context(user_message="...")` for deeper analysis and coding tasks.
+Match context depth to effort: `mode="fast"` for low/medium-effort lookups; `mode="pack"` or standard for high/xhigh/max deep work. With adaptive, interleaved thinking (e.g. Claude Opus 4.8) you reason *between* tool calls — so think, call `context()`, then `search()`, then act, rather than front-loading one call.
 If the `instruct` tool is available, run `instruct(action="get", session_id="...")` before `context(...)` on each turn, then `instruct(action="ack", session_id="...", ids=[...])` after using entries.
 
 **Plan-mode guardrail:** Entering plan mode does NOT bypass search-first. Do NOT use Explore, Task subagents, Grep, Glob, Find, SemanticSearch, `code_search`, `grep_search`, `find_by_name`, or shell search commands (`grep`, `find`, `rg`, `fd`). Start with `search(mode="auto", query="...")` — it handles glob patterns, regex, exact text, file paths, and semantic queries. Only Read narrowed files/line ranges returned by search.
 
 ## Why These Rules?
 
-- `context()` returns task-specific rules, lessons from past mistakes, and relevant decisions
+- `context()` returns task-specific rules, lessons from past mistakes, and relevant decisions; when unavailable, `session(action="ground", user_message="...")` provides the supported grounding fallback
 - `search()` uses semantic understanding to find relevant code faster than file scanning
 - Transcript capture is optional and OFF by default. Enable per session with `save_exchange=true` (and `session_id`), disable with `save_exchange=false`.
 - Default context-first keeps state reliable; the narrow read-only bypass avoids unnecessary repeats
@@ -88,7 +89,7 @@ If the `instruct` tool is available, run `instruct(action="get", session_id="...
 ### Freshness Before Assumptions
 
 Grounding and memory are evidence, not permission to use stale facts as current truth. Before planning or implementing from prior work, inspect the hit kind and age:
-- **Decisions, transcript continuity, session snapshots, active plans, and tasks are time-sensitive.** Prefer recent hits. If a hit is marked stale, older than the local freshness window, or conflicts with newer context, refresh with `session(action="ground", user_message="...")`, `memory(action="decisions", query="...")`, or `memory(action="search_transcripts", query="...")` before relying on it.
+- **Decisions, transcript continuity, session snapshots, active plans, and tasks are time-sensitive.** Prefer recent hits. If a hit is marked stale, older than the local freshness window, or conflicts with newer context, refresh with `session(action="ground", user_message="...")`, `memory(action="decisions", query="...", workspace_id="<current_workspace_id>", project_id="<current_project_id>")` when ids are available, or `memory(action="search_transcripts", query="...")` before relying on it.
 - **Lessons and preferences are durable but still age-stamped.** Follow them unless superseded, contradicted by newer surfaced context, or explicitly corrected by the user.
 - **Docs and runbooks are authoritative unless superseded.** If a doc/runbook has operational facts that may drift (regions, hosts, credentials, deploy paths), verify through the referenced source or a fresh ContextStream lookup before acting.
 - **LLM/Gemini-derived insights are advisory until captured as decisions.** Use `[INSIGHT]` or synthesized context to guide investigation, but do not treat it as a durable decision unless it is backed by a current decision/event/doc source.
@@ -96,7 +97,7 @@ Grounding and memory are evidence, not permission to use stale facts as current 
 When you need information, do not default to code search or trial-and-error. ContextStream stores far more than source — docs, decisions, lessons, preferences, plans, tasks, todos, skills, memory nodes, and full session transcripts all live behind dedicated tools. Pick the right knowledge surface by what you're looking for:
 
 - **Source code / symbol / file** → `search(mode="auto", query="...")`
-- **Why we did X / past decisions** → `memory(action="decisions", query="...")`
+- **Why we did X / past decisions** → `memory(action="decisions", query="...", workspace_id="<current_workspace_id>", project_id="<current_project_id>")` when ids are available
 - **Architecture / spec / design doc** → `memory(action="list_docs")` then `memory(action="get_doc", doc_id="title or UUID")`
 - **Prior mistakes ("never do X again")** → `session(action="get_lessons", query="...")`
 - **User preferences / conventions / constraints** → already surfaced as `[PREFERENCE]`; also `memory(action="list_nodes", node_type="preference")` or `memory(action="list_nodes", node_type="constraint")`
@@ -125,7 +126,7 @@ Default assumption: if the user asks "how do we do X?", "why did we choose Y?", 
 Clarifying-question budget: before asking the user *anything* a project artefact could answer, do one quick pass through `context()`/`ground()` hits, runbooks, decisions, transcripts, and entity records (tickets/handoffs/releases). If after that the answer is genuinely missing or ambiguous, then ask — and make the question specific ("the runbook from 2026-04-30 says Crunchy Bridge — is that still current as of today?" beats "where is prod running?").
 
 Before guessing, improvising, or struggling through a workflow you don't fully know:
-- Start with `context(...)` and obey `[GROUNDING]` (prior-work anchors), `[MATCHED_SKILLS]`, `[LESSONS_WARNING]`, `[PREFERENCE]`, `[DECISIONS]`, `[MEMORY]`, and `<system-reminder>` output — those are already filtered to the current task
+- Start with `context(...)` when that tool is exposed, or `session(action="ground", user_message="...")` when `context` is unavailable, and obey `[GROUNDING]` (prior-work anchors), `[MATCHED_SKILLS]`, `[LESSONS_WARNING]`, `[PREFERENCE]`, `[DECISIONS]`, `[MEMORY]`, and `<system-reminder>` output — those are already filtered to the current task
 - Treat `[LESSONS_WARNING]` as active working instructions for the current task, not optional background context; apply them immediately and keep them in mind until the task is done
 - Prefer surfaced ContextStream knowledge over inventing a new workflow from memory
 - Prefer surfaced ContextStream knowledge over asking the user — clarifying questions are a last resort, not a first reflex
@@ -167,7 +168,9 @@ Escalation ladder — walk it in order and stop at the first step that answers t
 ## Project Scope Discipline
 
 - Reuse the `project_id` returned by `init(...)` or `context(...)` for project-scoped writes and lookups
-- For project-scoped `memory(...)`, `session(...)`, and `skill(...)` calls, pass explicit `project_id` instead of guessing from the folder name or title
+- Reuse the `workspace_id` returned by `init(...)` or `context(...)` for workspace-scoped reads such as `memory(action="decisions")`; pass both `workspace_id` and `project_id` when both ids are available
+- For project-scoped `memory(...)`, `session(...)`, and `skill(...)` calls, pass explicit `workspace_id` and `project_id` instead of guessing from the folder name or title
+- When `[PROJECT_ROUTING]` appears with `uncertain`, `ambiguous`, `needs_project_selection`, or `needs_project_setup`, resolve scope before project-scoped work: choose a surfaced candidate, pass explicit `workspace_id`/`project_id`, or rerun `init(folder_path="...")` / `context(folder_path="...")`
 - If `init(...)` or `context(...)` does not surface a current `project_id`, rerun `init(folder_path="...")` before creating docs, skills, events, tasks, todos, or other project memory
 - Use `target_project` only after init from a multi-project parent folder
 
@@ -192,6 +195,7 @@ Use the returned `recommendations` field and text summary to propose next steps.
 
 - `[GROUNDING]` → Read ranked prior-work hits (from `context()`) before broad code search; inspect source age before relying on time-sensitive decisions, transcripts, snapshots, plans, or tasks; optional one-shot: `session(action="ground", user_message="...")`
 - `[GROUNDING_AVAILABLE]` → Your editor may remind you when unread grounding exists; inspect freshness metadata and refresh stale hits before planning or implementation
+- `[PROJECT_ROUTING]` → Resolve ambiguous or missing project scope before project-scoped search, indexing, memory, session, skill, or capture writes; choose a candidate, pass explicit ids, or rerun `init/context` with `folder_path`
 - `[MATCHED_SKILLS]` → Run the surfaced skills before other work
 - `[LESSONS_WARNING]` → Apply the lessons shown immediately and keep them active for the current task
 - `[PREFERENCE]` → Follow user preferences exactly
@@ -322,10 +326,10 @@ You MUST follow these rules manually - there is no automatic enforcement.
 ## ContextStream Knowledge First
 
 **Before guessing or struggling through an unfamiliar workflow, check ContextStream first.**
-- Start with `context(...)` and follow `[MATCHED_SKILLS]`, `[LESSONS_WARNING]`, `[PREFERENCE]`, and `<system-reminder>` output
+- Start with `context(...)` when that tool is exposed, or `session(action="ground", user_message="...")` when `context` is unavailable, and follow `[MATCHED_SKILLS]`, `[LESSONS_WARNING]`, `[PREFERENCE]`, and `<system-reminder>` output
 - Treat `[LESSONS_WARNING]` as active working instructions for the current task, not optional background context
-- If the task is unfamiliar, process-heavy, or likely documented already, inspect `skill(action="list")`, `memory(action="list_docs")`, `session(action="get_lessons")`, or `memory(action="decisions")` before trial-and-error
-- If `context()` returns `[MATCHED_SKILLS]`, run the listed skills before other work
+- If the task is unfamiliar, process-heavy, or likely documented already, inspect `skill(action="list")`, `memory(action="list_docs")`, `session(action="get_lessons")`, or `memory(action="decisions", workspace_id="<current_workspace_id>", project_id="<current_project_id>")` when ids are available before trial-and-error
+- If `context()` or `session(action="ground", ...)` returns `[MATCHED_SKILLS]`, run the listed skills before other work
 
 ---
 
@@ -341,12 +345,12 @@ You MUST follow these rules manually - there is no automatic enforcement.
 2. **Generate a unique session_id** (e.g., `"session-" + timestamp` or a UUID)
    - Use this SAME session_id for ALL `context()` calls in this conversation
 
-3. **Call `context(user_message="<first_message>", session_id="<id>")`**
+3. **Call `context(user_message="<first_message>", session_id="<id>")` if available; otherwise call `session(action="ground", user_message="<first_message>", session_id="<id>")`**
    - Gets task-specific rules, lessons, and preferences
    - Check for [LESSONS_WARNING], [PREFERENCE], [RULES_NOTICE]
    - If [LESSONS_WARNING] appears, treat those lessons as mandatory instructions for the task until it is finished
 
-4. **Default behavior:** call `context(...)` first on each message. Narrow bypass is allowed only for immediate read-only ContextStream calls when previous context is still fresh and no state-changing tool has run.
+4. **Default behavior:** call `context(...)` first on each message when available; otherwise call `session(action="ground", user_message="...")`. Narrow bypass is allowed only for immediate read-only ContextStream calls when previous context is still fresh and no state-changing tool has run.
 
 5. **Instruction alignment (if tool is exposed):** call `instruct(action="get", session_id="<id>")` before `context(...)` each turn, and `instruct(action="ack", session_id="<id>", ids=[...])` after using entries.
 

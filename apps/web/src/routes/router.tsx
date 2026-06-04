@@ -1,32 +1,40 @@
-import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
-import { AccountAboutRoute } from "./components/account-about-route";
-import { AccountGeneralRoute } from "./components/account-general-route";
-import { AccountImportRoute } from "./components/account-import-route";
-import { AccountLibraryRoute } from "./components/account-library-route";
-import { AccountLogsRoute } from "./components/account-logs-route";
-import { AccountNotFound } from "./components/account-not-found";
+import { createRootRoute, createRoute, createRouter, Navigate } from "@tanstack/react-router";
+import { AccountSettings } from "../features/account/AccountSettings";
+import { UserProfilePage } from "../features/user/UserProfilePage";
+import { UserSettings } from "../features/user/UserSettings";
+import { useAuthenticatedRouteUser } from "./authenticated-route-user";
 import { AccountNotificationsRoute } from "./components/account-notifications-route";
 import { AccountProfileRoute } from "./components/account-profile-route";
 import { AccountRoute } from "./components/account-route";
-import { AccountServicesRoute } from "./components/account-services-route";
-import { AccountThemeRoute } from "./components/account-theme-route";
-import { AccountUsersRoute } from "./components/account-users-route";
 import { AdminAboutRoute } from "./components/admin-about-route";
 import { AdminGeneralRoute } from "./components/admin-general-route";
 import { AdminImportRoute } from "./components/admin-import-route";
-import { AdminIndexRedirect } from "./components/admin-index-redirect";
-import { AdminLayout } from "./components/admin-layout";
 import { AdminLibraryRoute } from "./components/admin-library-route";
 import { AdminLogsRoute } from "./components/admin-logs-route";
-import { AdminNotFound } from "./components/admin-not-found";
 import { AdminNotificationsRoute } from "./components/admin-notifications-route";
 import { AdminServicesRoute } from "./components/admin-services-route";
+import { AdminThemeRoute } from "./components/admin-theme-route";
 import { AdminUsersRoute } from "./components/admin-users-route";
-import { AppRoute } from "./components/app-route";
 import { DashboardRoute } from "./components/dashboard-route";
 import { IndexRoute } from "./components/index-route";
 import { LoginRoute } from "./components/login-route";
 import { RootLayout } from "./components/root-layout";
+
+function SettingsIndexRedirect() {
+  return <Navigate replace to="/settings/about" />;
+}
+
+function ProfileSettingsMainRoute() {
+  const user = useAuthenticatedRouteUser();
+
+  return <AccountSettings activePage="main" user={user} />;
+}
+
+function ProfileSettingsPasswordRoute() {
+  const user = useAuthenticatedRouteUser();
+
+  return <AccountSettings activePage="password" user={user} />;
+}
 
 const rootRoute = createRootRoute({ component: RootLayout });
 
@@ -42,172 +50,171 @@ const loginRoute = createRoute({
   component: LoginRoute,
 });
 
-const appRoute = createRoute({
+const authenticatedRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "app",
-  component: AppRoute,
+  id: "authenticated",
+  component: AccountRoute,
 });
 
 const dashboardRoute = createRoute({
-  getParentRoute: () => appRoute,
+  getParentRoute: () => authenticatedRoute,
   path: "dashboard",
   component: DashboardRoute,
 });
 
-const accountRoute = createRoute({
+const profileRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "account",
+  path: "profile",
   component: AccountRoute,
-  notFoundComponent: AccountNotFound,
 });
 
-const accountProfileRoute = createRoute({
-  getParentRoute: () => accountRoute,
+const profileIndexRoute = createRoute({
+  getParentRoute: () => profileRoute,
   path: "/",
   component: AccountProfileRoute,
 });
 
-const accountThemeRoute = createRoute({
-  getParentRoute: () => accountRoute,
-  path: "theme",
-  component: AccountThemeRoute,
+const profileSettingsMainRoute = createRoute({
+  getParentRoute: () => profileRoute,
+  path: "settings/main",
+  component: ProfileSettingsMainRoute,
 });
 
-const accountNotificationsRoute = createRoute({
-  getParentRoute: () => accountRoute,
-  path: "notifications",
+const profileSettingsPasswordRoute = createRoute({
+  getParentRoute: () => profileRoute,
+  path: "settings/password",
+  component: ProfileSettingsPasswordRoute,
+});
+
+const profileSettingsNotificationsRoute = createRoute({
+  getParentRoute: () => profileRoute,
+  path: "settings/notifications",
   component: AccountNotificationsRoute,
 });
 
-const accountGeneralRoute = createRoute({
-  getParentRoute: () => accountRoute,
-  path: "general",
-  component: AccountGeneralRoute,
-});
-
-const accountLibraryRoute = createRoute({
-  getParentRoute: () => accountRoute,
-  path: "library",
-  component: AccountLibraryRoute,
-});
-
-const accountUsersRoute = createRoute({
-  getParentRoute: () => accountRoute,
-  path: "users",
-  component: AccountUsersRoute,
-});
-
-const accountImportRoute = createRoute({
-  getParentRoute: () => accountRoute,
-  path: "import",
-  component: AccountImportRoute,
-});
-
-const accountServicesRoute = createRoute({
-  getParentRoute: () => accountRoute,
-  path: "services",
-  component: AccountServicesRoute,
-});
-
-const accountLogsRoute = createRoute({
-  getParentRoute: () => accountRoute,
-  path: "logs",
-  component: AccountLogsRoute,
-});
-
-const accountAboutRoute = createRoute({
-  getParentRoute: () => accountRoute,
-  path: "about",
-  component: AccountAboutRoute,
-});
-
-const adminLayoutRoute = createRoute({
+const usersRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/admin",
-  component: AdminLayout,
-  notFoundComponent: AdminNotFound,
+  path: "users",
+  component: AccountRoute,
 });
 
-const adminIndexRoute = createRoute({
-  getParentRoute: () => adminLayoutRoute,
+const usersIndexRoute = createRoute({
+  getParentRoute: () => usersRoute,
   path: "/",
-  component: AdminIndexRedirect,
+  component: AdminUsersRoute,
 });
 
-const adminGeneralRoute = createRoute({
-  getParentRoute: () => adminLayoutRoute,
+const userProfileRoute = createRoute({
+  getParentRoute: () => usersRoute,
+  path: "$publicUserId",
+  component: UserProfilePage,
+});
+
+const userSettingsMainRoute = createRoute({
+  getParentRoute: () => usersRoute,
+  path: "$publicUserId/settings/main",
+  component: () => <UserSettings activePage="main" />,
+});
+
+const userSettingsPasswordRoute = createRoute({
+  getParentRoute: () => usersRoute,
+  path: "$publicUserId/settings/password",
+  component: () => <UserSettings activePage="password" />,
+});
+
+const userSettingsPermissionsRoute = createRoute({
+  getParentRoute: () => usersRoute,
+  path: "$publicUserId/settings/permissions",
+  component: () => <UserSettings activePage="permissions" />,
+});
+
+const settingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "settings",
+  component: AccountRoute,
+});
+
+const settingsIndexRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "/",
+  component: SettingsIndexRedirect,
+});
+
+const settingsThemeRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "theme",
+  component: AdminThemeRoute,
+});
+
+const settingsAboutRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "about",
+  component: AdminAboutRoute,
+});
+
+const settingsGeneralRoute = createRoute({
+  getParentRoute: () => settingsRoute,
   path: "general",
   component: AdminGeneralRoute,
 });
 
-const adminLibraryRoute = createRoute({
-  getParentRoute: () => adminLayoutRoute,
+const settingsLibraryRoute = createRoute({
+  getParentRoute: () => settingsRoute,
   path: "library",
   component: AdminLibraryRoute,
 });
 
-const adminUsersRoute = createRoute({
-  getParentRoute: () => adminLayoutRoute,
-  path: "users",
-  component: AdminUsersRoute,
-});
-
-const adminImportRoute = createRoute({
-  getParentRoute: () => adminLayoutRoute,
+const settingsImportRoute = createRoute({
+  getParentRoute: () => settingsRoute,
   path: "import",
   component: AdminImportRoute,
 });
 
-const adminNotificationsRoute = createRoute({
-  getParentRoute: () => adminLayoutRoute,
+const settingsNotificationsRoute = createRoute({
+  getParentRoute: () => settingsRoute,
   path: "notifications",
   component: AdminNotificationsRoute,
 });
 
-const adminServicesRoute = createRoute({
-  getParentRoute: () => adminLayoutRoute,
+const settingsServicesRoute = createRoute({
+  getParentRoute: () => settingsRoute,
   path: "services",
   component: AdminServicesRoute,
 });
 
-const adminLogsRoute = createRoute({
-  getParentRoute: () => adminLayoutRoute,
+const settingsLogsRoute = createRoute({
+  getParentRoute: () => settingsRoute,
   path: "logs",
   component: AdminLogsRoute,
-});
-
-const adminAboutRoute = createRoute({
-  getParentRoute: () => adminLayoutRoute,
-  path: "about",
-  component: AdminAboutRoute,
 });
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
-  appRoute.addChildren([dashboardRoute]),
-  accountRoute.addChildren([
-    accountProfileRoute,
-    accountThemeRoute,
-    accountNotificationsRoute,
-    accountGeneralRoute,
-    accountLibraryRoute,
-    accountUsersRoute,
-    accountImportRoute,
-    accountServicesRoute,
-    accountLogsRoute,
-    accountAboutRoute,
+  authenticatedRoute.addChildren([dashboardRoute]),
+  profileRoute.addChildren([
+    profileIndexRoute,
+    profileSettingsMainRoute,
+    profileSettingsPasswordRoute,
+    profileSettingsNotificationsRoute,
   ]),
-  adminLayoutRoute.addChildren([
-    adminIndexRoute,
-    adminGeneralRoute,
-    adminLibraryRoute,
-    adminUsersRoute,
-    adminImportRoute,
-    adminNotificationsRoute,
-    adminServicesRoute,
-    adminLogsRoute,
-    adminAboutRoute,
+  usersRoute.addChildren([
+    usersIndexRoute,
+    userProfileRoute,
+    userSettingsMainRoute,
+    userSettingsPasswordRoute,
+    userSettingsPermissionsRoute,
+  ]),
+  settingsRoute.addChildren([
+    settingsIndexRoute,
+    settingsThemeRoute,
+    settingsAboutRoute,
+    settingsGeneralRoute,
+    settingsLibraryRoute,
+    settingsImportRoute,
+    settingsNotificationsRoute,
+    settingsServicesRoute,
+    settingsLogsRoute,
   ]),
 ]);
 

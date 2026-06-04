@@ -1,24 +1,27 @@
 import {
   type AdminChangeUserPasswordRequest,
   type AdminChangeUserPasswordResponse,
-  type AdminChangeUserRoleRequest,
-  type AdminDisableUserRequest,
   type AdminUpdateUserPermissionsRequest,
   type AdminUpdateUserStatusRequest,
-  type AdminUserSummary,
   type ApiErrorResponse,
   type ChangePasswordRequest,
   type ChangePasswordResponse,
   type CreateAdminRequest,
   type CreateLocalUserRequest,
+  DEFAULT_SIGNED_IN_USER_PERMISSIONS,
+  hasPermissionGrant,
+  isUserPermission,
   type LoginRequest,
+  type ManagedUserProfile,
+  type ManagedUserSummary,
   type PublicUser,
+  SYSTEM_ADMIN_PERMISSION,
+  type UpdateManagedUserProfileRequest,
   type UpdateUserProfileRequest,
   USER_PERMISSION_VALUES,
   type UserPermission,
-  type UserRole,
 } from "@arrtemplar/shared";
-import { and, eq, ne, or, sql } from "drizzle-orm";
+import { and, eq, isNull, or, sql } from "drizzle-orm";
 import type { DatabaseClient } from "../db/client";
 import { auditLogs, sessions, type User, userPermissionGrants, users } from "../db/schema";
 import { hashPassword, verifyPassword } from "./password";
@@ -61,9 +64,22 @@ export type CreateAdminFailure = {
 
 export type CreateAdminResult = CreateAdminSuccess | CreateAdminFailure;
 
-type CreateLocalUserSuccess = {
+type PermissionCheckSuccess = {
   ok: true;
   user: PublicUser;
+};
+
+type PermissionCheckFailure = {
+  ok: false;
+  status: 401 | 403;
+  body: ApiErrorResponse;
+};
+
+type PermissionCheckResult = PermissionCheckSuccess | PermissionCheckFailure;
+
+type CreateLocalUserSuccess = {
+  ok: true;
+  user: ManagedUserSummary;
 };
 
 type CreateLocalUserFailure = {
@@ -108,35 +124,46 @@ type ChangePasswordFailure = {
 
 type ChangePasswordResult = ChangePasswordSuccess | ChangePasswordFailure;
 
-type AdminUsersListSuccess = {
+type ManagedUsersListSuccess = {
   ok: true;
-  users: AdminUserSummary[];
+  users: ManagedUserSummary[];
 };
 
-type AdminUserMutationSuccess = {
+type ManagedUserProfileSuccess = {
   ok: true;
-  user: AdminUserSummary;
+  user: ManagedUserProfile;
 };
 
-type AdminChangeUserPasswordSuccess = {
+type ManagedUserProfileFailure = {
+  ok: false;
+  status: 401 | 403 | 404;
+  body: ApiErrorResponse;
+};
+
+type ManagedUserMutationSuccess = {
+  ok: true;
+  user: ManagedUserSummary;
+};
+
+type ManagedUserPasswordSuccess = {
   ok: true;
   body: AdminChangeUserPasswordResponse;
 };
 
-type AdminUserMutationFailure = {
+type ManagedUserMutationFailure = {
   ok: false;
   status: 401 | 403 | 404 | 409;
   body: ApiErrorResponse;
 };
 
-type AdminUsersListResult = AdminUsersListSuccess;
-type AdminUserMutationResult = AdminUserMutationSuccess | AdminUserMutationFailure;
-type AdminChangeUserPasswordResult = AdminChangeUserPasswordSuccess | AdminUserMutationFailure;
+type ManagedUsersListResult = ManagedUsersListSuccess | PermissionCheckFailure;
+type ManagedUserProfileResult = ManagedUserProfileSuccess | ManagedUserProfileFailure;
+type ManagedUserProfileMutationResult = ManagedUserProfileSuccess | ManagedUserMutationFailure;
+type ManagedUserMutationResult = ManagedUserMutationSuccess | ManagedUserMutationFailure;
+type ManagedUserPasswordResult = ManagedUserPasswordSuccess | ManagedUserMutationFailure;
 
 type DatabaseTransaction = Parameters<Parameters<DatabaseClient["db"]["transaction"]>[0]>[0];
-type AdminUserUpdateValues = Partial<
-  Pick<User, "disabledAt" | "passwordHash" | "role" | "updatedAt">
->;
+type ManagedUserUpdateValues = Partial<Pick<User, "disabledAt" | "passwordHash" | "updatedAt">>;
 
 const invalidCredentialsError: ApiErrorResponse = {
   error: {
@@ -156,13 +183,6 @@ const unauthenticatedError: ApiErrorResponse = {
   error: {
     code: "UNAUTHENTICATED",
     message: "Authentication is required.",
-  },
-};
-
-const forbiddenError: ApiErrorResponse = {
-  error: {
-    code: "FORBIDDEN",
-    message: "Admin role is required.",
   },
 };
 
@@ -194,10 +214,17 @@ const targetUserNotFoundError: ApiErrorResponse = {
   },
 };
 
-const invalidPermissionTargetError: ApiErrorResponse = {
+const selfServiceOnlyError: ApiErrorResponse = {
   error: {
-    code: "INVALID_PERMISSION_TARGET",
-    message: "Permissions can only be granted to mod accounts.",
+    code: "SELF_SERVICE_ONLY",
+    message: "Use the self-service profile endpoints for your own account.",
+  },
+};
+
+const lastSystemAdminRequiredError: ApiErrorResponse = {
+  error: {
+    code: "LAST_SYSTEM_ADMIN_REQUIRED",
+    message: "At least one active user must keep the system:admin permission.",
   },
 };
 
@@ -224,7 +251,7 @@ export class AuthService {
     }
 
     const now = new Date();
-    const user = await createUserRecord(input, "admin", now);
+    const user = await createUserRecord(input, now);
     const created = this.insertInitialAdmin(user, context, now);
 
     if (!created) {
@@ -246,75 +273,144 @@ export class AuthService {
     actor: PublicUser,
     context: AuthRequestContext,
   ): Promise<CreateLocalUserResult> {
-    const actorResult = this.readActiveAdminActor(actor);
+    const actorResult = this.readActiveManagedActor(actor, "users:create");
 
     if (!actorResult.ok) {
       return actorResult;
     }
 
     const now = new Date();
-    const user = await createUserRecord(input, "user", now);
+    const user = await createUserRecord(input, now);
     const created = this.insertLocalUser(user, actorResult.actor, context, now);
 
     if (!created) {
       return { ok: false, status: 409, body: userAlreadyExistsError };
     }
 
-    return { ok: true, user: toPublicUser(user, readEffectivePermissions(this.database.db, user)) };
+    return {
+      ok: true,
+      user: toManagedUserSummary(user, readEffectivePermissions(this.database.db, user)),
+    };
   }
 
-  listAdminUsers(): AdminUsersListResult {
-    const userSummaries = this.database.db
-      .select({
-        internalId: users.id,
-        id: users.publicId,
-        username: users.username,
-        role: users.role,
-        disabledAt: users.disabledAt,
-        createdAt: users.createdAt,
-        updatedAt: users.updatedAt,
-      })
-      .from(users)
-      .where(ne(users.role, "admin"))
-      .all();
-    const permissionsByUserId = readPermissionGrantsByUserId(this.database.db);
-    const summaries = userSummaries
-      .map((user): AdminUserSummary => {
-        if (user.role === "admin") {
-          throw new Error("Admin accounts cannot be listed as managed users.");
-        }
+  listUsers(actor: PublicUser): ManagedUsersListResult {
+    const actorResult = this.readActiveManagedActor(actor);
 
-        return {
-          id: user.id,
-          username: user.username,
-          role: user.role,
-          disabledAt: user.disabledAt,
-          createdAt: user.createdAt,
-          updatedAt: user.updatedAt,
-          permissions: permissionsByUserId.get(user.internalId) ?? [],
-        };
-      })
+    if (!actorResult.ok) {
+      return actorResult;
+    }
+
+    const userRows = this.database.db.select().from(users).all();
+    const permissionsByUserId = readEffectivePermissionsByUserId(this.database.db, userRows);
+    const summaries = userRows
+      .map((user) => toManagedUserSummary(user, permissionsByUserId.get(user.id) ?? []))
       .sort((left, right) => left.username.localeCompare(right.username));
 
     return { ok: true, users: summaries };
   }
 
-  updateAdminManagedUserPermissions(
+  getManagedUserProfile(targetUserId: string, actor: PublicUser): ManagedUserProfileResult {
+    const actorResult = this.readActiveManagedActor(actor);
+
+    if (!actorResult.ok) {
+      return actorResult;
+    }
+
+    const targetUser = this.findUserByPublicId(targetUserId);
+
+    if (!targetUser) {
+      return { ok: false, status: 404, body: targetUserNotFoundError };
+    }
+
+    return {
+      ok: true,
+      user: toManagedUserProfile(
+        targetUser,
+        readEffectivePermissions(this.database.db, targetUser),
+      ),
+    };
+  }
+
+  updateManagedUserProfile(
+    targetUserId: string,
+    input: UpdateManagedUserProfileRequest,
+    actor: PublicUser,
+    context: AuthRequestContext,
+  ): ManagedUserProfileMutationResult {
+    return this.runManagedUserMutation({
+      actor,
+      context,
+      requiredPermission: "users:update",
+      targetUserId,
+      mutate: (tx, targetUser, actorUser, now) => {
+        const username = input.username?.trim();
+        const email = input.email ? normalizeEmail(input.email) : undefined;
+        const existingUser = findUserByUsernameOrEmail(tx, username, email);
+
+        if (existingUser && existingUser.id !== targetUser.id) {
+          return { ok: false, status: 409, body: userAlreadyExistsError };
+        }
+
+        if (!username && !email) {
+          return {
+            ok: true,
+            user: toManagedUserProfile(targetUser, readEffectivePermissions(tx, targetUser)),
+          };
+        }
+
+        tx.update(users)
+          .set({
+            ...(username ? { username } : {}),
+            ...(email ? { email } : {}),
+            updatedAt: now,
+          })
+          .where(eq(users.id, targetUser.id))
+          .run();
+
+        const updatedUser = tx.select().from(users).where(eq(users.id, targetUser.id)).get();
+
+        if (!updatedUser) {
+          return { ok: false, status: 404, body: targetUserNotFoundError };
+        }
+
+        writeManagedUserAuditLog(tx, {
+          action: "users.profile.updated",
+          actorUserId: actorUser.id,
+          context,
+          createdAt: now,
+          metadata: { username: updatedUser.username, email: updatedUser.email },
+          targetUser: updatedUser,
+        });
+
+        return {
+          ok: true,
+          user: toManagedUserProfile(updatedUser, readEffectivePermissions(tx, updatedUser)),
+        };
+      },
+    });
+  }
+
+  updateManagedUserPermissions(
     targetUserId: string,
     input: AdminUpdateUserPermissionsRequest,
     actor: PublicUser,
     context: AuthRequestContext,
-  ): AdminUserMutationResult {
-    return this.runAdminUserMutation({
+  ): ManagedUserMutationResult {
+    return this.runManagedUserMutation({
       actor,
       context,
+      requiredPermission: "users:permissions",
       targetUserId,
       mutate: (tx, targetUser, actorUser, now) => {
-        if (targetUser.role !== "mod") {
-          return { ok: false, status: 409, body: invalidPermissionTargetError };
-        }
+        const permissions = normalizePermissions(input.permissions.filter(isUserPermission));
 
-        const permissions = normalizePermissions(input.permissions);
+        if (
+          !permissions.includes(SYSTEM_ADMIN_PERMISSION) &&
+          hasExplicitPermissionGrant(tx, targetUser.id, SYSTEM_ADMIN_PERMISSION) &&
+          countActiveSystemAdmins(tx) <= 1
+        ) {
+          return { ok: false, status: 409, body: lastSystemAdminRequiredError };
+        }
 
         tx.delete(userPermissionGrants).where(eq(userPermissionGrants.userId, targetUser.id)).run();
 
@@ -335,8 +431,8 @@ export class AuthService {
 
         tx.update(users).set({ updatedAt: now }).where(eq(users.id, targetUser.id)).run();
         revokeUserSessions(tx, targetUser.id);
-        writeAdminUserAuditLog(tx, {
-          action: "admin.users.permissions_changed",
+        writeManagedUserAuditLog(tx, {
+          action: "users.permissions.updated",
           actorUserId: actorUser.id,
           context,
           createdAt: now,
@@ -344,30 +440,31 @@ export class AuthService {
           targetUser,
         });
 
-        return readAdminUserMutationSuccess(tx, targetUserId);
+        return readManagedUserSummarySuccess(tx, targetUser.id);
       },
     });
   }
 
-  async changeAdminManagedUserPassword(
+  async changeManagedUserPassword(
     targetUserId: string,
     input: AdminChangeUserPasswordRequest,
     actor: PublicUser,
     context: AuthRequestContext,
-  ): Promise<AdminChangeUserPasswordResult> {
+  ): Promise<ManagedUserPasswordResult> {
     const passwordHash = await hashPassword(input.password);
 
-    return this.runAdminUserMutation({
+    return this.runManagedUserMutation({
       actor,
       context,
+      requiredPermission: "users:password",
       targetUserId,
       mutate: (tx, targetUser, actorUser, now) => {
-        updateAdminUserAndRevokeSessions(
+        updateManagedUserAndRevokeSessions(
           tx,
           targetUser,
           { passwordHash, updatedAt: now },
           {
-            action: "admin.users.password_changed",
+            action: "users.password.changed",
             actorUserId: actorUser.id,
             context,
             createdAt: now,
@@ -379,100 +476,47 @@ export class AuthService {
     });
   }
 
-  changeAdminManagedUserRole(
-    targetUserId: string,
-    input: AdminChangeUserRoleRequest,
-    actor: PublicUser,
-    context: AuthRequestContext,
-  ): AdminUserMutationResult {
-    return this.runAdminUserMutation({
-      actor,
-      context,
-      targetUserId,
-      mutate: (tx, targetUser, actorUser, now) => {
-        if (targetUser.role !== input.role) {
-          updateAdminUserAndRevokeSessions(
-            tx,
-            targetUser,
-            { role: input.role, updatedAt: now },
-            {
-              action: "admin.users.role_changed",
-              actorUserId: actorUser.id,
-              context,
-              createdAt: now,
-              metadata: { previousRole: targetUser.role, role: input.role },
-            },
-          );
-        }
-
-        return readAdminUserMutationSuccess(tx, targetUserId);
-      },
-    });
-  }
-
-  disableAdminManagedUser(
-    targetUserId: string,
-    _input: AdminDisableUserRequest,
-    actor: PublicUser,
-    context: AuthRequestContext,
-  ): AdminUserMutationResult {
-    return this.runAdminUserMutation({
-      actor,
-      context,
-      targetUserId,
-      mutate: (tx, targetUser, actorUser, now) => {
-        if (!targetUser.disabledAt) {
-          updateAdminUserAndRevokeSessions(
-            tx,
-            targetUser,
-            { disabledAt: now, updatedAt: now },
-            {
-              action: "admin.users.disabled",
-              actorUserId: actorUser.id,
-              context,
-              createdAt: now,
-            },
-          );
-        }
-
-        return readAdminUserMutationSuccess(tx, targetUserId);
-      },
-    });
-  }
-
-  updateAdminManagedUserStatus(
+  updateManagedUserStatus(
     targetUserId: string,
     input: AdminUpdateUserStatusRequest,
     actor: PublicUser,
     context: AuthRequestContext,
-  ): AdminUserMutationResult {
-    return this.runAdminUserMutation({
+  ): ManagedUserMutationResult {
+    return this.runManagedUserMutation({
       actor,
       context,
+      requiredPermission: "users:disable",
       targetUserId,
       mutate: (tx, targetUser, actorUser, now) => {
-        if (!input.disabled && targetUser.disabledAt) {
-          updateAdminUserAndRevokeSessions(
-            tx,
-            targetUser,
-            { disabledAt: null, updatedAt: now },
-            {
-              action: "admin.users.enabled",
-              actorUserId: actorUser.id,
-              context,
-              createdAt: now,
-            },
-          );
+        if (
+          input.disabled &&
+          hasExplicitPermissionGrant(tx, targetUser.id, SYSTEM_ADMIN_PERMISSION)
+        ) {
+          if (countActiveSystemAdmins(tx) <= 1) {
+            return { ok: false, status: 409, body: lastSystemAdminRequiredError };
+          }
         }
 
-        return readAdminUserMutationSuccess(tx, targetUserId);
+        updateManagedUserAndRevokeSessions(
+          tx,
+          targetUser,
+          { disabledAt: input.disabled ? now : null, updatedAt: now },
+          {
+            action: input.disabled ? "users.disabled" : "users.restored",
+            actorUserId: actorUser.id,
+            context,
+            createdAt: now,
+          },
+        );
+
+        return readManagedUserSummarySuccess(tx, targetUser.id);
       },
     });
   }
 
   async login(input: LoginRequest, context: AuthRequestContext): Promise<LoginResult> {
     const email = normalizeEmail(input.email);
-    const rateLimitKey = createRateLimitKey(email, context.ipAddress);
+    const rateLimitKey = createRateLimitKey(email);
 
     if (this.rateLimiter.isBlocked(rateLimitKey)) {
       this.writeAuditLog({
@@ -552,12 +596,14 @@ export class AuthService {
   getCurrentUser(sessionToken: string | null): PublicUser | null {
     const currentSession = this.findSession(sessionToken);
 
-    return currentSession
-      ? toPublicUser(
-          currentSession.user,
-          readEffectivePermissions(this.database.db, currentSession.user),
-        )
-      : null;
+    if (!currentSession) {
+      return null;
+    }
+
+    return toPublicUser(
+      currentSession.user,
+      readEffectivePermissions(this.database.db, currentSession.user),
+    );
   }
 
   getUserProfile(sessionToken: string | null): UserProfileResult {
@@ -621,7 +667,7 @@ export class AuthService {
     }
 
     this.writeAuditLog({
-      action: "user.profile.updated",
+      action: "profile.updated",
       actorUserId: currentSession.user.id,
       targetType: "user",
       targetId: currentSession.user.id,
@@ -653,7 +699,7 @@ export class AuthService {
 
     if (!passwordMatches) {
       this.writeAuditLog({
-        action: "user.password.change_failed",
+        action: "profile.password.change_failed",
         actorUserId: currentSession.user.id,
         targetType: "user",
         targetId: currentSession.user.id,
@@ -671,7 +717,7 @@ export class AuthService {
       .run();
 
     this.writeAuditLog({
-      action: "user.password.changed",
+      action: "profile.password.changed",
       actorUserId: currentSession.user.id,
       targetType: "user",
       targetId: currentSession.user.id,
@@ -681,67 +727,56 @@ export class AuthService {
     return { ok: true, body: { status: "ok" } };
   }
 
-  requireRole(
+  requirePermission(
     sessionToken: string | null,
-    role: UserRole,
-  ): { ok: true; user: PublicUser } | { ok: false; status: 401 | 403; body: ApiErrorResponse } {
+    permission: UserPermission,
+  ): PermissionCheckResult {
     const currentSession = this.findSession(sessionToken);
 
     if (!currentSession) {
       return { ok: false, status: 401, body: unauthenticatedError };
     }
 
-    if (currentSession.user.role !== role) {
+    const permissions = readEffectivePermissions(this.database.db, currentSession.user);
+
+    if (!hasPermissionGrant(permissions, permission)) {
       this.writeAuditLog({
-        action: "admin.auth.denied",
+        action: "auth.permission.denied",
         actorUserId: currentSession.user.id,
-        targetType: "role",
-        targetId: role,
+        targetType: "permission",
+        targetId: permission,
       });
 
-      return { ok: false, status: 403, body: forbiddenError };
+      return { ok: false, status: 403, body: forbiddenError(permission) };
     }
 
-    return {
-      ok: true,
-      user: toPublicUser(
-        currentSession.user,
-        readEffectivePermissions(this.database.db, currentSession.user),
-      ),
-    };
+    return { ok: true, user: toPublicUser(currentSession.user, permissions) };
   }
 
-  recordAdminAuthCheck(user: PublicUser, context: AuthRequestContext): void {
-    const actorUser = this.findUserByPublicId(user.id);
-
-    this.writeAuditLog({
-      action: "admin.auth.check",
-      actorUserId: actorUser?.id ?? null,
-      targetType: "user",
-      targetId: actorUser?.id ?? null,
-      ipAddress: context.ipAddress,
-    });
-  }
-
-  private readActiveAdminActor(
+  private readActiveManagedActor(
     actor: PublicUser,
-  ): { ok: true; actor: User } | { ok: false; status: 401 | 403; body: ApiErrorResponse } {
+    requiredPermission?: UserPermission,
+  ): { ok: true; actor: User } | PermissionCheckFailure {
     const actorUser = this.findUserByPublicId(actor.id);
 
     if (!actorUser || actorUser.disabledAt) {
       return { ok: false, status: 401, body: unauthenticatedError };
     }
 
-    if (actorUser.role !== "admin") {
-      return { ok: false, status: 403, body: forbiddenError };
+    const permissions = readEffectivePermissions(this.database.db, actorUser);
+
+    if (!hasPermissionGrant(permissions, "users:manage")) {
+      return { ok: false, status: 403, body: forbiddenError("users:manage") };
+    }
+
+    if (requiredPermission && !hasPermissionGrant(permissions, requiredPermission)) {
+      return { ok: false, status: 403, body: forbiddenError(requiredPermission) };
     }
 
     return { ok: true, actor: actorUser };
   }
 
-  private runAdminUserMutation<
-    T extends AdminChangeUserPasswordSuccess | AdminUserMutationSuccess,
-  >(input: {
+  private runManagedUserMutation<TSuccess>(input: {
     actor: PublicUser;
     context: AuthRequestContext;
     mutate: (
@@ -749,10 +784,11 @@ export class AuthService {
       targetUser: User,
       actorUser: User,
       now: string,
-    ) => T | AdminUserMutationFailure;
+    ) => TSuccess | ManagedUserMutationFailure;
+    requiredPermission: UserPermission;
     targetUserId: string;
-  }): T | AdminUserMutationFailure {
-    const actorResult = this.readActiveAdminActor(input.actor);
+  }): TSuccess | ManagedUserMutationFailure {
+    const actorResult = this.readActiveManagedActor(input.actor, input.requiredPermission);
 
     if (!actorResult.ok) {
       return actorResult;
@@ -765,6 +801,10 @@ export class AuthService {
 
       if (!targetUser) {
         return { ok: false, status: 404, body: targetUserNotFoundError };
+      }
+
+      if (targetUser.id === actorResult.actor.id) {
+        return { ok: false, status: 409, body: selfServiceOnlyError };
       }
 
       return input.mutate(tx, targetUser, actorResult.actor, now);
@@ -816,23 +856,7 @@ export class AuthService {
     username: string | undefined,
     email: string | undefined,
   ): User | undefined {
-    if (username && email) {
-      return this.database.db
-        .select()
-        .from(users)
-        .where(or(eq(users.username, username), eq(users.email, email)))
-        .get();
-    }
-
-    if (username) {
-      return this.database.db.select().from(users).where(eq(users.username, username)).get();
-    }
-
-    if (email) {
-      return this.database.db.select().from(users).where(eq(users.email, email)).get();
-    }
-
-    return undefined;
+    return findUserByUsernameOrEmail(this.database.db, username, email);
   }
 
   private findUserByPublicId(publicUserId: string): User | undefined {
@@ -851,6 +875,16 @@ export class AuthService {
       }
 
       tx.insert(users).values(user).run();
+      tx.insert(userPermissionGrants)
+        .values({
+          id: Bun.randomUUIDv7(),
+          userId: user.id,
+          permission: SYSTEM_ADMIN_PERMISSION,
+          grantedByUserId: user.id,
+          createdAt: now.toISOString(),
+          updatedAt: now.toISOString(),
+        })
+        .run();
       tx.insert(auditLogs)
         .values({
           id: Bun.randomUUIDv7(),
@@ -858,7 +892,11 @@ export class AuthService {
           action: "auth.setup.admin_created",
           targetType: "user",
           targetId: user.id,
-          metadataJson: JSON.stringify({ username: user.username, email: user.email }),
+          metadataJson: JSON.stringify({
+            username: user.username,
+            email: user.email,
+            permissions: [SYSTEM_ADMIN_PERMISSION],
+          }),
           ipAddress: context.ipAddress,
           createdAt: now.toISOString(),
         })
@@ -875,11 +913,7 @@ export class AuthService {
     now: Date,
   ): boolean {
     return this.database.db.transaction((tx) => {
-      const existingUser = tx
-        .select({ id: users.id })
-        .from(users)
-        .where(or(eq(users.username, user.username), eq(users.email, user.email)))
-        .get();
+      const existingUser = findUserByUsernameOrEmail(tx, user.username, user.email);
 
       if (existingUser) {
         return false;
@@ -890,7 +924,7 @@ export class AuthService {
         .values({
           id: Bun.randomUUIDv7(),
           actorUserId: actor.id,
-          action: "admin.users.created",
+          action: "users.created",
           targetType: "user",
           targetId: user.id,
           metadataJson: JSON.stringify({ username: user.username, email: user.email }),
@@ -957,44 +991,40 @@ function toPublicUser(user: User, permissions: UserPermission[]): PublicUser {
     id: user.publicId,
     username: user.username,
     email: user.email,
-    role: user.role,
     permissions,
     createdAt: user.createdAt,
     lastLoginAt: user.lastLoginAt,
   };
 }
 
-function toAdminUserSummary(user: User): AdminUserSummary {
-  if (user.role === "admin") {
-    throw new Error("Admin accounts cannot be summarized as managed users.");
-  }
-
+function toManagedUserSummary(user: User, permissions: UserPermission[]): ManagedUserSummary {
   return {
     id: user.publicId,
     username: user.username,
-    role: user.role,
     disabledAt: user.disabledAt,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
-    permissions: [],
+    permissions,
+  };
+}
+
+function toManagedUserProfile(user: User, permissions: UserPermission[]): ManagedUserProfile {
+  return {
+    ...toManagedUserSummary(user, permissions),
+    email: user.email,
+    lastLoginAt: user.lastLoginAt,
   };
 }
 
 function readManagedTargetUser(tx: DatabaseTransaction, targetUserId: string): User | null {
-  return (
-    tx
-      .select()
-      .from(users)
-      .where(and(eq(users.publicId, targetUserId), ne(users.role, "admin")))
-      .get() ?? null
-  );
+  return tx.select().from(users).where(eq(users.publicId, targetUserId)).get() ?? null;
 }
 
-function readAdminUserMutationSuccess(
+function readManagedUserSummarySuccess(
   tx: DatabaseTransaction,
-  targetUserId: string,
-): AdminUserMutationResult {
-  const updatedUser = readManagedTargetUser(tx, targetUserId);
+  targetInternalUserId: string,
+): ManagedUserMutationResult {
+  const updatedUser = tx.select().from(users).where(eq(users.id, targetInternalUserId)).get();
 
   if (!updatedUser) {
     return { ok: false, status: 404, body: targetUserNotFoundError };
@@ -1002,14 +1032,11 @@ function readAdminUserMutationSuccess(
 
   return {
     ok: true,
-    user: {
-      ...toAdminUserSummary(updatedUser),
-      permissions: readPermissionGrants(tx, updatedUser.id),
-    },
+    user: toManagedUserSummary(updatedUser, readEffectivePermissions(tx, updatedUser)),
   };
 }
 
-function readPermissionGrantsByUserId(
+function readExplicitPermissionGrantsByUserId(
   tx: DatabaseTransaction | DatabaseClient["db"],
 ): Map<string, UserPermission[]> {
   const permissionsByUserId = new Map<string, UserPermission[]>();
@@ -1018,6 +1045,10 @@ function readPermissionGrantsByUserId(
     .select({ permission: userPermissionGrants.permission, userId: userPermissionGrants.userId })
     .from(userPermissionGrants)
     .all()) {
+    if (!isUserPermission(grant.permission)) {
+      continue;
+    }
+
     permissionsByUserId.set(grant.userId, [
       ...(permissionsByUserId.get(grant.userId) ?? []),
       grant.permission,
@@ -1031,7 +1062,24 @@ function readPermissionGrantsByUserId(
   return permissionsByUserId;
 }
 
-function readPermissionGrants(
+function readEffectivePermissionsByUserId(
+  tx: DatabaseTransaction | DatabaseClient["db"],
+  userRows: readonly User[],
+): Map<string, UserPermission[]> {
+  const explicitPermissionsByUserId = readExplicitPermissionGrantsByUserId(tx);
+  const effectivePermissionsByUserId = new Map<string, UserPermission[]>();
+
+  for (const user of userRows) {
+    effectivePermissionsByUserId.set(
+      user.id,
+      computeEffectivePermissions(explicitPermissionsByUserId.get(user.id) ?? []),
+    );
+  }
+
+  return effectivePermissionsByUserId;
+}
+
+function readExplicitPermissionGrants(
   tx: DatabaseTransaction | DatabaseClient["db"],
   userId: string,
 ): UserPermission[] {
@@ -1041,7 +1089,8 @@ function readPermissionGrants(
       .from(userPermissionGrants)
       .where(eq(userPermissionGrants.userId, userId))
       .all()
-      .map((grant) => grant.permission),
+      .map((grant) => grant.permission)
+      .filter(isUserPermission),
   );
 }
 
@@ -1049,27 +1098,58 @@ function readEffectivePermissions(
   tx: DatabaseTransaction | DatabaseClient["db"],
   user: User,
 ): UserPermission[] {
-  if (user.role === "admin") {
+  return computeEffectivePermissions(readExplicitPermissionGrants(tx, user.id));
+}
+
+function computeEffectivePermissions(
+  explicitPermissions: readonly UserPermission[],
+): UserPermission[] {
+  if (explicitPermissions.includes(SYSTEM_ADMIN_PERMISSION)) {
     return [...USER_PERMISSION_VALUES];
   }
 
-  if (user.role !== "mod") {
-    return [];
-  }
-
-  return readPermissionGrants(tx, user.id);
+  return normalizePermissions([...DEFAULT_SIGNED_IN_USER_PERMISSIONS, ...explicitPermissions]);
 }
 
-function normalizePermissions(permissions: UserPermission[]): UserPermission[] {
+function normalizePermissions(permissions: readonly UserPermission[]): UserPermission[] {
   return [...new Set(permissions)].sort(
     (left, right) => (permissionOrder.get(left) ?? 0) - (permissionOrder.get(right) ?? 0),
   );
 }
 
-function updateAdminUserAndRevokeSessions(
+function hasExplicitPermissionGrant(
+  tx: DatabaseTransaction,
+  userId: string,
+  permission: UserPermission,
+): boolean {
+  const grant = tx
+    .select({ id: userPermissionGrants.id })
+    .from(userPermissionGrants)
+    .where(
+      and(eq(userPermissionGrants.userId, userId), eq(userPermissionGrants.permission, permission)),
+    )
+    .get();
+
+  return Boolean(grant);
+}
+
+function countActiveSystemAdmins(tx: DatabaseTransaction): number {
+  const result = tx
+    .select({ count: sql<number>`count(*)`.mapWith(Number) })
+    .from(userPermissionGrants)
+    .innerJoin(users, eq(users.id, userPermissionGrants.userId))
+    .where(
+      and(eq(userPermissionGrants.permission, SYSTEM_ADMIN_PERMISSION), isNull(users.disabledAt)),
+    )
+    .get();
+
+  return result?.count ?? 0;
+}
+
+function updateManagedUserAndRevokeSessions(
   tx: DatabaseTransaction,
   targetUser: User,
-  values: AdminUserUpdateValues,
+  values: ManagedUserUpdateValues,
   auditLog: {
     action: string;
     actorUserId: string;
@@ -1080,14 +1160,14 @@ function updateAdminUserAndRevokeSessions(
 ): void {
   tx.update(users).set(values).where(eq(users.id, targetUser.id)).run();
   revokeUserSessions(tx, targetUser.id);
-  writeAdminUserAuditLog(tx, { ...auditLog, targetUser });
+  writeManagedUserAuditLog(tx, { ...auditLog, targetUser });
 }
 
 function revokeUserSessions(tx: DatabaseTransaction, targetUserId: string): void {
   tx.delete(sessions).where(eq(sessions.userId, targetUserId)).run();
 }
 
-function writeAdminUserAuditLog(
+function writeManagedUserAuditLog(
   tx: DatabaseTransaction,
   input: {
     action: string;
@@ -1117,7 +1197,6 @@ function writeAdminUserAuditLog(
 
 async function createUserRecord(
   input: CreateAdminRequest | CreateLocalUserRequest,
-  role: UserRole,
   now: Date,
 ): Promise<User> {
   return {
@@ -1126,7 +1205,6 @@ async function createUserRecord(
     username: input.username.trim(),
     email: normalizeEmail(input.email),
     passwordHash: await hashPassword(input.password),
-    role,
     disabledAt: null,
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
@@ -1134,10 +1212,43 @@ async function createUserRecord(
   };
 }
 
+function findUserByUsernameOrEmail(
+  tx: DatabaseTransaction | DatabaseClient["db"],
+  username: string | undefined,
+  email: string | undefined,
+): User | undefined {
+  if (username && email) {
+    return tx
+      .select()
+      .from(users)
+      .where(or(eq(users.username, username), eq(users.email, email)))
+      .get();
+  }
+
+  if (username) {
+    return tx.select().from(users).where(eq(users.username, username)).get();
+  }
+
+  if (email) {
+    return tx.select().from(users).where(eq(users.email, email)).get();
+  }
+
+  return undefined;
+}
+
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-function createRateLimitKey(email: string, ipAddress: string | null): string {
-  return `${ipAddress ?? "unknown"}:${email}`;
+function createRateLimitKey(email: string): string {
+  return email;
+}
+
+function forbiddenError(permission: UserPermission): ApiErrorResponse {
+  return {
+    error: {
+      code: "FORBIDDEN",
+      message: `${permission} permission is required.`,
+    },
+  };
 }

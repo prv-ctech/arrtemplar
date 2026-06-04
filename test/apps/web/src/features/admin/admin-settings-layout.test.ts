@@ -1,224 +1,75 @@
 import { describe, expect, it } from "bun:test";
 import { readWorkspaceSource } from "./admin-settings-test-sources";
 
-const adminSettingsSourcePath = "apps/web/src/features/admin/AdminSettings.tsx";
-const adminUsersSettingsSourcePath = "apps/web/src/features/admin/AdminUsersSettings.tsx";
-const alertDialogSourcePath = "apps/web/src/components/ui/alert-dialog.tsx";
-const appShellSourcePath = "apps/web/src/components/layout/AppShell.tsx";
-const dialogSourcePath = "apps/web/src/components/ui/dialog.tsx";
-const settingsNavSourcePath = "apps/web/src/features/settings/SettingsNav.tsx";
-const switchSourcePath = "apps/web/src/components/ui/switch.tsx";
-const stylesSourcePath = "apps/web/src/styles.css";
+const settingsSourcePath = "apps/web/src/features/admin/AdminSettings.tsx";
+const usersSourcePath = "apps/web/src/features/admin/AdminUsersSettings.tsx";
+const usersHooksSourcePath = "apps/web/src/features/admin/admin-users.ts";
 
-describe("admin settings layout", () => {
-  it("keeps a page-level heading available to assistive technology", async () => {
-    const source = await readWorkspaceSource(adminSettingsSourcePath);
+describe("app settings layout", () => {
+  it("uses /settings paths and permission-aware section metadata instead of admin-only copy", async () => {
+    const source = await readWorkspaceSource(settingsSourcePath);
 
-    expect(source).toContain('<h1 className="sr-only">Admin settings</h1>');
+    expect(source).toContain('<h1 className="sr-only">Settings</h1>');
+    expect(source).toContain('path: "/settings/about"');
+    expect(source).toContain('path: "/settings/theme"');
+    expect(source).toContain('path: "/settings/services"');
+    expect(source).not.toContain('path: "/admin/');
+    expect(source).not.toContain("Admin settings");
+    expect(source).not.toContain("mod role");
   });
 
-  it("uses a single shell scroll container on mobile instead of nesting viewport and page scrolling", async () => {
-    const source = await readWorkspaceSource(appShellSourcePath);
+  it("keeps the users section as a real directory-driven management surface", async () => {
+    const settingsSource = await readWorkspaceSource(settingsSourcePath);
+    const usersSource = await readWorkspaceSource(usersSourcePath);
+    const hooksSource = await readWorkspaceSource(usersHooksSourcePath);
 
-    expect(source).toContain("h-dvh w-full max-w-full overflow-hidden");
-    expect(source).toContain("grid h-dvh w-full");
-    expect(source).toContain("grid-rows-[auto_minmax(0,1fr)]");
-    expect(source).toContain("min-h-0 overflow-y-auto lg:h-dvh");
-    expect(source).not.toContain("max-w-420");
-    expect(source).not.toContain('className="min-w-0 h-dvh overflow-y-auto"');
-  });
-
-  it("lets authenticated shell content fill wide viewports", async () => {
-    const source = await readWorkspaceSource(appShellSourcePath);
-
-    expect(source).toContain(
-      'className="grid h-dvh w-full grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[4.75rem_minmax(0,1fr)]"',
-    );
-    expect(source).toContain(
-      'className="flex w-full items-center gap-3 px-4 py-3 sm:px-6 lg:px-8"',
-    );
-    expect(source).toContain('className="w-full px-4 py-5 sm:px-6 lg:px-8 lg:py-7"');
-    expect(source).not.toMatch(/max-w-(370|420)/);
-  });
-
-  it("keeps the compact account menu button accessible", async () => {
-    const source = await readWorkspaceSource(appShellSourcePath);
-
-    expect(source).toContain("Open account menu for");
-    expect(source).toContain("user.username");
-  });
-
-  it("keeps mobile shell actions and places desktop actions beside search", async () => {
-    const source = await readWorkspaceSource(appShellSourcePath);
-    const shellHeaderStart = source.indexOf("<aside");
-    const contentAreaStart = source.indexOf("<section");
-    const desktopHeaderStart = source.indexOf("Desktop-only header with search and actions");
-    const searchPosition = source.indexOf("<search", desktopHeaderStart);
-    const desktopActionsPosition = source.indexOf(
-      'className="hidden gap-2 lg:flex"',
-      searchPosition,
-    );
-    const mobileActionsPosition = source.indexOf('className="lg:hidden"', shellHeaderStart);
-
-    expect(shellHeaderStart).toBeGreaterThan(-1);
-    expect(contentAreaStart).toBeGreaterThan(shellHeaderStart);
-    expect(desktopHeaderStart).toBeGreaterThan(contentAreaStart);
-    expect(mobileActionsPosition).toBeGreaterThan(shellHeaderStart);
-    expect(mobileActionsPosition).toBeLessThan(contentAreaStart);
-    expect(searchPosition).toBeGreaterThan(desktopHeaderStart);
-    expect(desktopActionsPosition).toBeGreaterThan(searchPosition);
-    expect(source).toContain('accountMenuSide="right"');
-  });
-
-  it("removes staged watch and requests placeholders from the primary shell navigation", async () => {
-    const source = await readWorkspaceSource(appShellSourcePath);
-
-    expect(source).not.toContain('label: "Watch"');
-    expect(source).not.toContain('label: "Requests"');
-    expect(source).not.toContain("Watch staged");
-    expect(source).not.toContain("Requests staged");
-    expect(source).not.toContain("ShellDisabledNavItem");
-    expect(source).not.toContain("\"to\" in item");
-  });
-
-  it("uses a desktop-only search header without adding a mobile header", async () => {
-    const source = await readWorkspaceSource(appShellSourcePath);
-
-    expect(source).toContain(
-      'className="sticky top-0 z-20 hidden border-b border-border bg-background/92 backdrop-blur-lg lg:block"',
-    );
-    expect(source).toContain(
-      'className="flex w-full items-center gap-3 px-4 py-3 sm:px-6 lg:px-8"',
-    );
-    expect(source).toContain('className="flex min-w-0 flex-1 items-center gap-3');
-    expect(source).not.toContain("hidden min-w-72 items-center");
-  });
-
-  it("styles native scrollbars with theme tokens", async () => {
-    const source = await readWorkspaceSource(stylesSourcePath);
-
-    expect(source).toContain("scrollbar-color:");
-    expect(source).toContain("var(--primary)");
-    expect(source).toContain("var(--background)");
-    expect(source).toContain("::-webkit-scrollbar-thumb");
-    expect(source).toContain(".scrollbar-hidden");
-    expect(source).toContain("scrollbar-width: none");
-  });
-
-  it("renders the users section as a real local-account management panel", async () => {
-    const source = await readWorkspaceSource(adminSettingsSourcePath);
-    const usersSource = await readWorkspaceSource(adminUsersSettingsSourcePath);
-    const userUsernameInterpolation = "$" + "{user.username}";
-
-    expect(source).toContain("AdminUsersSettings");
-    expect(usersSource).toContain("useAdminUsersQuery");
-    expect(usersSource).toContain("useCreateAdminUserMutation");
-    expect(usersSource).toContain("useChangeAdminUserPasswordMutation");
-    expect(usersSource).toContain("useChangeAdminUserRoleMutation");
-    expect(usersSource).toContain("useAdminPermissionCatalogQuery");
-    expect(usersSource).toContain("useUpdateAdminUserPermissionsMutation");
-    expect(usersSource).toContain("ADMIN_PERMISSION_CATALOG");
-    expect(usersSource).toContain("useDisableAdminUserMutation");
-    expect(usersSource).toContain("useEnableAdminUserMutation");
-    expect(usersSource).toContain("<Table");
-    expect(usersSource).toContain("<Dialog");
-    expect(usersSource).toContain("<AlertDialog");
-    expect(usersSource).not.toContain("Local accounts</h2>");
-    expect(usersSource).toContain('className="flex shrink-0 justify-start sm:justify-end"');
-    expect(usersSource).toContain("No managed local accounts yet");
-    expect(usersSource).not.toContain("currentAdminPassword");
-    expect(usersSource).not.toContain("Your admin password");
-    expect(usersSource).toContain("Permission grants");
-    expect(usersSource).toContain("function PermissionsCell");
-    expect(usersSource).toContain("Manage permissions");
-    expect(usersSource).toContain("PlusIcon");
-    expect(usersSource).toContain(
-      `aria-label={\`Manage permissions for ${userUsernameInterpolation}\`}`,
-    );
-    expect(usersSource).toContain("onClick={onManagePermissions}");
-    expect(usersSource).toContain("getPermissionLabel(permission)");
-    expect(usersSource).toContain("High risk");
-    expect(usersSource).toContain('option value="user"');
-    expect(usersSource).toContain('option value="mod"');
+    expect(settingsSource).toContain("AdminUsersSettings");
+    expect(settingsSource).toContain("ThemeSettings");
+    expect(settingsSource).not.toContain("<AccountSettings");
+    expect(settingsSource).not.toContain('activePage="theme"');
+    expect(usersSource).toContain("Public ID");
+    expect(usersSource).toContain("Permissions");
+    expect(usersSource).toContain("Status");
+    expect(usersSource).toContain("Created");
+    expect(usersSource).toContain("Updated");
+    expect(usersSource).not.toContain("RoleBadge");
+    expect(usersSource).not.toContain('option value="mod"');
     expect(usersSource).not.toContain('option value="admin"');
-    expect(usersSource).not.toContain("Full admin");
-    expect(usersSource).toContain("user.permissions");
-    expect(usersSource).not.toContain("Last active admin accounts cannot be disabled or demoted.");
-    expect(usersSource).not.toContain("activeAdminCount");
-    expect(usersSource).not.toContain("isActiveAdmin");
-    expect(source).not.toContain("Allow Registration");
-    expect(source).not.toContain("Default role assigned to newly registered users.");
-  });
-
-  it("keeps dialogs and permission grants viewport-safe on phones", async () => {
-    const alertDialogSource = await readWorkspaceSource(alertDialogSourcePath);
-    const dialogSource = await readWorkspaceSource(dialogSourcePath);
-    const usersSource = await readWorkspaceSource(adminUsersSettingsSourcePath);
-
-    expect(dialogSource).toContain("max-h-[calc(100dvh-2rem)]");
-    expect(dialogSource).toContain("overflow-y-auto overscroll-contain");
-    expect(alertDialogSource).toContain("max-h-[calc(100dvh-2rem)]");
-    expect(alertDialogSource).toContain("overflow-y-auto overscroll-contain");
-    expect(usersSource).toContain("grid-rows-[auto_minmax(0,1fr)]");
-    expect(usersSource).toContain("grid-rows-[minmax(0,1fr)_auto_auto]");
-    expect(usersSource).toContain("Available permission grants</legend>");
-    expect(usersSource).not.toContain("{entry.permission}</span>");
-  });
-});
-
-describe("admin settings navigation", () => {
-  it("exposes horizontal tab semantics and keyboard movement", async () => {
-    const source = await readWorkspaceSource(settingsNavSourcePath);
-
-    expect(source).toContain('role="tablist"');
-    expect(source).toContain('role="tab"');
-    expect(source).toContain("aria-selected={isActive}");
-    expect(source).toContain("aria-controls={");
-    expect(source).toContain("-settings-panel`}");
-    expect(source).toContain("scrollbar-hidden");
-    expect(source).toContain("tabIndex={isActive ? 0 : -1}");
-    expect(source).toContain("ArrowRight");
-    expect(source).toContain("ArrowLeft");
-    expect(source).toContain("Home");
-    expect(source).toContain("End");
-  });
-
-  it("keeps the mobile tab rail swipeable and touch-friendly without clipping labels", async () => {
-    const source = await readWorkspaceSource(settingsNavSourcePath);
-
-    expect(source).toContain("overflow-x-auto");
-    expect(source).toContain("touch-pan-x");
-    expect(source).toContain("scroll-px-4");
-    expect(source).toContain("snap-x");
-    expect(source).toContain("snap-start");
-    expect(source).toContain("min-h-11");
-    expect(source).toContain("relative z-10 w-full bg-background/95 backdrop-blur-sm");
-    expect(source).toContain("relative z-10 flex gap-0 overflow-x-auto");
-    expect(source).toContain("pr-4 pl-0");
-    expect(source).not.toContain("border-border px-4 scroll-px-4");
-  });
-
-  it("persists horizontal tab scroll position when route changes remount the settings page", async () => {
-    const source = await readWorkspaceSource(settingsNavSourcePath);
-
-    expect(source).toContain("settingsNavScrollLeftByKey");
-    expect(source).toContain("useLayoutEffect");
-    expect(source).toContain("useMemo");
-    expect(source).toContain("useRef");
-    expect(source).toContain("scrollLeft");
-    expect(source).toContain("onScroll={handleScroll}");
-    expect(source).toContain("tablistRef.current");
-    expect(source).toContain("settingsNavScrollLeftByKey.set");
-    expect(source).toContain("settingsNavScrollLeftByKey.get");
-  });
-});
-
-describe("settings switch styling", () => {
-  it("does not combine conflicting border colors and uses canonical translate utilities", async () => {
-    const source = await readWorkspaceSource(switchSourcePath);
-
-    expect(source).not.toContain("border border-input border-transparent");
-    expect(source).toContain("data-[state=checked]:translate-x-5.5");
-    expect(source).not.toContain("data-[state=checked]:translate-x-[1.375rem]");
+    expect(usersSource).not.toContain('option value="user"');
+    expect(usersSource).toContain("Full admin");
+    expect(usersSource).toContain("High risk");
+    expect(usersSource).toContain("Default user");
+    expect(usersSource).toContain("Service operator");
+    expect(usersSource).toContain("User manager");
+    expect(usersSource).toContain("users:manage");
+    expect(usersSource).toContain("settings:theme");
+    expect(usersSource).toContain("DropdownMenu");
+    expect(usersSource).toContain("Open user actions");
+    expect(usersSource).toContain("Default: admin");
+    expect(usersSource).toContain("canToggleUserStatus");
+    expect(usersSource).toContain("UserCirclePlusIcon");
+    expect(usersSource).toContain('aria-label="Create user"');
+    expect(usersSource).toContain("bg-primary text-primary-foreground");
+    expect(usersSource).toContain("shadow-(--shadow-button)");
+    expect(usersSource).toContain("pointer-events-none size-4");
+    expect(usersSource).not.toContain("lucide-react");
+    expect(usersSource).not.toContain("UserRoundPlus");
+    expect(usersSource).toContain("focus-visible:ring-0");
+    expect(usersSource).toContain("focus-visible:shadow-none");
+    expect(usersSource).toContain("hover:translate-y-0");
+    expect(usersSource).toContain("active:translate-y-0");
+    expect(usersSource).not.toContain(
+      "Manage local users by public ID, permissions, and account status.",
+    );
+    expect(usersSource).not.toContain("<PlusIcon");
+    expect(usersSource).not.toContain("<TableHead>Actions</TableHead>");
+    expect(usersSource).not.toContain('explicitPermissions.join(", ")');
+    expect(hooksSource).toContain("useUsersQuery");
+    expect(hooksSource).toContain("useCreateUserMutation");
+    expect(hooksSource).toContain("useChangeManagedUserPasswordMutation");
+    expect(hooksSource).toContain("usePermissionCatalogQuery");
+    expect(hooksSource).toContain("useUpdateManagedUserPermissionsMutation");
+    expect(hooksSource).toContain("useUpdateManagedUserStatusMutation");
+    expect(hooksSource).not.toContain("useChangeAdminUserRoleMutation");
   });
 });

@@ -1,13 +1,4 @@
 import type {
-  AdminChangeUserPasswordRequest,
-  AdminChangeUserPasswordResponse,
-  AdminChangeUserRoleRequest,
-  AdminDisableUserRequest,
-  AdminPermissionCatalogResponse,
-  AdminUpdateUserPermissionsRequest,
-  AdminUpdateUserStatusRequest,
-  AdminUserResponse,
-  AdminUsersListResponse,
   AuthSetupStatusResponse,
   AuthUserResponse,
   ChangePasswordResponse,
@@ -15,10 +6,22 @@ import type {
   CreateLocalUserResponse,
   LoginResponse,
   LogoutResponse,
+  ManagedUserProfileResponse,
+  ManagedUsersListResponse,
+  PermissionCatalogResponse,
+  PublicUser,
   UpdateUserProfileResponse,
   UserProfileResponse,
 } from "@arrtemplar/shared";
-import { ADMIN_PERMISSION_CATALOG, USER_PERMISSION_VALUES } from "@arrtemplar/shared";
+import {
+  isUserPermission,
+  PERMISSION_CATALOG,
+  PERMISSION_CATEGORIES,
+  PERMISSION_DEFAULT_GRANTS,
+  PERMISSION_RISK_VALUES,
+  PERMISSION_ROUTE_SURFACES,
+  USER_PERMISSION_VALUES,
+} from "@arrtemplar/shared";
 import { Elysia, t } from "elysia";
 import type { DatabaseClient } from "../db/client";
 import { AuthService } from "./auth.service";
@@ -26,49 +29,75 @@ import { MIN_PASSWORD_LENGTH } from "./password";
 import type { LoginRateLimiter } from "./rate-limit";
 import { SESSION_COOKIE_NAME, SESSION_DURATION_SECONDS } from "./session-token";
 
-const userRoleSchema = t.Union([t.Literal("user"), t.Literal("mod"), t.Literal("admin")]);
-const managedUserRoleSchema = t.Union([t.Literal("user"), t.Literal("mod")]);
 const publicUserIdSchema = t.String({ minLength: 9, maxLength: 9, pattern: "^[A-Za-z0-9]{9}$" });
-const userPermissionSchema = t.Union([
-  t.Literal(USER_PERMISSION_VALUES[0]),
-  t.Literal(USER_PERMISSION_VALUES[1]),
-  t.Literal(USER_PERMISSION_VALUES[2]),
-  t.Literal(USER_PERMISSION_VALUES[3]),
-  t.Literal(USER_PERMISSION_VALUES[4]),
-  t.Literal(USER_PERMISSION_VALUES[5]),
-  t.Literal(USER_PERMISSION_VALUES[6]),
-  t.Literal(USER_PERMISSION_VALUES[7]),
-]);
+const userPermissionSchema = t.Union(
+  USER_PERMISSION_VALUES.map((permission) => t.Literal(permission)) as [
+    ReturnType<typeof t.Literal>,
+    ...ReturnType<typeof t.Literal>[],
+  ],
+);
+const permissionCategorySchema = t.Union(
+  PERMISSION_CATEGORIES.map((category) => t.Literal(category)) as [
+    ReturnType<typeof t.Literal>,
+    ...ReturnType<typeof t.Literal>[],
+  ],
+);
+const permissionRiskSchema = t.Union(
+  PERMISSION_RISK_VALUES.map((risk) => t.Literal(risk)) as [
+    ReturnType<typeof t.Literal>,
+    ...ReturnType<typeof t.Literal>[],
+  ],
+);
+const permissionDefaultGrantSchema = t.Union(
+  PERMISSION_DEFAULT_GRANTS.map((grant) => t.Literal(grant)) as [
+    ReturnType<typeof t.Literal>,
+    ...ReturnType<typeof t.Literal>[],
+  ],
+);
+const permissionRouteSurfaceSchema = t.Union(
+  PERMISSION_ROUTE_SURFACES.map((surface) => t.Literal(surface)) as [
+    ReturnType<typeof t.Literal>,
+    ...ReturnType<typeof t.Literal>[],
+  ],
+);
+
+const permissionRouteSchema = t.Object({
+  surface: permissionRouteSurfaceSchema,
+  path: t.String(),
+});
 
 const publicUserSchema = t.Object({
   id: publicUserIdSchema,
   username: t.String(),
   email: t.String({ format: "email" }),
-  role: userRoleSchema,
   permissions: t.Array(userPermissionSchema),
   createdAt: t.String({ format: "date-time" }),
   lastLoginAt: t.Union([t.String({ format: "date-time" }), t.Null()]),
 });
 
-const adminUserSummarySchema = t.Object({
+const managedUserSummarySchema = t.Object({
   id: publicUserIdSchema,
   username: t.String(),
-  role: managedUserRoleSchema,
   disabledAt: t.Union([t.String({ format: "date-time" }), t.Null()]),
   createdAt: t.String({ format: "date-time" }),
   updatedAt: t.String({ format: "date-time" }),
   permissions: t.Array(userPermissionSchema),
 });
 
-const adminPermissionCatalogEntrySchema = t.Object({
+const managedUserProfileSchema = t.Object({
+  ...managedUserSummarySchema.properties,
+  email: t.String({ format: "email" }),
+  lastLoginAt: t.Union([t.String({ format: "date-time" }), t.Null()]),
+});
+
+const permissionCatalogEntrySchema = t.Object({
   permission: userPermissionSchema,
+  category: permissionCategorySchema,
   label: t.String(),
   description: t.String(),
-  routeSlug: t.String(),
-  sourceAdminRoute: t.String(),
-  minimumRole: t.Union([t.Literal("mod"), t.Literal("admin")]),
-  risk: t.Union([t.Literal("standard"), t.Literal("high")]),
-  augmentsPersonalRoute: t.Boolean(),
+  risk: permissionRiskSchema,
+  defaultGrant: permissionDefaultGrantSchema,
+  route: t.Union([permissionRouteSchema, t.Null()]),
 });
 
 const loginRequestSchema = t.Object({
@@ -98,35 +127,30 @@ const changePasswordRequestSchema = t.Object({
   newPassword: t.String({ minLength: MIN_PASSWORD_LENGTH, maxLength: 1024 }),
 });
 
-const adminUserParamsSchema = t.Object({
-  id: publicUserIdSchema,
+const managedUserParamsSchema = t.Object({
+  publicUserId: publicUserIdSchema,
 });
 
-const adminChangeUserPasswordRequestSchema = t.Object({
+const managedUserPasswordRequestSchema = t.Object({
   password: t.String({ minLength: MIN_PASSWORD_LENGTH, maxLength: 1024 }),
 });
 
-const adminChangeUserRoleRequestSchema = t.Object({
-  role: managedUserRoleSchema,
-});
-
-const adminDisableUserRequestSchema = t.Object({});
-
-const adminUpdateUserStatusRequestSchema = t.Object({
-  disabled: t.Literal(false),
-});
-
-const adminUpdateUserPermissionsRequestSchema = t.Object({
+const managedUserPermissionsRequestSchema = t.Object({
   permissions: t.Array(userPermissionSchema),
+});
+
+const managedUserStatusRequestSchema = t.Object({
+  disabled: t.Boolean(),
 });
 
 const loginResponseSchema = t.Object({ user: publicUserSchema });
 const createAdminResponseSchema = t.Object({ user: publicUserSchema });
-const createLocalUserResponseSchema = t.Object({ user: publicUserSchema });
-const adminUsersListResponseSchema = t.Object({ users: t.Array(adminUserSummarySchema) });
-const adminUserResponseSchema = t.Object({ user: adminUserSummarySchema });
-const adminPermissionCatalogResponseSchema = t.Object({
-  permissions: t.Array(adminPermissionCatalogEntrySchema),
+const createLocalUserResponseSchema = t.Object({ user: managedUserSummarySchema });
+const managedUsersListResponseSchema = t.Object({ users: t.Array(managedUserSummarySchema) });
+const managedUserResponseSchema = t.Object({ user: managedUserSummarySchema });
+const managedUserProfileResponseSchema = t.Object({ user: managedUserProfileSchema });
+const permissionCatalogResponseSchema = t.Object({
+  permissions: t.Array(permissionCatalogEntrySchema),
 });
 const authSetupStatusResponseSchema = t.Object({ required: t.Boolean() });
 const authUserResponseSchema = t.Object({ user: t.Union([publicUserSchema, t.Null()]) });
@@ -144,69 +168,11 @@ const apiErrorResponseSchema = t.Object({
   }),
 });
 
-const adminUserMutationResponseSchemas = {
-  200: adminUserResponseSchema,
-  401: apiErrorResponseSchema,
-  403: apiErrorResponseSchema,
-  404: apiErrorResponseSchema,
-  409: apiErrorResponseSchema,
-};
-
-const adminUserMutationRouteSchemas = {
-  params: adminUserParamsSchema,
-  cookie: sessionCookieSchema,
-  response: adminUserMutationResponseSchemas,
-};
-
 export type AuthRoutesOptions = {
   database: DatabaseClient;
   sessionCookieSecure: boolean;
   rateLimiter?: LoginRateLimiter;
 };
-
-type AdminRoleFailure = Extract<ReturnType<AuthService["requireRole"]>, { ok: false }>;
-type AdminTargetMutationBase = { sessionCookieValue: unknown };
-type AdminPasswordMutation = AdminTargetMutationBase & {
-  body: AdminChangeUserPasswordRequest;
-  kind: "password";
-};
-type AdminRoleMutation = AdminTargetMutationBase & {
-  body: AdminChangeUserRoleRequest;
-  kind: "role";
-};
-type AdminDisableMutation = AdminTargetMutationBase & {
-  body: AdminDisableUserRequest;
-  kind: "disable";
-};
-type AdminStatusMutation = AdminTargetMutationBase & {
-  body: AdminUpdateUserStatusRequest;
-  kind: "status";
-};
-type AdminPermissionsMutation = AdminTargetMutationBase & {
-  body: AdminUpdateUserPermissionsRequest;
-  kind: "permissions";
-};
-type AdminTargetMutation =
-  | AdminPasswordMutation
-  | AdminRoleMutation
-  | AdminDisableMutation
-  | AdminStatusMutation
-  | AdminPermissionsMutation;
-type AdminPasswordMutationResult = Awaited<
-  ReturnType<AuthService["changeAdminManagedUserPassword"]>
->;
-type AdminRoleMutationResult = Awaited<ReturnType<AuthService["changeAdminManagedUserRole"]>>;
-type AdminDisableMutationResult = Awaited<ReturnType<AuthService["disableAdminManagedUser"]>>;
-type AdminStatusMutationResult = Awaited<ReturnType<AuthService["updateAdminManagedUserStatus"]>>;
-type AdminPermissionsMutationResult = Awaited<
-  ReturnType<AuthService["updateAdminManagedUserPermissions"]>
->;
-type AdminTargetMutationResult =
-  | AdminPasswordMutationResult
-  | AdminRoleMutationResult
-  | AdminDisableMutationResult
-  | AdminStatusMutationResult
-  | AdminPermissionsMutationResult;
 
 export function createAuthRoutes(options: AuthRoutesOptions) {
   const authService = new AuthService(options.database, options.rateLimiter);
@@ -214,8 +180,9 @@ export function createAuthRoutes(options: AuthRoutesOptions) {
   return new Elysia({ prefix: "/api" })
     .use(createSetupRoutes(authService, options))
     .use(createSessionRoutes(authService, options))
-    .use(createUserRoutes(authService))
-    .use(createAdminRoutes(authService));
+    .use(createProfileRoutes(authService))
+    .use(createPermissionRoutes(authService))
+    .use(createUsersRoutes(authService));
 }
 
 function createSetupRoutes(authService: AuthService, options: AuthRoutesOptions) {
@@ -241,14 +208,7 @@ function createSetupRoutes(authService: AuthService, options: AuthRoutesOptions)
           return status(result.status, result.body);
         }
 
-        writeSessionCookie(
-          cookie[SESSION_COOKIE_NAME],
-          result.sessionToken,
-          result.expiresAt,
-          options,
-        );
-
-        return { user: result.user } satisfies CreateAdminResponse;
+        return writeSessionUserResponse(cookie[SESSION_COOKIE_NAME], options, result);
       },
       {
         body: createAdminRequestSchema,
@@ -260,7 +220,7 @@ function createSetupRoutes(authService: AuthService, options: AuthRoutesOptions)
         detail: {
           summary: "Create first admin account",
           description:
-            "Creates the first user as an admin account and signs them in. Disabled after any user exists.",
+            "Creates the first user, grants system:admin, and signs the user in. Disabled after any user exists.",
           tags: ["Auth"],
         },
       },
@@ -275,21 +235,10 @@ function createSessionRoutes(authService: AuthService, options: AuthRoutesOption
         const result = await authService.login(body, createRequestContext(request));
 
         if (!result.ok) {
-          if (result.status === 429) {
-            return status(429, result.body);
-          }
-
-          return status(401, result.body);
+          return status(result.status, result.body);
         }
 
-        writeSessionCookie(
-          cookie[SESSION_COOKIE_NAME],
-          result.sessionToken,
-          result.expiresAt,
-          options,
-        );
-
-        return { user: result.user } satisfies LoginResponse;
+        return writeSessionUserResponse(cookie[SESSION_COOKIE_NAME], options, result);
       },
       {
         body: loginRequestSchema,
@@ -346,10 +295,10 @@ function createSessionRoutes(authService: AuthService, options: AuthRoutesOption
     );
 }
 
-function createUserRoutes(authService: AuthService) {
+function createProfileRoutes(authService: AuthService) {
   return new Elysia()
     .get(
-      "/user/profile",
+      "/profile",
       ({ cookie, status }) => {
         const result = authService.getUserProfile(
           readSessionToken(cookie[SESSION_COOKIE_NAME].value),
@@ -368,14 +317,14 @@ function createUserRoutes(authService: AuthService) {
           401: apiErrorResponseSchema,
         },
         detail: {
-          summary: "Get user profile",
+          summary: "Get profile",
           description: "Returns the authenticated user's own profile.",
           tags: ["Auth"],
         },
       },
     )
     .put(
-      "/user/profile",
+      "/profile",
       ({ body, cookie, request, status }) => {
         const result = authService.updateUserProfile(
           readSessionToken(cookie[SESSION_COOKIE_NAME].value),
@@ -398,14 +347,14 @@ function createUserRoutes(authService: AuthService) {
           409: apiErrorResponseSchema,
         },
         detail: {
-          summary: "Update user profile",
+          summary: "Update profile",
           description: "Updates username and email for the authenticated user only.",
           tags: ["Auth"],
         },
       },
     )
     .put(
-      "/user/password",
+      "/profile/password",
       async ({ body, cookie, request, status }) => {
         const result = await authService.changePassword(
           readSessionToken(cookie[SESSION_COOKIE_NAME].value),
@@ -427,7 +376,7 @@ function createUserRoutes(authService: AuthService) {
           401: apiErrorResponseSchema,
         },
         detail: {
-          summary: "Change user password",
+          summary: "Change own password",
           description:
             "Changes the authenticated user's password after verifying the current password.",
           tags: ["Auth"],
@@ -436,106 +385,80 @@ function createUserRoutes(authService: AuthService) {
     );
 }
 
-function createAdminRoutes(authService: AuthService) {
+function createPermissionRoutes(authService: AuthService) {
+  return new Elysia().get(
+    "/permissions/catalog",
+    ({ cookie, status }) => {
+      return withUsersManage(
+        authService,
+        cookie[SESSION_COOKIE_NAME].value,
+        status,
+        () => ({ permissions: [...PERMISSION_CATALOG] }) satisfies PermissionCatalogResponse,
+      );
+    },
+    {
+      cookie: sessionCookieSchema,
+      response: {
+        200: permissionCatalogResponseSchema,
+        401: apiErrorResponseSchema,
+        403: apiErrorResponseSchema,
+      },
+      detail: {
+        summary: "List permission catalog",
+        description:
+          "Returns the shared permission catalog for user-management surfaces guarded by users:manage.",
+        tags: ["Auth"],
+      },
+    },
+  );
+}
+
+function createUsersRoutes(authService: AuthService) {
   return new Elysia()
     .get(
-      "/admin/auth/check",
-      ({ cookie, request, status }) => {
-        const result = requireAdmin(authService, cookie[SESSION_COOKIE_NAME].value);
-
-        if (!result.ok) return status(result.status, result.body);
-
-        authService.recordAdminAuthCheck(result.user, createRequestContext(request));
-
-        return { user: result.user } satisfies AuthUserResponse;
-      },
-      {
-        cookie: sessionCookieSchema,
-        response: {
-          200: authUserResponseSchema,
-          401: apiErrorResponseSchema,
-          403: apiErrorResponseSchema,
-        },
-        detail: {
-          summary: "Check admin authentication",
-          description:
-            "Protected admin endpoint used to verify session and admin-role enforcement.",
-          tags: ["Auth"],
-        },
-      },
-    )
-    .get(
-      "/admin/permission-catalog",
+      "/users",
       ({ cookie, status }) => {
-        const adminResult = requireAdmin(authService, cookie[SESSION_COOKIE_NAME].value);
+        return withUsersManage(authService, cookie[SESSION_COOKIE_NAME].value, status, (user) => {
+          const result = authService.listUsers(user);
 
-        if (!adminResult.ok) return status(adminResult.status, adminResult.body);
-
-        return {
-          permissions: [...ADMIN_PERMISSION_CATALOG],
-        } satisfies AdminPermissionCatalogResponse;
+          return result.ok
+            ? ({ users: result.users } satisfies ManagedUsersListResponse)
+            : status(result.status, result.body);
+        });
       },
       {
         cookie: sessionCookieSchema,
         response: {
-          200: adminPermissionCatalogResponseSchema,
+          200: managedUsersListResponseSchema,
           401: apiErrorResponseSchema,
           403: apiErrorResponseSchema,
         },
         detail: {
-          summary: "List grantable admin sections",
-          description:
-            "Admin-only endpoint returning the shared permission catalog for mod grants.",
-          tags: ["Auth"],
-        },
-      },
-    )
-    .get(
-      "/admin/users",
-      ({ cookie, status }) => {
-        const adminResult = requireAdmin(authService, cookie[SESSION_COOKIE_NAME].value);
-
-        if (!adminResult.ok) {
-          return status(adminResult.status, adminResult.body);
-        }
-
-        const result = authService.listAdminUsers();
-
-        return { users: result.users } satisfies AdminUsersListResponse;
-      },
-      {
-        cookie: sessionCookieSchema,
-        response: {
-          200: adminUsersListResponseSchema,
-          401: apiErrorResponseSchema,
-          403: apiErrorResponseSchema,
-        },
-        detail: {
-          summary: "List local user accounts",
-          description:
-            "Admin-only endpoint returning safe local-account summaries without password hashes or session secrets.",
+          summary: "List users",
+          description: "Returns safe user summaries for actors with users:manage or system:admin.",
           tags: ["Auth"],
         },
       },
     )
     .post(
-      "/admin/users",
+      "/users",
       async ({ body, cookie, request, status }) => {
-        const adminResult = requireAdmin(authService, cookie[SESSION_COOKIE_NAME].value);
+        return withUsersManageAsync(
+          authService,
+          cookie[SESSION_COOKIE_NAME].value,
+          status,
+          async (user) => {
+            const result = await authService.createLocalUser(
+              body,
+              user,
+              createRequestContext(request),
+            );
 
-        if (!adminResult.ok) return status(adminResult.status, adminResult.body);
-
-        const result = await authService.createLocalUser(
-          body,
-          adminResult.user,
-          createRequestContext(request),
+            return result.ok
+              ? ({ user: result.user } satisfies CreateLocalUserResponse)
+              : status(result.status, result.body);
+          },
         );
-
-        if (!result.ok) {
-          return status(result.status, result.body);
-        }
-
-        return { user: result.user } satisfies CreateLocalUserResponse;
       },
       {
         body: createLocalUserRequestSchema,
@@ -547,29 +470,91 @@ function createAdminRoutes(authService: AuthService) {
           409: apiErrorResponseSchema,
         },
         detail: {
-          summary: "Create local user account",
+          summary: "Create user",
           description:
-            "Admin-only endpoint for creating local user accounts. Accounts created here always receive the user role.",
+            "Creates a local user account when the actor has users:manage plus users:create.",
           tags: ["Auth"],
         },
       },
     )
-    .patch(
-      "/admin/users/:id/password",
-      async ({ body, cookie, params, request, status }) => {
-        const result = await runAdminTargetMutation(authService, request, params.id, {
-          body,
-          kind: "password",
-          sessionCookieValue: cookie[SESSION_COOKIE_NAME].value,
-        });
+    .get(
+      "/users/:publicUserId",
+      ({ cookie, params, status }) => {
+        return withUsersManage(authService, cookie[SESSION_COOKIE_NAME].value, status, (user) => {
+          const result = authService.getManagedUserProfile(params.publicUserId, user);
 
-        return result.ok
-          ? (result.body satisfies AdminChangeUserPasswordResponse)
-          : status(result.status, result.body);
+          return result.ok
+            ? ({ user: result.user } satisfies ManagedUserProfileResponse)
+            : status(result.status, result.body);
+        });
       },
       {
-        body: adminChangeUserPasswordRequestSchema,
-        params: adminUserParamsSchema,
+        params: managedUserParamsSchema,
+        cookie: sessionCookieSchema,
+        response: {
+          200: managedUserProfileResponseSchema,
+          401: apiErrorResponseSchema,
+          403: apiErrorResponseSchema,
+          404: apiErrorResponseSchema,
+        },
+        detail: {
+          summary: "Get managed user profile",
+          description:
+            "Returns a managed user's profile for actors with users:manage or system:admin.",
+          tags: ["Auth"],
+        },
+      },
+    )
+    .put(
+      "/users/:publicUserId/settings/main",
+      createManagedUserMutationHandler<Parameters<AuthService["updateManagedUserProfile"]>[1]>(
+        authService,
+        (publicUserId, input, user, context) =>
+          authService.updateManagedUserProfile(publicUserId, input, user, context),
+      ),
+      {
+        params: managedUserParamsSchema,
+        body: updateUserProfileRequestSchema,
+        cookie: sessionCookieSchema,
+        response: {
+          200: managedUserProfileResponseSchema,
+          401: apiErrorResponseSchema,
+          403: apiErrorResponseSchema,
+          404: apiErrorResponseSchema,
+          409: apiErrorResponseSchema,
+        },
+        detail: {
+          summary: "Update managed user profile",
+          description:
+            "Updates another user's identity when the actor has users:manage plus users:update.",
+          tags: ["Auth"],
+        },
+      },
+    )
+    .put(
+      "/users/:publicUserId/settings/password",
+      async ({ body, cookie, params, request, status }) => {
+        return withUsersManageAsync(
+          authService,
+          cookie[SESSION_COOKIE_NAME].value,
+          status,
+          async (user) => {
+            const result = await authService.changeManagedUserPassword(
+              params.publicUserId,
+              body,
+              user,
+              createRequestContext(request),
+            );
+
+            return result.ok
+              ? (result.body satisfies ChangePasswordResponse)
+              : status(result.status, result.body);
+          },
+        );
+      },
+      {
+        params: managedUserParamsSchema,
+        body: managedUserPasswordRequestSchema,
         cookie: sessionCookieSchema,
         response: {
           200: changePasswordResponseSchema,
@@ -579,104 +564,73 @@ function createAdminRoutes(authService: AuthService) {
           409: apiErrorResponseSchema,
         },
         detail: {
-          summary: "Change a local account password",
+          summary: "Change managed user password",
           description:
-            "Admin-only high-risk endpoint that revokes the target user's sessions after changing their password.",
+            "Changes another user's password when the actor has users:manage plus users:password.",
+          tags: ["Auth"],
+        },
+      },
+    )
+    .put(
+      "/users/:publicUserId/settings/permissions",
+      ({ body, cookie, params, request, status }) => {
+        return runManagedUserMutation<Parameters<AuthService["updateManagedUserPermissions"]>[1]>(
+          authService,
+          cookie[SESSION_COOKIE_NAME].value,
+          params.publicUserId,
+          {
+            permissions: body.permissions.filter(
+              (permission): permission is (typeof USER_PERMISSION_VALUES)[number] =>
+                typeof permission === "string" && isUserPermission(permission),
+            ),
+          },
+          request,
+          status,
+          (publicUserId, input, user, context) =>
+            authService.updateManagedUserPermissions(publicUserId, input, user, context),
+        );
+      },
+      {
+        params: managedUserParamsSchema,
+        body: managedUserPermissionsRequestSchema,
+        cookie: sessionCookieSchema,
+        response: {
+          200: managedUserResponseSchema,
+          401: apiErrorResponseSchema,
+          403: apiErrorResponseSchema,
+          404: apiErrorResponseSchema,
+          409: apiErrorResponseSchema,
+        },
+        detail: {
+          summary: "Replace managed user permissions",
+          description:
+            "Replaces explicit permission grants when the actor has users:manage plus users:permissions.",
           tags: ["Auth"],
         },
       },
     )
     .patch(
-      "/admin/users/:id/role",
-      async ({ body, cookie, params, request, status }) => {
-        const result = await runAdminTargetMutation(authService, request, params.id, {
-          body,
-          kind: "role",
-          sessionCookieValue: cookie[SESSION_COOKIE_NAME].value,
-        });
-
-        return result.ok
-          ? ({ user: result.user } satisfies AdminUserResponse)
-          : status(result.status, result.body);
-      },
+      "/users/:publicUserId/status",
+      createManagedUserMutationHandler<Parameters<AuthService["updateManagedUserStatus"]>[1]>(
+        authService,
+        (publicUserId, input, user, context) =>
+          authService.updateManagedUserStatus(publicUserId, input, user, context),
+      ),
       {
-        ...adminUserMutationRouteSchemas,
-        body: adminChangeUserRoleRequestSchema,
-        detail: {
-          summary: "Change a local account role",
-          description:
-            "Admin-only high-risk endpoint that revokes target sessions and protects admin accounts from managed-user changes.",
-          tags: ["Auth"],
+        params: managedUserParamsSchema,
+        body: managedUserStatusRequestSchema,
+        cookie: sessionCookieSchema,
+        response: {
+          200: managedUserResponseSchema,
+          401: apiErrorResponseSchema,
+          403: apiErrorResponseSchema,
+          404: apiErrorResponseSchema,
+          409: apiErrorResponseSchema,
         },
-      },
-    )
-    .delete(
-      "/admin/users/:id",
-      async ({ body, cookie, params, request, status }) => {
-        const result = await runAdminTargetMutation(authService, request, params.id, {
-          body,
-          kind: "disable",
-          sessionCookieValue: cookie[SESSION_COOKIE_NAME].value,
-        });
-
-        return result.ok
-          ? ({ user: result.user } satisfies AdminUserResponse)
-          : status(result.status, result.body);
-      },
-      {
-        ...adminUserMutationRouteSchemas,
-        body: adminDisableUserRequestSchema,
         detail: {
-          summary: "Remove local account access",
+          summary: "Update managed user status",
           description:
-            "Admin-only high-risk endpoint that soft-deletes a local account by setting disabledAt, revokes target sessions, and protects the last active admin.",
-          tags: ["Auth"],
-        },
-      },
-    )
-    .patch(
-      "/admin/users/:id/permissions",
-      async ({ body, cookie, params, request, status }) => {
-        const result = await runAdminTargetMutation(authService, request, params.id, {
-          body,
-          kind: "permissions",
-          sessionCookieValue: cookie[SESSION_COOKIE_NAME].value,
-        });
-
-        return result.ok
-          ? ({ user: result.user } satisfies AdminUserResponse)
-          : status(result.status, result.body);
-      },
-      {
-        ...adminUserMutationRouteSchemas,
-        body: adminUpdateUserPermissionsRequestSchema,
-        detail: {
-          summary: "Replace local account permission grants",
-          description:
-            "Admin-only high-risk endpoint that validates grants against the shared catalog and revokes target sessions.",
-          tags: ["Auth"],
-        },
-      },
-    )
-    .patch(
-      "/admin/users/:id/status",
-      async ({ body, cookie, params, request, status }) => {
-        const result = await runAdminTargetMutation(authService, request, params.id, {
-          body,
-          kind: "status",
-          sessionCookieValue: cookie[SESSION_COOKIE_NAME].value,
-        });
-
-        return result.ok
-          ? ({ user: result.user } satisfies AdminUserResponse)
-          : status(result.status, result.body);
-      },
-      {
-        ...adminUserMutationRouteSchemas,
-        body: adminUpdateUserStatusRequestSchema,
-        detail: {
-          summary: "Restore local account access",
-          description: "Admin-only high-risk endpoint that re-enables a disabled local account.",
+            "Disables or restores another user when the actor has users:manage plus users:disable.",
           tags: ["Auth"],
         },
       },
@@ -687,89 +641,121 @@ function readSessionToken(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-function requireAdmin(authService: AuthService, sessionCookieValue: unknown) {
-  return authService.requireRole(readSessionToken(sessionCookieValue), "admin");
+function requireUsersManage(authService: AuthService, sessionCookieValue: unknown) {
+  return authService.requirePermission(readSessionToken(sessionCookieValue), "users:manage");
 }
 
-function runAdminTargetMutation(
-  authService: AuthService,
-  request: Request,
-  targetUserId: string,
-  input: AdminPasswordMutation,
-): Promise<AdminRoleFailure | AdminPasswordMutationResult>;
-function runAdminTargetMutation(
-  authService: AuthService,
-  request: Request,
-  targetUserId: string,
-  input: AdminRoleMutation,
-): Promise<AdminRoleFailure | AdminRoleMutationResult>;
-function runAdminTargetMutation(
-  authService: AuthService,
-  request: Request,
-  targetUserId: string,
-  input: AdminDisableMutation,
-): Promise<AdminRoleFailure | AdminDisableMutationResult>;
-function runAdminTargetMutation(
-  authService: AuthService,
-  request: Request,
-  targetUserId: string,
-  input: AdminStatusMutation,
-): Promise<AdminRoleFailure | AdminStatusMutationResult>;
-function runAdminTargetMutation(
-  authService: AuthService,
-  request: Request,
-  targetUserId: string,
-  input: AdminPermissionsMutation,
-): Promise<AdminRoleFailure | AdminPermissionsMutationResult>;
-async function runAdminTargetMutation(
-  authService: AuthService,
-  request: Request,
-  targetUserId: string,
-  input: AdminTargetMutation,
-): Promise<AdminRoleFailure | AdminTargetMutationResult> {
-  const adminResult = requireAdmin(authService, input.sessionCookieValue);
+function writeSessionUserResponse(
+  sessionCookie: {
+    value: string | undefined;
+    httpOnly?: boolean | undefined;
+    secure?: boolean | undefined;
+    sameSite?: boolean | "none" | "lax" | "strict" | undefined;
+    path?: string | undefined;
+    maxAge?: number | undefined;
+    expires?: Date | undefined;
+  },
+  options: AuthRoutesOptions,
+  result: { expiresAt: Date; sessionToken: string; user: PublicUser },
+): CreateAdminResponse | LoginResponse {
+  writeSessionCookie(sessionCookie, result.sessionToken, result.expiresAt, options);
 
-  if (!adminResult.ok) return adminResult;
+  return { user: result.user };
+}
 
-  const context = createRequestContext(request);
+// biome-ignore lint/suspicious/noExplicitAny: Elysia's SelectiveStatus callback type varies per route and is impractical to model precisely for these shared helpers.
+type StatusHandler = (...args: any[]) => any;
 
-  switch (input.kind) {
-    case "password":
-      return authService.changeAdminManagedUserPassword(
-        targetUserId,
-        input.body,
-        adminResult.user,
-        context,
-      );
-    case "role":
-      return authService.changeAdminManagedUserRole(
-        targetUserId,
-        input.body,
-        adminResult.user,
-        context,
-      );
-    case "disable":
-      return authService.disableAdminManagedUser(
-        targetUserId,
-        input.body,
-        adminResult.user,
-        context,
-      );
-    case "status":
-      return authService.updateAdminManagedUserStatus(
-        targetUserId,
-        input.body,
-        adminResult.user,
-        context,
-      );
-    case "permissions":
-      return authService.updateAdminManagedUserPermissions(
-        targetUserId,
-        input.body,
-        adminResult.user,
-        context,
-      );
+function withUsersManage<T>(
+  authService: AuthService,
+  sessionCookieValue: unknown,
+  status: StatusHandler,
+  onAllowed: (user: PublicUser) => T,
+): T | ReturnType<StatusHandler> {
+  const permissionResult = requireUsersManage(authService, sessionCookieValue);
+
+  if (!permissionResult.ok) {
+    return status(permissionResult.status, permissionResult.body);
   }
+
+  return onAllowed(permissionResult.user);
+}
+
+async function withUsersManageAsync<T>(
+  authService: AuthService,
+  sessionCookieValue: unknown,
+  status: StatusHandler,
+  onAllowed: (user: PublicUser) => Promise<T>,
+): Promise<T | ReturnType<StatusHandler>> {
+  const permissionResult = requireUsersManage(authService, sessionCookieValue);
+
+  if (!permissionResult.ok) {
+    return status(permissionResult.status, permissionResult.body);
+  }
+
+  return onAllowed(permissionResult.user);
+}
+
+function runManagedUserMutation<TBody>(
+  authService: AuthService,
+  sessionCookieValue: unknown,
+  publicUserId: string,
+  input: TBody,
+  request: Request,
+  status: StatusHandler,
+  mutate: (
+    publicUserId: string,
+    input: TBody,
+    user: PublicUser,
+    context: ReturnType<typeof createRequestContext>,
+  ) => { ok: false; status: 401 | 403 | 404 | 409; body: unknown } | { ok: true; user: unknown },
+): { user: unknown } | ReturnType<StatusHandler> {
+  return withUsersManage(authService, sessionCookieValue, status, (user) =>
+    managedUserResponseOrStatus(
+      mutate(publicUserId, input, user, createRequestContext(request)),
+      status,
+    ),
+  );
+}
+
+function managedUserResponseOrStatus(
+  result: { ok: false; status: 401 | 403 | 404 | 409; body: unknown } | { ok: true; user: unknown },
+  status: StatusHandler,
+) {
+  return result.ok ? { user: result.user } : status(result.status, result.body);
+}
+
+function createManagedUserMutationHandler<TBody>(
+  authService: AuthService,
+  mutate: (
+    publicUserId: string,
+    input: TBody,
+    user: PublicUser,
+    context: ReturnType<typeof createRequestContext>,
+  ) => { ok: false; status: 401 | 403 | 404 | 409; body: unknown } | { ok: true; user: unknown },
+) {
+  return ({
+    body,
+    cookie,
+    params,
+    request,
+    status,
+  }: {
+    body: TBody;
+    cookie: Record<string, { value?: unknown } | undefined>;
+    params: { publicUserId: string };
+    request: Request;
+    status: StatusHandler;
+  }) =>
+    runManagedUserMutation(
+      authService,
+      cookie[SESSION_COOKIE_NAME]?.value,
+      params.publicUserId,
+      body,
+      request,
+      status,
+      mutate,
+    );
 }
 
 function writeSessionCookie(

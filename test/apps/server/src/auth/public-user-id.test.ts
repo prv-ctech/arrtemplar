@@ -1,25 +1,43 @@
 import { describe, expect, it } from "bun:test";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   generatePublicUserId,
   PUBLIC_USER_ID_ALPHABET,
   PUBLIC_USER_ID_LENGTH,
 } from "../../../../../apps/server/src/auth/public-user-id";
-import { userPermissionGrants, userRoles, users } from "../../../../../apps/server/src/db/schema";
 import {
-  ADMIN_PERMISSION_CATALOG,
+  DEFAULT_SIGNED_IN_USER_PERMISSIONS,
+  PERMISSION_CATALOG,
   USER_PERMISSION_VALUES,
   type UserPermission,
 } from "../../../../../packages/shared/src";
 
+const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../../");
+const schemaSourcePath = `${workspaceRoot}/apps/server/src/db/schema.ts`;
+const sqlBaselinePath = `${workspaceRoot}/apps/server/drizzle/0000_core_tables.sql`;
+const snapshotPath = `${workspaceRoot}/apps/server/drizzle/meta/0000_snapshot.json`;
+
 const expectedPermissions: UserPermission[] = [
-  "admin:general",
-  "admin:library",
-  "admin:users",
-  "admin:import",
-  "admin:notifications",
-  "admin:services",
-  "admin:logs",
-  "admin:about",
+  "system:admin",
+  "users:manage",
+  "users:create",
+  "users:update",
+  "users:password",
+  "users:permissions",
+  "users:disable",
+  "profile:update",
+  "profile:password",
+  "profile:notifications",
+  "settings:view",
+  "settings:general",
+  "settings:services",
+  "settings:library",
+  "settings:import",
+  "settings:notifications",
+  "settings:logs",
+  "settings:about",
+  "settings:theme",
 ];
 
 describe("managed account public IDs", () => {
@@ -54,32 +72,76 @@ describe("managed account public IDs", () => {
   });
 });
 
-describe("role and permission foundations", () => {
-  it("models the ordered user < mod < admin role hierarchy", () => {
-    expect(userRoles).toEqual(["user", "mod", "admin"]);
-  });
-
-  it("exports the shared admin-derived permission catalog", () => {
+describe("permission foundations", () => {
+  it("exports the shared permission-first catalog", () => {
     expect([...USER_PERMISSION_VALUES]).toEqual(expectedPermissions);
-    expect(ADMIN_PERMISSION_CATALOG.map((entry) => entry.permission)).toEqual(expectedPermissions);
-    expect(ADMIN_PERMISSION_CATALOG.map((entry) => entry.routeSlug)).toEqual([
-      "general",
-      "library",
-      "users",
-      "import",
-      "notifications",
-      "services",
-      "logs",
-      "about",
+    expect(PERMISSION_CATALOG.map((entry) => entry.permission)).toEqual(expectedPermissions);
+    expect(DEFAULT_SIGNED_IN_USER_PERMISSIONS).toEqual([
+      "profile:update",
+      "profile:password",
+      "profile:notifications",
+      "settings:view",
+      "settings:about",
+      "settings:theme",
     ]);
-    expect(ADMIN_PERMISSION_CATALOG.every((entry) => entry.minimumRole === "mod")).toBe(true);
-    expect(
-      ADMIN_PERMISSION_CATALOG.every((entry) => entry.sourceAdminRoute.startsWith("/admin/")),
-    ).toBe(true);
+
+    expect(PERMISSION_CATALOG.find((entry) => entry.permission === "system:admin")).toMatchObject({
+      category: "system",
+      risk: "critical",
+      defaultGrant: "bootstrap-first-user",
+      route: null,
+    });
+    expect(PERMISSION_CATALOG.find((entry) => entry.permission === "users:manage")).toMatchObject({
+      category: "users",
+      route: { surface: "users", path: "/users" },
+      defaultGrant: "explicit",
+    });
+    expect(PERMISSION_CATALOG.find((entry) => entry.permission === "profile:update")).toMatchObject(
+      {
+        category: "profile",
+        route: { surface: "profile", path: "/profile/settings/main" },
+        defaultGrant: "signed-in-user",
+      },
+    );
+    expect(PERMISSION_CATALOG.find((entry) => entry.permission === "settings:theme")).toMatchObject(
+      {
+        category: "settings",
+        route: { surface: "settings", path: "/settings/theme" },
+        defaultGrant: "signed-in-user",
+      },
+    );
   });
 
-  it("exports schema columns and tables for managed account IDs and permission grants", () => {
-    expect(users.publicId).toBeDefined();
-    expect(userPermissionGrants).toBeDefined();
+  it("keeps public IDs and permission grants in the server schema source", async () => {
+    const source = await Bun.file(schemaSourcePath).text();
+
+    expect(source).toContain('publicId: text("public_id")');
+    expect(source).toContain('"user_permission_grants"');
+  });
+
+  it("removes legacy role storage from the users table sources", async () => {
+    const [schemaSource, sqlSource, snapshotSource] = await Promise.all([
+      Bun.file(schemaSourcePath).text(),
+      Bun.file(sqlBaselinePath).text(),
+      Bun.file(snapshotPath).text(),
+    ]);
+    const snapshot = JSON.parse(snapshotSource) as {
+      tables: {
+        users: {
+          columns: Record<string, unknown>;
+          indexes: Record<string, unknown>;
+        };
+      };
+    };
+
+    expect(schemaSource).not.toContain("USER_ROLES");
+    expect(schemaSource).not.toContain('role: text("role"');
+    expect(schemaSource).not.toContain('index("users_role_idx"');
+
+    expect(sqlSource).not.toContain("`role` text");
+    expect(sqlSource).not.toContain("CREATE INDEX `users_role_idx`");
+
+    expect(snapshot.tables.users.columns.role).toBeUndefined();
+    expect(snapshot.tables.users.indexes.users_role_idx).toBeUndefined();
   });
 });

@@ -4,7 +4,6 @@ CREATE TABLE `users` (
 	`username` text NOT NULL,
 	`email` text NOT NULL,
 	`password_hash` text NOT NULL,
-	`role` text DEFAULT 'user' NOT NULL,
 	`disabled_at` text,
 	`created_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
 	`updated_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
@@ -14,7 +13,6 @@ CREATE TABLE `users` (
 CREATE UNIQUE INDEX `users_public_id_unique` ON `users` (`public_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `users_username_unique` ON `users` (`username`);--> statement-breakpoint
 CREATE UNIQUE INDEX `users_email_unique` ON `users` (`email`);--> statement-breakpoint
-CREATE INDEX `users_role_idx` ON `users` (`role`);--> statement-breakpoint
 CREATE TABLE `user_permission_grants` (
 	`id` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,

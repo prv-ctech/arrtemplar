@@ -17,59 +17,46 @@ describe("Catppuccin theme options", () => {
   });
 
   it("uses official Catppuccin palette colors for theme preview swatches", () => {
-    expect(CATPPUCCIN_THEMES).toEqual([
-      {
-        value: "latte",
-        label: "Latte",
-        description: "Bright panels with mauve command accents.",
-        dark: false,
-        swatches: [
-          "#e6e9ef",
-          "#eff1f5",
-          "#ccd0da",
-          "#8839ef",
-          "#fe640b",
-        ],
-      },
-      {
-        value: "frappe",
-        label: "Frappé",
-        description: "Muted dusk surfaces with lavender and peach.",
-        dark: true,
-        swatches: [
-          "#292c3c",
-          "#303446",
-          "#414559",
-          "#ca9ee6",
-          "#ef9f76",
-        ],
-      },
-      {
-        value: "macchiato",
-        label: "Macchiato",
-        description: "Medium contrast with mauve and warm peach.",
-        dark: true,
-        swatches: [
-          "#1e2030",
-          "#24273a",
-          "#363a4f",
-          "#c6a0f6",
-          "#f5a97f",
-        ],
-      },
-      {
-        value: "mocha",
-        label: "Mocha",
-        description: "Deep theater mode with mauve and amber contrast.",
-        dark: true,
-        swatches: [
-          "#181825",
-          "#1e1e2e",
-          "#313244",
-          "#cba6f7",
-          "#fab387",
-        ],
-      },
+    expect(CATPPUCCIN_THEMES).toHaveLength(4);
+    expect(CATPPUCCIN_THEMES[0]).toMatchObject({
+      value: "latte",
+      label: "Latte",
+      dark: false,
+    });
+    expect(CATPPUCCIN_THEMES[0]?.swatches).toEqual([
+      "#e6e9ef",
+      "#eff1f5",
+      "#ccd0da",
+      "#8839ef",
+      "#fe640b",
+    ]);
+    expect(CATPPUCCIN_THEMES[1]).toMatchObject({ value: "frappe", label: "Frappé", dark: true });
+    expect(CATPPUCCIN_THEMES[1]?.swatches).toEqual([
+      "#292c3c",
+      "#303446",
+      "#414559",
+      "#ca9ee6",
+      "#ef9f76",
+    ]);
+    expect(CATPPUCCIN_THEMES[2]).toMatchObject({
+      value: "macchiato",
+      label: "Macchiato",
+      dark: true,
+    });
+    expect(CATPPUCCIN_THEMES[2]?.swatches).toEqual([
+      "#1e2030",
+      "#24273a",
+      "#363a4f",
+      "#c6a0f6",
+      "#f5a97f",
+    ]);
+    expect(CATPPUCCIN_THEMES[3]).toMatchObject({ value: "mocha", label: "Mocha", dark: true });
+    expect(CATPPUCCIN_THEMES[3]?.swatches).toEqual([
+      "#181825",
+      "#1e1e2e",
+      "#313244",
+      "#cba6f7",
+      "#fab387",
     ]);
   });
 

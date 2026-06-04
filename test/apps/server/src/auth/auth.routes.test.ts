@@ -7,24 +7,24 @@ import {
   SESSION_COOKIE_NAME,
 } from "../../../../../apps/server/src/auth/session-token";
 import type { DatabaseClient } from "../../../../../apps/server/src/db/client";
-import {
-  auditLogs,
-  sessions,
-  userPermissionGrants,
-  users,
-} from "../../../../../apps/server/src/db/schema";
+import { sessions, userPermissionGrants, users } from "../../../../../apps/server/src/db/schema";
 import {
   CSRF_HEADER_NAME,
   CSRF_HEADER_VALUE,
+  DEFAULT_SIGNED_IN_USER_PERMISSIONS,
+  SYSTEM_ADMIN_PERMISSION,
   USER_PERMISSION_VALUES,
+  type UserPermission,
 } from "../../../../../packages/shared/src";
 import {
   closeServerTestDatabases,
   createServerTestApp,
   csrfJsonRequest,
+  TEST_WEB_ORIGIN,
   type TestAppContext,
 } from "../../../../helpers/server";
 
+const DEFAULT_PASSWORD = "correct-horse-battery-staple";
 const openDatabases: DatabaseClient[] = [];
 
 afterEach(() => {
@@ -42,14 +42,14 @@ describe("auth routes", () => {
     expect(body).toEqual({ required: true });
   });
 
-  it("creates the first account as admin, signs it in, and never returns the password hash", async () => {
+  it("creates the first account with an explicit system:admin grant and full effective permissions", async () => {
     const { app, database } = await createEmptyAuthTestApp();
 
     const response = await app.handle(
       csrfJsonRequest("/api/auth/setup", {
         username: "owner",
         email: "owner@example.local",
-        password: "correct-horse-battery-staple",
+        password: DEFAULT_PASSWORD,
       }),
     );
     const body = await response.json();
@@ -63,7 +63,6 @@ describe("auth routes", () => {
         id: expect.any(String),
         username: "owner",
         email: "owner@example.local",
-        role: "admin",
         permissions: [...USER_PERMISSION_VALUES],
         createdAt: expect.any(String),
         lastLoginAt: null,
@@ -73,37 +72,21 @@ describe("auth routes", () => {
     expectSecureSessionCookie(setCookie);
 
     const [storedUser] = database.db.select().from(users).all();
+    const storedGrants = database.db.select().from(userPermissionGrants).all();
     const [storedSession] = database.db.select().from(sessions).all();
-    const storedAuditLogs = database.db.select().from(auditLogs).all();
-    const auditActions = storedAuditLogs.map((entry) => entry.action);
 
-    expect(storedUser?.role).toBe("admin");
-    expectUuidv7(storedUser?.id);
-    expectPublicUserId(storedUser?.publicId);
-    expect(body.user.id).toBe(storedUser?.publicId);
-    expect(body.user.id).not.toBe(storedUser?.id);
-    expect(JSON.stringify(body)).not.toContain(storedUser?.id ?? "missing-user-id");
-    expect(storedUser?.passwordHash).toStartWith("$argon2id$");
-    expect(storedUser?.passwordHash).not.toBe("correct-horse-battery-staple");
-    expect(
-      await Bun.password.verify("correct-horse-battery-staple", storedUser?.passwordHash ?? ""),
-    ).toBe(true);
-    expectUuidv7(storedSession?.id);
-    expect(storedSession?.userId).toBe(storedUser?.id);
+    expect(storedUser?.publicId).toBe(body.user.id);
+    expect(storedGrants).toHaveLength(1);
+    expect(storedGrants[0]?.userId).toBe(storedUser?.id);
+    expect(storedGrants[0]?.permission).toBe(SYSTEM_ADMIN_PERMISSION);
     expect(storedSession?.tokenHash).toBe(hashSessionToken(sessionToken));
-    for (const auditLog of storedAuditLogs) {
-      expectUuidv7(auditLog.id);
-    }
-    expect(
-      storedAuditLogs.find((entry) => entry.action === "auth.setup.admin_created")?.actorUserId,
-    ).toBe(storedUser?.id);
-    expect(auditActions).toContain("auth.setup.admin_created");
+    expect("role" in (storedUser ?? {})).toBe(false);
 
-    const adminResponse = await app.handle(
-      new Request("http://localhost/api/admin/auth/check", { headers: { cookie: cookieHeader } }),
+    const usersResponse = await app.handle(
+      new Request("http://localhost/api/users", { headers: { cookie: cookieHeader } }),
     );
 
-    expect(adminResponse.status).toBe(200);
+    expect(usersResponse.status).toBe(200);
   });
 
   it("blocks setup after any user exists", async () => {
@@ -115,7 +98,7 @@ describe("auth routes", () => {
       csrfJsonRequest("/api/auth/setup", {
         username: "second-admin",
         email: "second-admin@example.local",
-        password: "correct-horse-battery-staple",
+        password: DEFAULT_PASSWORD,
       }),
     );
     const createBody = await createResponse.json();
@@ -132,21 +115,12 @@ describe("auth routes", () => {
     expect(database.db.select().from(users).all()).toHaveLength(2);
   });
 
-  it("lets only an admin create later local accounts and always stores them as users", async () => {
-    const { app, database } = await createAuthTestApp();
-    const adminCookie = await loginAndReadCookie(app);
+  it("returns default self-service permissions for signed-in users without explicit grants", async () => {
+    const { app } = await createAuthTestApp();
+    const viewerCookie = await loginAndReadCookie(app, "viewer@example.local");
 
     const response = await app.handle(
-      csrfJsonRequest(
-        "/api/admin/users",
-        {
-          username: "watcher",
-          email: "watcher@example.local",
-          password: "correct-horse-battery-staple",
-          role: "admin",
-        },
-        { cookie: adminCookie },
-      ),
+      new Request("http://localhost/api/auth/me", { headers: { cookie: viewerCookie } }),
     );
     const body = await response.json();
 
@@ -154,329 +128,367 @@ describe("auth routes", () => {
     expect(body).toEqual({
       user: {
         id: expect.any(String),
-        username: "watcher",
-        email: "watcher@example.local",
-        role: "user",
-        permissions: [],
+        username: "viewer",
+        email: "viewer@example.local",
+        permissions: [...DEFAULT_SIGNED_IN_USER_PERMISSIONS],
         createdAt: expect.any(String),
-        lastLoginAt: null,
+        lastLoginAt: expect.any(String),
       },
     });
-
-    const createdUser = database.db
-      .select()
-      .from(users)
-      .all()
-      .find((user) => user.email === "watcher@example.local");
-    const auditActions = database.db
-      .select()
-      .from(auditLogs)
-      .all()
-      .map((entry) => entry.action);
-
-    expect(createdUser?.role).toBe("user");
-    expectPublicUserId(createdUser?.publicId);
-    expect(body.user.id).toBe(createdUser?.publicId);
-    expect(body.user.id).not.toBe(createdUser?.id);
-    expect(JSON.stringify(body)).not.toContain(createdUser?.id ?? "missing-user-id");
-    expect(createdUser?.passwordHash).toStartWith("$argon2id$");
-    expect(createdUser?.passwordHash).not.toBe("correct-horse-battery-staple");
-    expect(auditActions).toContain("admin.users.created");
+    expect("role" in body.user).toBe(false);
   });
 
-  it("lists safe managed non-admin user summaries only for admins", async () => {
-    const { admin, adminCookie, app, viewer, viewerCookie } = await createAdminViewerTestContext();
+  it("gates the users directory behind users:manage and returns safe summaries", async () => {
+    const { app, database, viewer } = await createAuthTestApp([
+      {
+        username: "manager",
+        email: "manager@example.local",
+        password: DEFAULT_PASSWORD,
+        permissions: ["users:manage"],
+      },
+    ]);
+    const manager = requireStoredUserByEmail(database, "manager@example.local");
 
-    const anonymousResponse = await app.handle(new Request("http://localhost/api/admin/users"));
+    const anonymousResponse = await app.handle(new Request("http://localhost/api/users"));
+    const viewerCookie = await loginAndReadCookie(app, "viewer@example.local");
     const viewerResponse = await app.handle(
-      new Request("http://localhost/api/admin/users", { headers: { cookie: viewerCookie } }),
+      new Request("http://localhost/api/users", { headers: { cookie: viewerCookie } }),
     );
-    const adminResponse = await app.handle(
-      new Request("http://localhost/api/admin/users", { headers: { cookie: adminCookie } }),
+    const managerCookie = await loginAndReadCookie(app, "manager@example.local");
+    const managerResponse = await app.handle(
+      new Request("http://localhost/api/users", { headers: { cookie: managerCookie } }),
     );
-    const adminBody = await adminResponse.json();
+    const managerBody = await managerResponse.json();
 
     expect(anonymousResponse.status).toBe(401);
     expect(viewerResponse.status).toBe(403);
-    expect(adminResponse.status).toBe(200);
-    expect(adminBody.users).toEqual([expectedAdminUserSummary(viewer, "user")]);
-    expect(adminBody.users.map((user: { id: string }) => user.id)).not.toContain(admin.publicId);
-    expect(JSON.stringify(adminBody)).not.toContain("passwordHash");
-    expect(JSON.stringify(adminBody)).not.toContain(admin.passwordHash);
-    expect(JSON.stringify(adminBody)).not.toContain(admin.id);
-    expect(JSON.stringify(adminBody)).not.toContain(viewer.id);
-    for (const listedUser of adminBody.users) {
+    expect(managerResponse.status).toBe(200);
+    const listedIds = managerBody.users.map((user: { id: string }) => user.id);
+    expect(listedIds).toContain(manager.publicId);
+    expect(listedIds).toContain(viewer.publicId);
+    expect(listedIds).toHaveLength(3);
+    for (const listedUser of managerBody.users) {
       expect("email" in listedUser).toBe(false);
       expect("lastLoginAt" in listedUser).toBe(false);
+      expect("role" in listedUser).toBe(false);
       expect("passwordHash" in listedUser).toBe(false);
     }
   });
 
-  it("lets authenticated admins inspect the grant catalog and replace mod permissions", async () => {
-    const { admin, adminCookie, app, database, viewer, viewerCookie } =
-      await createAdminViewerTestContext();
+  it("requires users:create in addition to users:manage when creating users", async () => {
+    const { app } = await createAuthTestApp([
+      {
+        username: "manager",
+        email: "manager@example.local",
+        password: DEFAULT_PASSWORD,
+        permissions: ["users:manage"],
+      },
+    ]);
 
-    const anonymousCatalogResponse = await app.handle(
-      new Request("http://localhost/api/admin/permission-catalog"),
+    const managerCookie = await loginAndReadCookie(app, "manager@example.local");
+    const managerResponse = await app.handle(
+      csrfJsonRequest(
+        "/api/users",
+        {
+          username: "blocked-user",
+          email: "blocked-user@example.local",
+          password: DEFAULT_PASSWORD,
+        },
+        { cookie: managerCookie },
+      ),
     );
-    const viewerCatalogResponse = await app.handle(
-      new Request("http://localhost/api/admin/permission-catalog", {
+    const managerBody = await managerResponse.json();
+
+    expect(managerResponse.status).toBe(403);
+    expect(managerBody).toEqual({
+      error: {
+        code: "FORBIDDEN",
+        message: "users:create permission is required.",
+      },
+    });
+
+    const adminCookie = await loginAndReadCookie(app, "admin@example.local");
+    const adminResponse = await app.handle(
+      csrfJsonRequest(
+        "/api/users",
+        {
+          username: "watcher",
+          email: "watcher@example.local",
+          password: DEFAULT_PASSWORD,
+        },
+        { cookie: adminCookie },
+      ),
+    );
+    const adminBody = await adminResponse.json();
+
+    expect(adminResponse.status).toBe(200);
+    expect(adminBody).toEqual({
+      user: {
+        id: expect.any(String),
+        username: "watcher",
+        disabledAt: null,
+        createdAt: expect.any(String),
+        updatedAt: expect.any(String),
+        permissions: [...DEFAULT_SIGNED_IN_USER_PERMISSIONS],
+      },
+    });
+    expect("email" in adminBody.user).toBe(false);
+    expect("role" in adminBody.user).toBe(false);
+  });
+
+  it("enforces cross-user read access and supports managed profile updates", async () => {
+    const { app, admin, viewer } = await createAuthTestApp([
+      {
+        username: "manager",
+        email: "manager@example.local",
+        password: DEFAULT_PASSWORD,
+        permissions: ["users:manage", "users:update"],
+      },
+    ]);
+
+    const viewerCookie = await loginAndReadCookie(app, "viewer@example.local");
+    const deniedResponse = await app.handle(
+      new Request(`http://localhost/api/users/${admin.publicId}`, {
         headers: { cookie: viewerCookie },
       }),
     );
-    const adminCatalogResponse = await app.handle(
-      new Request("http://localhost/api/admin/permission-catalog", {
-        headers: { cookie: adminCookie },
+
+    expect(deniedResponse.status).toBe(403);
+
+    const managerCookie = await loginAndReadCookie(app, "manager@example.local");
+    const profileResponse = await app.handle(
+      new Request(`http://localhost/api/users/${viewer.publicId}`, {
+        headers: { cookie: managerCookie },
       }),
     );
-    const catalogBody = await adminCatalogResponse.json();
+    const profileBody = await profileResponse.json();
 
-    expect(anonymousCatalogResponse.status).toBe(401);
-    expect(viewerCatalogResponse.status).toBe(403);
-    expect(adminCatalogResponse.status).toBe(200);
-    expect(
-      catalogBody.permissions.map((entry: { permission: string }) => entry.permission),
-    ).toEqual([
-      "admin:general",
-      "admin:library",
-      "admin:users",
-      "admin:import",
-      "admin:notifications",
-      "admin:services",
-      "admin:logs",
-      "admin:about",
+    expect(profileResponse.status).toBe(200);
+    expect(profileBody.user).toMatchObject({
+      id: viewer.publicId,
+      username: "viewer",
+      email: "viewer@example.local",
+      permissions: [...DEFAULT_SIGNED_IN_USER_PERMISSIONS],
+    });
+
+    const updateResponse = await app.handle(
+      csrfJsonPutRequest(
+        `/api/users/${viewer.publicId}/settings/main`,
+        { username: "reader", email: "reader@example.local" },
+        { cookie: managerCookie },
+      ),
+    );
+    const updateBody = await updateResponse.json();
+
+    expect(updateResponse.status).toBe(200);
+    expect(updateBody.user).toMatchObject({
+      id: viewer.publicId,
+      username: "reader",
+      email: "reader@example.local",
+    });
+
+    const duplicateResponse = await app.handle(
+      csrfJsonPutRequest(
+        `/api/users/${viewer.publicId}/settings/main`,
+        { username: "admin", email: "admin@example.local" },
+        { cookie: managerCookie },
+      ),
+    );
+
+    expect(duplicateResponse.status).toBe(409);
+  });
+
+  it("returns the permission catalog and revokes sessions after permission changes", async () => {
+    const { app, viewer, viewerCookie } = await createAuthTestApp([
+      {
+        username: "manager",
+        email: "manager@example.local",
+        password: DEFAULT_PASSWORD,
+        permissions: ["users:manage"],
+      },
     ]);
 
-    const grantUserPermissionsResponse = await adminPatch(
-      app,
-      `/api/admin/users/${viewer.publicId}/permissions`,
-      { permissions: ["admin:import"] },
-      adminCookie,
+    const managerCookie = await loginAndReadCookie(app, "manager@example.local");
+    const managerCatalogResponse = await app.handle(
+      new Request("http://localhost/api/permissions/catalog", {
+        headers: { cookie: managerCookie },
+      }),
     );
-    const grantUserPermissionsBody = await grantUserPermissionsResponse.json();
+    const managerCatalogBody = await managerCatalogResponse.json();
 
-    expect(grantUserPermissionsResponse.status).toBe(409);
-    expect(grantUserPermissionsBody.error.code).toBe("INVALID_PERMISSION_TARGET");
+    expect(managerCatalogResponse.status).toBe(200);
+    expect(
+      managerCatalogBody.permissions.map((entry: { permission: string }) => entry.permission),
+    ).toEqual([...USER_PERMISSION_VALUES]);
 
-    const promoteResponse = await adminPatch(
-      app,
-      `/api/admin/users/${viewer.publicId}/role`,
-      { role: "mod" },
-      adminCookie,
+    const deniedPermissionsResponse = await app.handle(
+      csrfJsonPutRequest(
+        `/api/users/${viewer.publicId}/settings/permissions`,
+        { permissions: ["settings:services"] },
+        { cookie: managerCookie },
+      ),
+    );
+    const deniedPermissionsBody = await deniedPermissionsResponse.json();
+
+    expect(deniedPermissionsResponse.status).toBe(403);
+    expect(deniedPermissionsBody).toEqual({
+      error: {
+        code: "FORBIDDEN",
+        message: "users:permissions permission is required.",
+      },
+    });
+
+    const adminCookie = await loginAndReadCookie(app, "admin@example.local");
+    const invalidPermissionsResponse = await app.handle(
+      csrfJsonPutRequest(
+        `/api/users/${viewer.publicId}/settings/permissions`,
+        { permissions: ["settings:services", "settings:unknown"] },
+        { cookie: adminCookie },
+      ),
     );
 
-    expect(promoteResponse.status).toBe(200);
+    expect(invalidPermissionsResponse.status).toBe(422);
 
-    const modCookie = await loginAndReadCookie(app, "viewer@example.local");
-    const modGrantResponse = await adminPatch(
-      app,
-      `/api/admin/users/${viewer.publicId}/permissions`,
-      { permissions: ["admin:import"] },
-      modCookie,
-    );
-    const invalidPermissionResponse = await adminPatch(
-      app,
-      `/api/admin/users/${viewer.publicId}/permissions`,
-      { permissions: ["admin:logs", "admin:unknown"] },
-      adminCookie,
-    );
-
-    expect(modGrantResponse.status).toBe(403);
-    expect(invalidPermissionResponse.status).toBe(422);
-
-    const grantResponse = await adminPatch(
-      app,
-      `/api/admin/users/${viewer.publicId}/permissions`,
-      { permissions: ["admin:logs", "admin:import", "admin:logs"] },
-      adminCookie,
+    const grantResponse = await app.handle(
+      csrfJsonPutRequest(
+        `/api/users/${viewer.publicId}/settings/permissions`,
+        { permissions: ["settings:services"] },
+        { cookie: adminCookie },
+      ),
     );
     const grantBody = await grantResponse.json();
 
     expect(grantResponse.status).toBe(200);
-    expect(grantBody.user).toMatchObject({
-      id: viewer.publicId,
-      username: "viewer",
-      role: "mod",
-      permissions: ["admin:import", "admin:logs"],
-    });
-    expect(JSON.stringify(grantBody)).not.toContain(viewer.id);
-    await expectSessionRejected(app, modCookie);
-
-    const storedGrants = database.db.select().from(userPermissionGrants).all();
-    expect(storedGrants).toHaveLength(2);
-    expect(storedGrants.map((grant) => grant.userId).every((userId) => userId === viewer.id)).toBe(
-      true,
-    );
-    expect(storedGrants.map((grant) => grant.permission).sort()).toEqual([
-      "admin:import",
-      "admin:logs",
+    expect(grantBody.user.permissions).toEqual([
+      ...DEFAULT_SIGNED_IN_USER_PERMISSIONS.slice(0, 4),
+      "settings:services",
+      ...DEFAULT_SIGNED_IN_USER_PERMISSIONS.slice(4),
     ]);
+    await expectSessionRejected(app, viewerCookie);
 
-    const listResponse = await app.handle(
-      new Request("http://localhost/api/admin/users", { headers: { cookie: adminCookie } }),
+    const reloginCookie = await loginAndReadCookie(app, "viewer@example.local");
+    const meResponse = await app.handle(
+      new Request("http://localhost/api/auth/me", { headers: { cookie: reloginCookie } }),
     );
-    const listBody = await listResponse.json();
-    const listedViewer = listBody.users.find((user: { id: string }) => user.id === viewer.publicId);
-    const auditEntries = database.db.select().from(auditLogs).all();
-    const permissionsAudit = auditEntries.find(
-      (entry) => entry.action === "admin.users.permissions_changed",
-    );
+    const meBody = await meResponse.json();
 
-    expect(listedViewer.permissions).toEqual(["admin:import", "admin:logs"]);
-    expect(permissionsAudit?.actorUserId).toBe(admin.id);
-    expect(permissionsAudit?.targetId).toBe(viewer.id);
-    expect(JSON.stringify(permissionsAudit)).not.toContain("correct-horse-battery-staple");
-
-    const grantedModCookie = await loginAndReadCookie(app, "viewer@example.local");
-    const grantedModMeResponse = await app.handle(
-      new Request("http://localhost/api/auth/me", { headers: { cookie: grantedModCookie } }),
-    );
-    const grantedModMeBody = await grantedModMeResponse.json();
-
-    expect(grantedModMeResponse.status).toBe(200);
-    expect(grantedModMeBody.user).toMatchObject({
-      id: viewer.publicId,
-      role: "mod",
-      permissions: ["admin:import", "admin:logs"],
-    });
-
-    const revokeResponse = await adminPatch(
-      app,
-      `/api/admin/users/${viewer.publicId}/permissions`,
-      { permissions: [] },
-      adminCookie,
-    );
-    const revokeBody = await revokeResponse.json();
-
-    expect(revokeResponse.status).toBe(200);
-    expect(revokeBody.user.permissions).toEqual([]);
-    expect(database.db.select().from(userPermissionGrants).all()).toHaveLength(0);
+    expect(meResponse.status).toBe(200);
+    expect(meBody.user.permissions).toEqual([
+      ...DEFAULT_SIGNED_IN_USER_PERMISSIONS.slice(0, 4),
+      "settings:services",
+      ...DEFAULT_SIGNED_IN_USER_PERMISSIONS.slice(4),
+    ]);
   });
 
-  it("lets authenticated admins change target passwords and revokes target sessions", async () => {
-    const { adminCookie, app, database, viewer, viewerCookie } =
-      await createAdminViewerTestContext();
+  it("requires users:password for cross-user password changes and revokes target sessions", async () => {
+    const { app, viewerCookie, viewer } = await createAuthTestApp([
+      {
+        username: "operator",
+        email: "operator@example.local",
+        password: DEFAULT_PASSWORD,
+        permissions: ["users:manage", "users:password"],
+      },
+    ]);
+
+    const operatorCookie = await loginAndReadCookie(app, "operator@example.local");
     const newPassword = "updated-correct-horse-battery-staple";
 
-    const passwordPath = `/api/admin/users/${viewer.publicId}/password`;
-    const tooShortPasswordResponse = await adminPatch(
-      app,
-      passwordPath,
-      { password: "short" },
-      adminCookie,
+    const response = await app.handle(
+      csrfJsonPutRequest(
+        `/api/users/${viewer.publicId}/settings/password`,
+        { password: newPassword },
+        { cookie: operatorCookie },
+      ),
     );
-
-    expect(tooShortPasswordResponse.status).toBe(422);
-
-    const response = await adminPatch(app, passwordPath, { password: newPassword }, adminCookie);
     const body = await response.json();
-    const storedViewer = requireStoredUserByEmail(database, "viewer@example.local");
 
     expect(response.status).toBe(200);
     expect(body).toEqual({ status: "ok" });
-    await expectPasswordHashReplaced(storedViewer.passwordHash, newPassword);
     await expectSessionRejected(app, viewerCookie);
     await expectPasswordReplaced(app, "viewer@example.local", newPassword);
-
-    const auditJson = JSON.stringify(database.db.select().from(auditLogs).all());
-
-    expect(auditJson).not.toContain(newPassword);
-    expect(auditJson).not.toContain("correct-horse-battery-staple");
   });
 
-  it("changes managed account roles only between user and mod for authenticated admins", async () => {
-    const { adminCookie, app, viewer, viewerCookie } = await createAdminViewerTestContext();
+  it("protects the last active system admin from disable operations", async () => {
+    const { app, admin } = await createAuthTestApp([
+      {
+        username: "operator",
+        email: "operator@example.local",
+        password: DEFAULT_PASSWORD,
+        permissions: ["users:manage", "users:disable"],
+      },
+    ]);
 
-    const rolePath = `/api/admin/users/${viewer.publicId}/role`;
-    const adminPromotionResponse = await adminPatch(app, rolePath, { role: "admin" }, adminCookie);
-    expect(adminPromotionResponse.status).toBe(422);
+    const operatorCookie = await loginAndReadCookie(app, "operator@example.local");
+    const response = await app.handle(
+      csrfJsonPatchRequest(
+        `/api/users/${admin.publicId}/status`,
+        { disabled: true },
+        { cookie: operatorCookie },
+      ),
+    );
+    const body = await response.json();
 
-    const promoteResponse = await adminPatch(app, rolePath, { role: "mod" }, adminCookie);
-    const promoteBody = await promoteResponse.json();
-
-    expect(promoteResponse.status).toBe(200);
-    expect(promoteBody.user).toMatchObject({
-      id: viewer.publicId,
-      username: "viewer",
-      role: "mod",
+    expect(response.status).toBe(409);
+    expect(body).toEqual({
+      error: {
+        code: "LAST_SYSTEM_ADMIN_REQUIRED",
+        message: "At least one active user must keep the system:admin permission.",
+      },
     });
-    expect(JSON.stringify(promoteBody)).not.toContain(viewer.id);
-    await expectSessionRejected(app, viewerCookie);
-
-    const promotedViewerCookie = await loginAndReadCookie(app, "viewer@example.local");
-
-    const demoteViewerResponse = await adminPatch(app, rolePath, { role: "user" }, adminCookie);
-    const demoteViewerBody = await demoteViewerResponse.json();
-
-    expect(demoteViewerResponse.status).toBe(200);
-    expect(demoteViewerBody.user.role).toBe("user");
-    await expectSessionRejected(app, promotedViewerCookie);
   });
 
-  it("does not manage admin targets through admin users endpoints", async () => {
-    const { admin, adminCookie, app } = await createAdminViewerTestContext();
-    const adminPath = `/api/admin/users/${admin.publicId}`;
-
-    const roleResponse = await adminPatch(app, `${adminPath}/role`, { role: "mod" }, adminCookie);
-    const passwordResponse = await adminPatch(
-      app,
-      `${adminPath}/password`,
-      { password: "updated-correct-horse-battery-staple" },
-      adminCookie,
+  it("prevents administrators from disabling their own account through managed status", async () => {
+    const { app, admin } = await createAuthTestApp();
+    const adminCookie = await loginAndReadCookie(app, "admin@example.local");
+    const response = await app.handle(
+      csrfJsonPatchRequest(
+        `/api/users/${admin.publicId}/status`,
+        { disabled: true },
+        { cookie: adminCookie },
+      ),
     );
-    const permissionsResponse = await adminPatch(
-      app,
-      `${adminPath}/permissions`,
-      { permissions: ["admin:logs"] },
-      adminCookie,
-    );
-    const disableResponse = await adminDelete(app, adminPath, {}, adminCookie);
+    const body = await response.json();
 
-    expect(roleResponse.status).toBe(404);
-    expect(passwordResponse.status).toBe(404);
-    expect(permissionsResponse.status).toBe(404);
-    expect(disableResponse.status).toBe(404);
+    expect(response.status).toBe(409);
+    expect(body).toEqual({
+      error: {
+        code: "SELF_SERVICE_ONLY",
+        message: "Use the self-service profile endpoints for your own account.",
+      },
+    });
   });
 
-  it("soft-deletes, re-enables, and revokes sessions for target users without locking out the last admin", async () => {
-    const { admin, adminCookie, app, database, viewer, viewerCookie } =
-      await createAdminViewerTestContext();
+  it("disables and restores managed users when the actor has users:disable", async () => {
+    const { app, viewer, viewerCookie } = await createAuthTestApp();
+    const adminCookie = await loginAndReadCookie(app, "admin@example.local");
 
-    const missingCsrfResponse = await app.handle(
-      jsonDeleteRequest(`/api/admin/users/${viewer.id}`, {}),
+    const disableResponse = await app.handle(
+      csrfJsonPatchRequest(
+        `/api/users/${viewer.publicId}/status`,
+        { disabled: true },
+        { cookie: adminCookie },
+      ),
     );
-    const viewerPath = `/api/admin/users/${viewer.publicId}`;
-
-    expect(missingCsrfResponse.status).toBe(403);
-
-    const disableResponse = await adminDelete(app, viewerPath, {}, adminCookie);
     const disableBody = await disableResponse.json();
-    const disabledViewer = requireStoredUserByEmail(database, "viewer@example.local");
 
     expect(disableResponse.status).toBe(200);
-    expect(disableBody.user).toMatchObject({
-      id: viewer.publicId,
-      username: "viewer",
-      role: "user",
-    });
-    expect(JSON.stringify(disableBody)).not.toContain(viewer.id);
     expect(disableBody.user.disabledAt).toEqual(expect.any(String));
-    expect(disabledViewer.disabledAt).toEqual(expect.any(String));
     await expectSessionRejected(app, viewerCookie);
 
     const disabledLoginResponse = await loginWithPassword(
       app,
       "viewer@example.local",
-      "correct-horse-battery-staple",
+      DEFAULT_PASSWORD,
     );
 
     expect(disabledLoginResponse.status).toBe(401);
 
-    const enableResponse = await adminPatch(
-      app,
-      `${viewerPath}/status`,
-      { disabled: false },
-      adminCookie,
+    const enableResponse = await app.handle(
+      csrfJsonPatchRequest(
+        `/api/users/${viewer.publicId}/status`,
+        { disabled: false },
+        { cookie: adminCookie },
+      ),
     );
     const enableBody = await enableResponse.json();
 
@@ -486,210 +498,34 @@ describe("auth routes", () => {
     const enabledLoginResponse = await loginWithPassword(
       app,
       "viewer@example.local",
-      "correct-horse-battery-staple",
+      DEFAULT_PASSWORD,
     );
 
     expect(enabledLoginResponse.status).toBe(200);
-
-    const disableAdminResponse = await adminDelete(
-      app,
-      `/api/admin/users/${admin.publicId}`,
-      {},
-      adminCookie,
-    );
-
-    expect(disableAdminResponse.status).toBe(404);
   });
 
-  it("validates admin user-management request bodies and path ids", async () => {
-    const { app } = await createAuthTestApp();
-    const adminCookie = await loginAndReadCookie(app);
+  it("does not let spoofed forwarded IPs reset login throttling for an account", async () => {
+    const { app } = await createAuthTestApp([], new LoginRateLimiter(1));
 
-    const invalidCreateUsernameResponse = await app.handle(
+    const firstFailure = await app.handle(
       csrfJsonRequest(
-        "/api/admin/users",
-        {
-          username: "   ",
-          email: "invalid-create@example.local",
-          password: "correct-horse-battery-staple",
-        },
-        { cookie: adminCookie },
+        "/api/auth/login",
+        { email: "admin@example.local", password: "wrong-password" },
+        { "x-forwarded-for": "198.51.100.10" },
       ),
     );
-    const invalidCreatePasswordResponse = await app.handle(
+    const spoofedIpFailure = await app.handle(
       csrfJsonRequest(
-        "/api/admin/users",
-        { username: "short-pass", email: "short-pass@example.local", password: "short" },
-        { cookie: adminCookie },
+        "/api/auth/login",
+        { email: "admin@example.local", password: "wrong-password" },
+        { "x-forwarded-for": "203.0.113.10" },
       ),
     );
-    const invalidPathResponse = await app.handle(
-      csrfJsonPatchRequest(
-        "/api/admin/users/not-a-uuid/role",
-        { role: "admin" },
-        { cookie: adminCookie },
-      ),
-    );
-    const invalidRoleResponse = await app.handle(
-      csrfJsonPatchRequest(
-        `/api/admin/users/${crypto.randomUUID()}/role`,
-        { role: "owner" },
-        { cookie: adminCookie },
-      ),
-    );
+    const body = await spoofedIpFailure.json();
 
-    expect(invalidCreateUsernameResponse.status).toBe(422);
-    expect(invalidCreatePasswordResponse.status).toBe(422);
-    expect(invalidPathResponse.status).toBe(422);
-    expect(invalidRoleResponse.status).toBe(422);
-  });
-
-  it("blocks anonymous and non-admin clients from creating local accounts", async () => {
-    const { app } = await createAuthTestApp();
-    const requestBody = {
-      username: "blocked-viewer",
-      email: "blocked-viewer@example.local",
-      password: "correct-horse-battery-staple",
-    };
-
-    const anonymousResponse = await app.handle(csrfJsonRequest("/api/admin/users", requestBody));
-    const viewerLoginResponse = await app.handle(
-      csrfJsonRequest("/api/auth/login", {
-        email: "viewer@example.local",
-        password: "correct-horse-battery-staple",
-      }),
-    );
-    const viewerCookie = toCookieHeader(viewerLoginResponse.headers.get("set-cookie") ?? "");
-    const viewerResponse = await app.handle(
-      csrfJsonRequest("/api/admin/users", requestBody, { cookie: viewerCookie }),
-    );
-
-    expect(anonymousResponse.status).toBe(401);
-    expect(viewerLoginResponse.status).toBe(200);
-    expect(viewerResponse.status).toBe(403);
-  });
-
-  it("logs in an admin, sets a secure HttpOnly cookie, exposes /me, and logs out", async () => {
-    const { app, database } = await createAuthTestApp();
-
-    const loginResponse = await app.handle(
-      csrfJsonRequest("/api/auth/login", {
-        email: "admin@example.local",
-        password: "correct-horse-battery-staple",
-      }),
-    );
-    const loginBody = await loginResponse.json();
-    const setCookie = loginResponse.headers.get("set-cookie") ?? "";
-    const cookieHeader = toCookieHeader(setCookie);
-    const sessionToken = readCookieValue(cookieHeader);
-
-    expect(loginResponse.status).toBe(200);
-    expect(loginBody).toEqual({
-      user: {
-        id: expect.any(String),
-        username: "admin",
-        email: "admin@example.local",
-        role: "admin",
-        permissions: [...USER_PERMISSION_VALUES],
-        createdAt: expect.any(String),
-        lastLoginAt: expect.any(String),
-      },
-    });
-    expect(JSON.stringify(loginBody)).not.toContain("passwordHash");
-    expectSecureSessionCookie(setCookie);
-    expect(setCookie).toContain("Max-Age=2592000");
-
-    const [storedSession] = database.db.select().from(sessions).all();
-    expect(storedSession?.tokenHash).toBe(hashSessionToken(sessionToken));
-    expect(storedSession?.tokenHash).not.toBe(sessionToken);
-
-    const meResponse = await app.handle(
-      new Request("http://localhost/api/auth/me", { headers: { cookie: cookieHeader } }),
-    );
-    const meBody = await meResponse.json();
-
-    expect(meResponse.status).toBe(200);
-    expect(meBody.user.email).toBe("admin@example.local");
-    expect(JSON.stringify(meBody)).not.toContain("passwordHash");
-
-    const adminResponse = await app.handle(
-      new Request("http://localhost/api/admin/auth/check", { headers: { cookie: cookieHeader } }),
-    );
-    expect(adminResponse.status).toBe(200);
-
-    const logoutResponse = await app.handle(
-      csrfJsonRequest("/api/auth/logout", undefined, { cookie: cookieHeader }),
-    );
-    const logoutBody = await logoutResponse.json();
-
-    expect(logoutResponse.status).toBe(200);
-    expect(logoutBody).toEqual({ status: "ok" });
-    expect(logoutResponse.headers.get("set-cookie") ?? "").toContain(`${SESSION_COOKIE_NAME}=`);
-    expect(database.db.select().from(sessions).all()).toHaveLength(0);
-
-    const anonymousMeResponse = await app.handle(
-      new Request("http://localhost/api/auth/me", { headers: { cookie: cookieHeader } }),
-    );
-    const anonymousMeBody = await anonymousMeResponse.json();
-    const auditActions = database.db
-      .select()
-      .from(auditLogs)
-      .all()
-      .map((entry) => entry.action);
-
-    expect(anonymousMeResponse.status).toBe(200);
-    expect(anonymousMeBody).toEqual({ user: null });
-    expect(auditActions).toContain("auth.login.success");
-    expect(auditActions).toContain("admin.auth.check");
-    expect(auditActions).toContain("auth.logout");
-  });
-
-  it("rejects bad credentials without creating a session or returning sensitive data", async () => {
-    const { app, database } = await createAuthTestApp();
-
-    const response = await app.handle(
-      csrfJsonRequest("/api/auth/login", {
-        email: "admin@example.local",
-        password: "wrong-password",
-      }),
-    );
-    const body = await response.json();
-
-    expect(response.status).toBe(401);
+    expect(firstFailure.status).toBe(401);
+    expect(spoofedIpFailure.status).toBe(429);
     expect(body).toEqual({
-      error: {
-        code: "INVALID_CREDENTIALS",
-        message: "Invalid email or password.",
-      },
-    });
-    expect(JSON.stringify(body)).not.toContain("passwordHash");
-    expect(JSON.stringify(body)).not.toContain("wrong-password");
-    expect(database.db.select().from(sessions).all()).toHaveLength(0);
-    const failedLoginAudit = database.db
-      .select()
-      .from(auditLogs)
-      .all()
-      .find((entry) => entry.action === "auth.login.failed");
-
-    expect(failedLoginAudit).toBeDefined();
-    expect(failedLoginAudit?.metadataJson).toBe(JSON.stringify({ email: "admin@example.local" }));
-    expect(JSON.stringify(failedLoginAudit)).not.toContain("wrong-password");
-    expect(JSON.stringify(failedLoginAudit)).not.toContain("arrtemplar_session");
-  });
-
-  it("rate-limits repeated failed logins", async () => {
-    const { app } = await createAuthTestApp(new LoginRateLimiter(2, 15 * 60 * 1000));
-    const body = { email: "admin@example.local", password: "wrong-password" };
-
-    const first = await app.handle(csrfJsonRequest("/api/auth/login", body));
-    const second = await app.handle(csrfJsonRequest("/api/auth/login", body));
-    const third = await app.handle(csrfJsonRequest("/api/auth/login", body));
-    const thirdBody = await third.json();
-
-    expect(first.status).toBe(401);
-    expect(second.status).toBe(401);
-    expect(third.status).toBe(429);
-    expect(thirdBody).toEqual({
       error: {
         code: "RATE_LIMITED",
         message: "Too many failed login attempts. Try again later.",
@@ -697,228 +533,106 @@ describe("auth routes", () => {
     });
   });
 
-  it("blocks anonymous and normal users from admin-only APIs", async () => {
-    const { app } = await createAuthTestApp();
-
-    const anonymousResponse = await app.handle(
-      new Request("http://localhost/api/admin/auth/check"),
-    );
-
-    expect(anonymousResponse.status).toBe(401);
-
-    const loginResponse = await app.handle(
-      csrfJsonRequest("/api/auth/login", {
-        email: "viewer@example.local",
-        password: "correct-horse-battery-staple",
-      }),
-    );
-    const cookieHeader = toCookieHeader(loginResponse.headers.get("set-cookie") ?? "");
-    const userAdminResponse = await app.handle(
-      new Request("http://localhost/api/admin/auth/check", { headers: { cookie: cookieHeader } }),
-    );
-    const userAdminBody = await userAdminResponse.json();
-
-    expect(loginResponse.status).toBe(200);
-    expect(userAdminResponse.status).toBe(403);
-    expect(userAdminBody).toEqual({
-      error: {
-        code: "FORBIDDEN",
-        message: "Admin role is required.",
-      },
-    });
-  });
-
-  it("returns only the authenticated user's profile from /api/user/profile", async () => {
-    const { app } = await createAuthTestApp();
-    const anonymousResponse = await app.handle(new Request("http://localhost/api/user/profile"));
-    const viewerCookie = await loginAndReadCookie(app, "viewer@example.local");
-    const viewerResponse = await app.handle(
-      new Request("http://localhost/api/user/profile", { headers: { cookie: viewerCookie } }),
-    );
-    const viewerBody = await viewerResponse.json();
-
-    expect(anonymousResponse.status).toBe(401);
-    expect(viewerResponse.status).toBe(200);
-    expect(viewerBody).toEqual({
-      user: {
-        id: expect.any(String),
-        username: "viewer",
-        email: "viewer@example.local",
-        role: "user",
-        permissions: [],
-        createdAt: expect.any(String),
-        lastLoginAt: expect.any(String),
-      },
-    });
-    expect(JSON.stringify(viewerBody)).not.toContain("passwordHash");
-  });
-
-  it("updates only the authenticated user's username and email", async () => {
+  it("updates and protects the signed-in user's own profile surfaces", async () => {
     const { app, database } = await createAuthTestApp();
     const viewerCookie = await loginAndReadCookie(app, "viewer@example.local");
 
-    const response = await app.handle(
+    const profileResponse = await app.handle(
+      new Request("http://localhost/api/profile", { headers: { cookie: viewerCookie } }),
+    );
+    const profileBody = await profileResponse.json();
+
+    expect(profileResponse.status).toBe(200);
+    expect(profileBody.user).toMatchObject({
+      username: "viewer",
+      email: "viewer@example.local",
+      permissions: [...DEFAULT_SIGNED_IN_USER_PERMISSIONS],
+    });
+
+    const updateResponse = await app.handle(
       csrfJsonPutRequest(
-        "/api/user/profile",
+        "/api/profile",
         { username: "reader", email: "reader@example.local" },
         { cookie: viewerCookie },
       ),
     );
-    const body = await response.json();
-    const storedViewer = findStoredUserByPublicId(database, body.user.id);
+    const updateBody = await updateResponse.json();
 
-    expect(response.status).toBe(200);
-    expect(body.user).toMatchObject({
+    expect(updateResponse.status).toBe(200);
+    expect(updateBody.user).toMatchObject({
       username: "reader",
       email: "reader@example.local",
-      role: "user",
     });
-    expect(storedViewer?.username).toBe("reader");
-    expect(storedViewer?.email).toBe("reader@example.local");
-
-    const duplicateResponse = await app.handle(
-      csrfJsonPutRequest(
-        "/api/user/profile",
-        { username: "admin", email: "admin@example.local" },
-        { cookie: viewerCookie },
-      ),
+    expect(findStoredUserByPublicId(database, updateBody.user.id)?.email).toBe(
+      "reader@example.local",
     );
-    const duplicateBody = await duplicateResponse.json();
 
-    expect(duplicateResponse.status).toBe(409);
-    expect(duplicateBody).toEqual({
-      error: {
-        code: "USER_ALREADY_EXISTS",
-        message: "A user with that username or email already exists.",
-      },
-    });
-  });
-
-  it("changes the authenticated user's password after verifying the current password", async () => {
-    const { app, database } = await createAuthTestApp();
-    const viewerCookie = await loginAndReadCookie(app, "viewer@example.local");
-
-    const wrongCurrentResponse = await app.handle(
+    const wrongPasswordResponse = await app.handle(
       csrfJsonPutRequest(
-        "/api/user/password",
-        {
-          currentPassword: "wrong-password",
-          newPassword: "correct-horse-battery-staple-updated",
-        },
+        "/api/profile/password",
+        { currentPassword: "wrong-password", newPassword: "new-secure-password" },
         { cookie: viewerCookie },
       ),
     );
 
-    expect(wrongCurrentResponse.status).toBe(401);
+    expect(wrongPasswordResponse.status).toBe(401);
 
-    const tooShortResponse = await app.handle(
+    const passwordResponse = await app.handle(
       csrfJsonPutRequest(
-        "/api/user/password",
-        { currentPassword: "correct-horse-battery-staple", newPassword: "short" },
+        "/api/profile/password",
+        { currentPassword: DEFAULT_PASSWORD, newPassword: "new-secure-password" },
         { cookie: viewerCookie },
       ),
     );
+    const passwordBody = await passwordResponse.json();
 
-    expect(tooShortResponse.status).toBe(422);
-
-    const response = await app.handle(
-      csrfJsonPutRequest(
-        "/api/user/password",
-        {
-          currentPassword: "correct-horse-battery-staple",
-          newPassword: "correct-horse-battery-staple-updated",
-        },
-        { cookie: viewerCookie },
-      ),
-    );
-    const body = await response.json();
-    const storedViewer = findStoredUserByEmail(database, "viewer@example.local");
-
-    expect(response.status).toBe(200);
-    expect(body).toEqual({ status: "ok" });
-    await expectPasswordHashReplaced(
-      storedViewer?.passwordHash,
-      "correct-horse-battery-staple-updated",
-    );
-
-    await expectPasswordReplaced(
-      app,
-      "viewer@example.local",
-      "correct-horse-battery-staple-updated",
-    );
-  });
-
-  it("treats deleted sessions as anonymous for current-user and admin checks", async () => {
-    const { app, database } = await createAuthTestApp();
-    const cookieHeader = await loginAndReadCookie(app);
-
-    database.db.delete(sessions).run();
-
-    await expectSessionRejected(app, cookieHeader);
-  });
-
-  it("expires sessions before current-user and admin checks", async () => {
-    const { app, database } = await createAuthTestApp();
-    const cookieHeader = await loginAndReadCookie(app);
-    const expiredAt = new Date(Date.now() - 60_000).toISOString();
-
-    database.db.update(sessions).set({ expiresAt: expiredAt }).run();
-
-    await expectSessionRejected(app, cookieHeader);
-    expect(database.db.select().from(sessions).all()).toHaveLength(0);
-  });
-
-  it("blocks disabled users even when they still have a session", async () => {
-    const { app, database } = await createAuthTestApp();
-    const cookieHeader = await loginAndReadCookie(app);
-
-    database.db.update(users).set({ disabledAt: new Date().toISOString() }).run();
-
-    await expectSessionRejected(app, cookieHeader);
+    expect(passwordResponse.status).toBe(200);
+    expect(passwordBody).toEqual({ status: "ok" });
+    await expectPasswordReplaced(app, "reader@example.local", "new-secure-password");
   });
 });
 
-async function createAdminViewerTestContext(): Promise<{
-  admin: ReturnType<typeof requireStoredUserByEmail>;
-  adminCookie: string;
+async function createAuthTestApp(
+  extraUsers: Array<{
+    username: string;
+    email: string;
+    password: string;
+    permissions?: UserPermission[];
+  }> = [],
+  rateLimiter = new LoginRateLimiter(),
+): Promise<{
   app: TestAppContext["app"];
   database: DatabaseClient;
+  admin: ReturnType<typeof requireStoredUserByEmail>;
   viewer: ReturnType<typeof requireStoredUserByEmail>;
   viewerCookie: string;
 }> {
-  const { app, database } = await createAuthTestApp();
-
-  return {
-    admin: requireStoredUserByEmail(database, "admin@example.local"),
-    adminCookie: await loginAndReadCookie(app),
-    app,
-    database,
-    viewer: requireStoredUserByEmail(database, "viewer@example.local"),
-    viewerCookie: await loginAndReadCookie(app, "viewer@example.local"),
-  };
-}
-
-async function createAuthTestApp(rateLimiter = new LoginRateLimiter()): Promise<{
-  app: TestAppContext["app"];
-  database: DatabaseClient;
-}> {
   const context = await createEmptyAuthTestApp(rateLimiter);
-  const { database } = context;
+  const { app, database } = context;
 
   await insertTestUser(database, {
     username: "admin",
     email: "admin@example.local",
-    password: "correct-horse-battery-staple",
-    role: "admin",
+    password: DEFAULT_PASSWORD,
+    permissions: [SYSTEM_ADMIN_PERMISSION],
   });
   await insertTestUser(database, {
     username: "viewer",
     email: "viewer@example.local",
-    password: "correct-horse-battery-staple",
-    role: "user",
+    password: DEFAULT_PASSWORD,
   });
 
-  return context;
+  for (const user of extraUsers) {
+    await insertTestUser(database, user);
+  }
+
+  return {
+    app,
+    database,
+    admin: requireStoredUserByEmail(database, "admin@example.local"),
+    viewer: requireStoredUserByEmail(database, "viewer@example.local"),
+    viewerCookie: await loginAndReadCookie(app, "viewer@example.local"),
+  };
 }
 
 async function createEmptyAuthTestApp(
@@ -929,29 +643,54 @@ async function createEmptyAuthTestApp(
 
 async function insertTestUser(
   database: DatabaseClient,
-  input: { username: string; email: string; password: string; role: "admin" | "user" },
+  input: {
+    username: string;
+    email: string;
+    password: string;
+    permissions?: UserPermission[];
+  },
 ): Promise<void> {
   const now = new Date().toISOString();
+  const userId = Bun.randomUUIDv7();
+
   database.db
     .insert(users)
     .values({
-      id: crypto.randomUUID(),
+      id: userId,
       publicId: generatePublicUserId(),
       username: input.username,
       email: input.email,
       passwordHash: await hashPassword(input.password),
-      role: input.role,
+      disabledAt: null,
       createdAt: now,
       updatedAt: now,
+      lastLoginAt: null,
     })
     .run();
+
+  if (input.permissions && input.permissions.length > 0) {
+    database.db
+      .insert(userPermissionGrants)
+      .values(
+        input.permissions.map((permission) => ({
+          id: Bun.randomUUIDv7(),
+          userId,
+          permission,
+          grantedByUserId: userId,
+          createdAt: now,
+          updatedAt: now,
+        })),
+      )
+      .run();
+  }
 }
 
 async function loginAndReadCookie(
   app: TestAppContext["app"],
   email = "admin@example.local",
+  password = DEFAULT_PASSWORD,
 ): Promise<string> {
-  const loginResponse = await loginWithPassword(app, email, "correct-horse-battery-staple");
+  const loginResponse = await loginWithPassword(app, email, password);
 
   expect(loginResponse.status).toBe(200);
 
@@ -971,20 +710,11 @@ async function expectPasswordReplaced(
   email: string,
   newPassword: string,
 ): Promise<void> {
-  const oldPasswordLogin = await loginWithPassword(app, email, "correct-horse-battery-staple");
+  const oldPasswordLogin = await loginWithPassword(app, email, DEFAULT_PASSWORD);
   const newPasswordLogin = await loginWithPassword(app, email, newPassword);
 
   expect(oldPasswordLogin.status).toBe(401);
   expect(newPasswordLogin.status).toBe(200);
-}
-
-async function expectPasswordHashReplaced(
-  passwordHash: string | undefined,
-  newPassword: string,
-): Promise<void> {
-  expect(passwordHash).toStartWith("$argon2id$");
-  expect(passwordHash).not.toContain(newPassword);
-  expect(await Bun.password.verify(newPassword, passwordHash ?? "")).toBe(true);
 }
 
 async function expectSessionRejected(
@@ -995,46 +725,13 @@ async function expectSessionRejected(
     new Request("http://localhost/api/auth/me", { headers: { cookie: cookieHeader } }),
   );
   const meBody = await meResponse.json();
-  const adminResponse = await app.handle(
-    new Request("http://localhost/api/admin/auth/check", { headers: { cookie: cookieHeader } }),
+  const usersResponse = await app.handle(
+    new Request("http://localhost/api/users", { headers: { cookie: cookieHeader } }),
   );
 
   expect(meResponse.status).toBe(200);
   expect(meBody).toEqual({ user: null });
-  expect(adminResponse.status).toBe(401);
-}
-
-async function adminPatch(
-  app: TestAppContext["app"],
-  path: string,
-  body: unknown,
-  cookie: string,
-): Promise<Response> {
-  return app.handle(csrfJsonPatchRequest(path, body, { cookie }));
-}
-
-async function adminDelete(
-  app: TestAppContext["app"],
-  path: string,
-  body: unknown,
-  cookie: string,
-): Promise<Response> {
-  return app.handle(csrfJsonDeleteRequest(path, body, { cookie }));
-}
-
-function expectedAdminUserSummary(
-  user: ReturnType<typeof requireStoredUserByEmail>,
-  role: "admin" | "user",
-) {
-  return expect.objectContaining({
-    id: user.publicId,
-    username: user.username,
-    role,
-    disabledAt: null,
-    createdAt: expect.any(String),
-    updatedAt: expect.any(String),
-    permissions: [],
-  });
+  expect(usersResponse.status).toBe(401);
 }
 
 function toCookieHeader(setCookie: string): string {
@@ -1088,7 +785,7 @@ function csrfJsonPutRequest(
     headers: {
       "content-type": "application/json",
       "x-forwarded-for": "127.0.0.1",
-      origin: "http://localhost:5173",
+      origin: TEST_WEB_ORIGIN,
       [CSRF_HEADER_NAME]: CSRF_HEADER_VALUE,
       ...headers,
     },
@@ -1106,48 +803,10 @@ function csrfJsonPatchRequest(
     headers: {
       "content-type": "application/json",
       "x-forwarded-for": "127.0.0.1",
-      origin: "http://localhost:5173",
+      origin: TEST_WEB_ORIGIN,
       [CSRF_HEADER_NAME]: CSRF_HEADER_VALUE,
       ...headers,
     },
     body: JSON.stringify(body),
   });
-}
-
-function csrfJsonDeleteRequest(
-  path: string,
-  body: unknown,
-  headers: Record<string, string> = {},
-): Request {
-  return new Request(`http://localhost${path}`, {
-    method: "DELETE",
-    headers: {
-      "content-type": "application/json",
-      "x-forwarded-for": "127.0.0.1",
-      origin: "http://localhost:5173",
-      [CSRF_HEADER_NAME]: CSRF_HEADER_VALUE,
-      ...headers,
-    },
-    body: JSON.stringify(body),
-  });
-}
-
-function jsonDeleteRequest(path: string, body: unknown): Request {
-  return new Request(`http://localhost${path}`, {
-    method: "DELETE",
-    headers: {
-      "content-type": "application/json",
-      "x-forwarded-for": "127.0.0.1",
-      origin: "http://localhost:5173",
-    },
-    body: JSON.stringify(body),
-  });
-}
-
-function expectUuidv7(id: string | undefined): void {
-  expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-}
-
-function expectPublicUserId(id: string | undefined): void {
-  expect(id).toMatch(/^[A-Za-z0-9]{9}$/);
 }

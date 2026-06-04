@@ -1,11 +1,14 @@
-import { USER_PERMISSION_VALUES, USER_ROLES } from "@arrtemplar/shared";
+import { USER_PERMISSION_VALUES } from "@arrtemplar/shared";
 import { type InferInsertModel, type InferSelectModel, sql } from "drizzle-orm";
 import { index, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 const timestampNow = sql<string>`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`;
 
-export const userRoles = USER_ROLES;
 export const userPermissions = USER_PERMISSION_VALUES;
+const userPermissionEnum = [...userPermissions] as [
+  (typeof userPermissions)[number],
+  ...(typeof userPermissions)[number][],
+];
 
 export const users = sqliteTable(
   "users",
@@ -15,7 +18,6 @@ export const users = sqliteTable(
     username: text("username").notNull(),
     email: text("email").notNull(),
     passwordHash: text("password_hash").notNull(),
-    role: text("role", { enum: userRoles }).notNull().default("user"),
     disabledAt: text("disabled_at"),
     createdAt: text("created_at").notNull().default(timestampNow),
     updatedAt: text("updated_at").notNull().default(timestampNow),
@@ -25,7 +27,6 @@ export const users = sqliteTable(
     uniqueIndex("users_public_id_unique").on(table.publicId),
     uniqueIndex("users_username_unique").on(table.username),
     uniqueIndex("users_email_unique").on(table.email),
-    index("users_role_idx").on(table.role),
   ],
 );
 
@@ -36,7 +37,7 @@ export const userPermissionGrants = sqliteTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    permission: text("permission", { enum: userPermissions }).notNull(),
+    permission: text("permission", { enum: userPermissionEnum }).notNull(),
     grantedByUserId: text("granted_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -90,7 +91,6 @@ export const auditLogs = sqliteTable(
   ],
 );
 
-export type UserRole = (typeof userRoles)[number];
 export type User = InferSelectModel<typeof users>;
 export type NewUser = InferInsertModel<typeof users>;
 export type UserPermissionGrant = InferSelectModel<typeof userPermissionGrants>;
