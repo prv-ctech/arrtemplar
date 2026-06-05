@@ -40,4 +40,13 @@ describe("profile self-service settings layout", () => {
     expect(source).not.toContain("Theme settings affect only the signed-in user.");
     expect(source).not.toContain("profile.role");
   });
+
+  it("keeps theme flavor options as real activatable buttons", async () => {
+    const source = await Bun.file(accountSettingsSourcePath).text();
+
+    expect(source).toContain("export function ThemeSettings()");
+    expect(source).toContain("aria-pressed={isSelected}");
+    expect(source).toContain("onClick={() => setTheme(option.value)}");
+    expect(source).toContain('type="button"');
+  });
 });

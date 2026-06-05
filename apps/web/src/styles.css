@@ -1,4 +1,7 @@
 @import "tailwindcss";
+@import "@catppuccin/tailwindcss/mocha.css";
+
+@custom-variant dark (&:where(.frappe, .frappe *, .macchiato, .macchiato *, .mocha, .mocha *));
 
 @theme inline {
   --font-sans:
@@ -24,179 +27,72 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-selected: var(--selected);
+  --color-selected-border: var(--selected-border);
 }
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
   --radius: 1rem;
 
-  --ctp-rosewater: #f5e0dc;
-  --ctp-flamingo: #f2cdcd;
-  --ctp-pink: #f5c2e7;
-  --ctp-mauve: #cba6f7;
-  --ctp-red: #f38ba8;
-  --ctp-maroon: #eba0ac;
-  --ctp-peach: #fab387;
-  --ctp-yellow: #f9e2af;
-  --ctp-sky: #89dceb;
-  --ctp-sapphire: #74c7ec;
-  --ctp-blue: #89b4fa;
-  --ctp-lavender: #b4befe;
-  --ctp-text: #cdd6f4;
-  --ctp-subtext-1: #bac2de;
-  --ctp-subtext-0: #a6adc8;
-  --ctp-overlay-2: #9399b2;
-  --ctp-overlay-1: #7f849c;
-  --ctp-overlay-0: #6c7086;
-  --ctp-surface-2: #585b70;
-  --ctp-surface-1: #45475a;
-  --ctp-surface-0: #313244;
-  --ctp-base: #1e1e2e;
-  --ctp-mantle: #181825;
-  --ctp-crust: #11111b;
+  --background: var(--catppuccin-color-base);
+  --foreground: var(--catppuccin-color-text);
+  --muted: color-mix(in srgb, var(--catppuccin-color-surface0) 82%, var(--catppuccin-color-base));
+  --muted-foreground: var(--catppuccin-color-subtext0);
+  --border: color-mix(in srgb, var(--catppuccin-color-overlay0) 66%, transparent);
+  --input: color-mix(in srgb, var(--catppuccin-color-surface1) 72%, transparent);
+  --ring: var(--catppuccin-color-lavender);
+  --card: var(--catppuccin-color-surface0);
+  --card-foreground: var(--catppuccin-color-text);
+  --popover: var(--catppuccin-color-mantle);
+  --popover-foreground: var(--catppuccin-color-text);
+  --secondary: var(--catppuccin-color-mantle);
+  --secondary-foreground: var(--catppuccin-color-text);
+  --accent: color-mix(in srgb, var(--catppuccin-color-mauve) 16%, var(--catppuccin-color-surface0));
+  --accent-foreground: var(--catppuccin-color-text);
+  --primary: var(--catppuccin-color-mauve);
+  --primary-foreground: var(--catppuccin-color-base);
+  --destructive: var(--catppuccin-color-red);
+  --destructive-foreground: var(--catppuccin-color-base);
+  --selected: color-mix(in srgb, var(--catppuccin-color-mauve) 10%, var(--catppuccin-color-base));
+  --selected-border: color-mix(
+    in srgb,
+    var(--catppuccin-color-mauve) 34%,
+    var(--catppuccin-color-surface2)
+  );
 
-  --background: var(--ctp-base);
-  --foreground: var(--ctp-text);
-  --muted: color-mix(in srgb, var(--ctp-surface-0) 82%, var(--ctp-base));
-  --muted-foreground: var(--ctp-subtext-0);
-  --border: color-mix(in srgb, var(--ctp-surface-1) 72%, transparent);
-  --input: color-mix(in srgb, var(--ctp-surface-1) 76%, transparent);
-  --ring: var(--ctp-lavender);
-  --card: color-mix(in srgb, var(--ctp-surface-0) 68%, var(--ctp-base));
-  --card-foreground: var(--ctp-text);
-  --popover: color-mix(in srgb, var(--ctp-mantle) 88%, var(--ctp-base));
-  --popover-foreground: var(--ctp-text);
-  --secondary: color-mix(in srgb, var(--ctp-surface-0) 72%, var(--ctp-mantle));
-  --secondary-foreground: var(--ctp-text);
-  --accent: color-mix(in srgb, var(--ctp-lavender) 16%, var(--ctp-surface-0));
-  --accent-foreground: var(--ctp-text);
-  --primary: var(--ctp-mauve);
-  --primary-foreground: var(--ctp-crust);
-  --destructive: var(--ctp-red);
-  --destructive-foreground: var(--ctp-crust);
-
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-
-  --shadow-soft: 0 24px 70px -42px color-mix(in srgb, var(--ctp-crust) 86%, transparent);
-  --shadow-panel: 0 40px 110px -70px color-mix(in srgb, var(--ctp-crust) 90%, transparent);
-  --shadow-button: 0 18px 40px -24px color-mix(in srgb, var(--ctp-mauve) 70%, transparent);
-  --surface-glass: color-mix(in srgb, var(--ctp-base) 78%, transparent);
-  --surface-panel: color-mix(in srgb, var(--ctp-surface-0) 72%, var(--ctp-base));
+  --shadow-soft: 0 24px 70px -42px
+    color-mix(in srgb, var(--catppuccin-color-crust) 86%, transparent);
+  --shadow-panel: 0 40px 110px -70px
+    color-mix(in srgb, var(--catppuccin-color-crust) 90%, transparent);
+  --shadow-button: 0 18px 40px -24px
+    color-mix(in srgb, var(--catppuccin-color-mauve) 70%, transparent);
+  --surface-glass: color-mix(in srgb, var(--catppuccin-color-base) 78%, transparent);
+  --surface-panel: color-mix(
+    in srgb,
+    var(--catppuccin-color-surface0) 72%,
+    var(--catppuccin-color-base)
+  );
 }
 
-html[data-theme="latte"],
 .latte {
   color-scheme: light;
-  --ctp-rosewater: #dc8a78;
-  --ctp-flamingo: #dd7878;
-  --ctp-pink: #ea76cb;
-  --ctp-mauve: #8839ef;
-  --ctp-red: #d20f39;
-  --ctp-maroon: #e64553;
-  --ctp-peach: #fe640b;
-  --ctp-yellow: #df8e1d;
-  --ctp-sky: #04a5e5;
-  --ctp-sapphire: #209fb5;
-  --ctp-blue: #1e66f5;
-  --ctp-lavender: #7287fd;
-  --ctp-text: #4c4f69;
-  --ctp-subtext-1: #5c5f77;
-  --ctp-subtext-0: #6c6f85;
-  --ctp-overlay-2: #7c7f93;
-  --ctp-overlay-1: #8c8fa1;
-  --ctp-overlay-0: #9ca0b0;
-  --ctp-surface-2: #acb0be;
-  --ctp-surface-1: #bcc0cc;
-  --ctp-surface-0: #ccd0da;
-  --ctp-base: #eff1f5;
-  --ctp-mantle: #e6e9ef;
-  --ctp-crust: #dce0e8;
-  --primary-foreground: #f8fbfc;
-  --destructive-foreground: #fff7f8;
-  --shadow-soft: 0 24px 70px -46px color-mix(in srgb, var(--ctp-overlay-1) 52%, transparent);
-  --shadow-panel: 0 40px 110px -72px color-mix(in srgb, var(--ctp-overlay-2) 48%, transparent);
-  --shadow-button: 0 18px 40px -24px color-mix(in srgb, var(--ctp-mauve) 56%, transparent);
 }
 
-html[data-theme="frappe"],
-.frappe {
-  color-scheme: dark;
-  --ctp-rosewater: #f2d5cf;
-  --ctp-flamingo: #eebebe;
-  --ctp-pink: #f4b8e4;
-  --ctp-mauve: #ca9ee6;
-  --ctp-red: #e78284;
-  --ctp-maroon: #ea999c;
-  --ctp-peach: #ef9f76;
-  --ctp-yellow: #e5c890;
-  --ctp-sky: #99d1db;
-  --ctp-sapphire: #85c1dc;
-  --ctp-blue: #8caaee;
-  --ctp-lavender: #babbf1;
-  --ctp-text: #c6d0f5;
-  --ctp-subtext-1: #b5bfe2;
-  --ctp-subtext-0: #a5adce;
-  --ctp-overlay-2: #949cbb;
-  --ctp-overlay-1: #838ba7;
-  --ctp-overlay-0: #737994;
-  --ctp-surface-2: #626880;
-  --ctp-surface-1: #51576d;
-  --ctp-surface-0: #414559;
-  --ctp-base: #303446;
-  --ctp-mantle: #292c3c;
-  --ctp-crust: #232634;
-}
-
-html[data-theme="macchiato"],
-.macchiato {
-  color-scheme: dark;
-  --ctp-rosewater: #f4dbd6;
-  --ctp-flamingo: #f0c6c6;
-  --ctp-pink: #f5bde6;
-  --ctp-mauve: #c6a0f6;
-  --ctp-red: #ed8796;
-  --ctp-maroon: #ee99a0;
-  --ctp-peach: #f5a97f;
-  --ctp-yellow: #eed49f;
-  --ctp-sky: #91d7e3;
-  --ctp-sapphire: #7dc4e4;
-  --ctp-blue: #8aadf4;
-  --ctp-lavender: #b7bdf8;
-  --ctp-text: #cad3f5;
-  --ctp-subtext-1: #b8c0e0;
-  --ctp-subtext-0: #a5adcb;
-  --ctp-overlay-2: #939ab7;
-  --ctp-overlay-1: #8087a2;
-  --ctp-overlay-0: #6e738d;
-  --ctp-surface-2: #5b6078;
-  --ctp-surface-1: #494d64;
-  --ctp-surface-0: #363a4f;
-  --ctp-base: #24273a;
-  --ctp-mantle: #1e2030;
-  --ctp-crust: #181926;
-}
-
-html[data-theme="mocha"],
+.frappe,
+.macchiato,
 .mocha {
   color-scheme: dark;
+  --selected: color-mix(
+    in srgb,
+    var(--catppuccin-color-mauve) 18%,
+    var(--catppuccin-color-surface0)
+  );
+  --selected-border: color-mix(
+    in srgb,
+    var(--catppuccin-color-mauve) 58%,
+    var(--catppuccin-color-surface2)
+  );
 }
 
 *,
@@ -214,14 +110,19 @@ body {
   min-width: 320px;
   min-height: 100dvh;
   color: var(--foreground);
-  background: linear-gradient(135deg, var(--ctp-mantle), var(--ctp-base) 48%, var(--ctp-crust));
+  background: linear-gradient(
+    135deg,
+    var(--catppuccin-color-mantle),
+    var(--catppuccin-color-base) 48%,
+    var(--catppuccin-color-crust)
+  );
   font-feature-settings: "cv02", "cv03", "cv04";
   text-rendering: optimizeLegibility;
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--primary) 72%, var(--ctp-surface-2))
+  scrollbar-color: color-mix(in srgb, var(--primary) 72%, var(--catppuccin-color-surface2))
     color-mix(in srgb, var(--background) 78%, transparent);
 }
 
@@ -237,7 +138,7 @@ body {
 *::-webkit-scrollbar-thumb {
   border: 0.1875rem solid color-mix(in srgb, var(--background) 78%, transparent);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--primary) 72%, var(--ctp-surface-2));
+  background: color-mix(in srgb, var(--primary) 72%, var(--catppuccin-color-surface2));
 }
 
 *::-webkit-scrollbar-thumb:hover {
@@ -259,10 +160,13 @@ body::before {
   pointer-events: none;
   content: "";
   background-image:
-    linear-gradient(color-mix(in srgb, var(--ctp-overlay-0) 10%, transparent) 1px, transparent 1px),
+    linear-gradient(
+      color-mix(in srgb, var(--catppuccin-color-overlay0) 10%, transparent) 1px,
+      transparent 1px
+    ),
     linear-gradient(
       90deg,
-      color-mix(in srgb, var(--ctp-overlay-0) 8%, transparent) 1px,
+      color-mix(in srgb, var(--catppuccin-color-overlay0) 8%, transparent) 1px,
       transparent 1px
     );
   background-size: 72px 72px;
@@ -279,7 +183,7 @@ select {
 
 ::selection {
   color: var(--foreground);
-  background: color-mix(in srgb, var(--ctp-overlay-2) 28%, transparent);
+  background: color-mix(in srgb, var(--catppuccin-color-overlay2) 28%, transparent);
 }
 
 @keyframes skeleton-shimmer {

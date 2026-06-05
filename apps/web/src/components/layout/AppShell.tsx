@@ -118,7 +118,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Public
   return (
     <main className="h-dvh w-full max-w-full overflow-hidden text-foreground">
       <div className="grid h-dvh w-full grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[4.75rem_minmax(0,1fr)]">
-        <aside className="sticky top-0 z-30 border-b border-border bg-[color-mix(in_srgb,var(--ctp-crust)_84%,transparent)] backdrop-blur-lg lg:h-dvh lg:border-r lg:border-b-0">
+        <aside className="sticky top-0 z-30 border-b border-border bg-[color-mix(in_srgb,var(--catppuccin-color-crust)_84%,transparent)] backdrop-blur-lg lg:h-dvh lg:border-r lg:border-b-0">
           <div className="flex items-center justify-between gap-1.5 px-3 py-3 lg:h-full lg:flex-col lg:justify-start lg:px-3 lg:py-4">
             <div className="flex items-center gap-1.5 lg:flex-col">
               <Link

@@ -5,39 +5,42 @@ export type CatppuccinThemeOption = {
   label: string;
   description: string;
   dark: boolean;
-  swatches: readonly string[];
 };
 
 export const DEFAULT_CATPPUCCIN_THEME: CatppuccinTheme = "mocha";
+
+export const CATPPUCCIN_PREVIEW_SWATCHES = [
+  "var(--catppuccin-color-mantle)",
+  "var(--catppuccin-color-base)",
+  "var(--catppuccin-color-surface0)",
+  "var(--catppuccin-color-mauve)",
+  "var(--catppuccin-color-peach)",
+] as const;
 
 export const CATPPUCCIN_THEMES = [
   {
     value: "latte",
     label: "Latte",
-    description: "Bright panels with mauve command accents.",
+    description: "Light flavor with calm base panels and mauve accents.",
     dark: false,
-    swatches: ["#e6e9ef", "#eff1f5", "#ccd0da", "#8839ef", "#fe640b"],
   },
   {
     value: "frappe",
     label: "Frappé",
-    description: "Muted dusk surfaces with lavender and peach.",
+    description: "Subdued dark flavor with softer contrast.",
     dark: true,
-    swatches: ["#292c3c", "#303446", "#414559", "#ca9ee6", "#ef9f76"],
   },
   {
     value: "macchiato",
     label: "Macchiato",
-    description: "Medium contrast with mauve and warm peach.",
+    description: "Medium-contrast dark flavor with gentle colors.",
     dark: true,
-    swatches: ["#1e2030", "#24273a", "#363a4f", "#c6a0f6", "#f5a97f"],
   },
   {
     value: "mocha",
     label: "Mocha",
-    description: "Deep theater mode with mauve and amber contrast.",
+    description: "Original darkest flavor with cozy contrast.",
     dark: true,
-    swatches: ["#181825", "#1e1e2e", "#313244", "#cba6f7", "#fab387"],
   },
 ] as const satisfies readonly CatppuccinThemeOption[];
 

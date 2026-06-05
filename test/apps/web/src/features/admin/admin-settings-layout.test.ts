@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { readWorkspaceSource } from "./admin-settings-test-sources";
 
 const settingsSourcePath = "apps/web/src/features/admin/AdminSettings.tsx";
+const settingsPrimitivesSourcePath = "apps/web/src/features/settings/SettingsPrimitives.tsx";
 const usersSourcePath = "apps/web/src/features/admin/AdminUsersSettings.tsx";
 const usersHooksSourcePath = "apps/web/src/features/admin/admin-users.ts";
 
@@ -49,6 +50,16 @@ describe("app settings layout", () => {
     expect(usersSource).toContain("canToggleUserStatus");
     expect(usersSource).toContain("UserCirclePlusIcon");
     expect(usersSource).toContain('aria-label="Create user"');
+    expect(usersSource).toContain('containerClassName="max-w-full bg-card"');
+    expect(usersSource).toContain('className="border-separate border-spacing-0"');
+    expect(usersSource).toContain("sticky right-0 w-12 border-l border-border");
+    expect(usersSource).toContain("shadow-[-1px_0_0_0_var(--border),-12px_0_0_0_var(--card)]");
+    expect(usersSource).toContain("sm:shadow-none");
+    expect(usersSource).toContain("sm:static sm:border-l-0 sm:bg-transparent");
+    expect(usersSource).not.toContain("bg-card/95");
+    expect(usersSource).not.toContain("backdrop-blur-sm");
+    expect(usersSource).toContain("const userActionHeaderClassName");
+    expect(usersSource).toContain("const userActionCellClassName");
     expect(usersSource).toContain("bg-primary text-primary-foreground");
     expect(usersSource).toContain("shadow-(--shadow-button)");
     expect(usersSource).toContain("pointer-events-none size-4");
@@ -71,5 +82,27 @@ describe("app settings layout", () => {
     expect(hooksSource).toContain("useUpdateManagedUserPermissionsMutation");
     expect(hooksSource).toContain("useUpdateManagedUserStatusMutation");
     expect(hooksSource).not.toContain("useChangeAdminUserRoleMutation");
+  });
+
+  it("keeps the settings tabs shell static while scrolling tab items inside it", async () => {
+    const source = await readWorkspaceSource("apps/web/src/features/settings/SettingsNav.tsx");
+
+    expect(source).toContain("w-full min-w-0 overflow-hidden rounded-2xl");
+    expect(source).toContain("scrollbar-hidden min-w-0 overflow-x-auto");
+    expect(source).toContain('className="w-max min-w-max"');
+    expect(source).toContain('className="h-auto w-max min-w-max gap-1 bg-transparent p-0"');
+    expect(source).not.toContain("py-1 pr-4 pl-0");
+    expect(source).not.toContain('className="w-max min-w-full"');
+    expect(source).not.toContain("data-[state=active]:bg-background");
+  });
+
+  it("uses an opaque selected settings tab surface across Catppuccin flavors", async () => {
+    const source = await readWorkspaceSource(settingsPrimitivesSourcePath);
+
+    expect(source).toContain("data-[state=active]:bg-selected");
+    expect(source).toContain("data-[state=active]:border-selected-border");
+    expect(source).toContain("text-muted-foreground");
+    expect(source).not.toContain("text-foreground/60");
+    expect(source).not.toContain("dark:data-[state=active]:bg-input/30");
   });
 });

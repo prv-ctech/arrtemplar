@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+  CATPPUCCIN_PREVIEW_SWATCHES,
   CATPPUCCIN_THEMES,
   DEFAULT_CATPPUCCIN_THEME,
   isCatppuccinTheme,
@@ -16,47 +17,30 @@ describe("Catppuccin theme options", () => {
     ]);
   });
 
-  it("uses official Catppuccin palette colors for theme preview swatches", () => {
+  it("uses official Catppuccin flavor metadata without duplicating palette hex values", () => {
     expect(CATPPUCCIN_THEMES).toHaveLength(4);
     expect(CATPPUCCIN_THEMES[0]).toMatchObject({
       value: "latte",
       label: "Latte",
       dark: false,
     });
-    expect(CATPPUCCIN_THEMES[0]?.swatches).toEqual([
-      "#e6e9ef",
-      "#eff1f5",
-      "#ccd0da",
-      "#8839ef",
-      "#fe640b",
-    ]);
     expect(CATPPUCCIN_THEMES[1]).toMatchObject({ value: "frappe", label: "Frappé", dark: true });
-    expect(CATPPUCCIN_THEMES[1]?.swatches).toEqual([
-      "#292c3c",
-      "#303446",
-      "#414559",
-      "#ca9ee6",
-      "#ef9f76",
-    ]);
     expect(CATPPUCCIN_THEMES[2]).toMatchObject({
       value: "macchiato",
       label: "Macchiato",
       dark: true,
     });
-    expect(CATPPUCCIN_THEMES[2]?.swatches).toEqual([
-      "#1e2030",
-      "#24273a",
-      "#363a4f",
-      "#c6a0f6",
-      "#f5a97f",
-    ]);
     expect(CATPPUCCIN_THEMES[3]).toMatchObject({ value: "mocha", label: "Mocha", dark: true });
-    expect(CATPPUCCIN_THEMES[3]?.swatches).toEqual([
-      "#181825",
-      "#1e1e2e",
-      "#313244",
-      "#cba6f7",
-      "#fab387",
+    expect(JSON.stringify(CATPPUCCIN_THEMES)).not.toMatch(/#[\da-f]{6}/i);
+  });
+
+  it("previews flavors with official Catppuccin CSS variables", () => {
+    expect(CATPPUCCIN_PREVIEW_SWATCHES).toEqual([
+      "var(--catppuccin-color-mantle)",
+      "var(--catppuccin-color-base)",
+      "var(--catppuccin-color-surface0)",
+      "var(--catppuccin-color-mauve)",
+      "var(--catppuccin-color-peach)",
     ]);
   });
 

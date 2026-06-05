@@ -24,7 +24,7 @@ export function LoginRoute() {
           className="h-full w-full scale-105 object-cover opacity-28 blur-[1.5px] saturate-[0.9]"
           src={loginMediaAssets.backdrop}
         />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_24%_18%,color-mix(in_srgb,var(--primary)_24%,transparent),transparent_28rem),radial-gradient(circle_at_78%_76%,color-mix(in_srgb,var(--ctp-peach)_16%,transparent),transparent_34rem),linear-gradient(180deg,color-mix(in_srgb,var(--background)_58%,transparent),var(--background)_88%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_24%_18%,color-mix(in_srgb,var(--primary)_24%,transparent),transparent_28rem),radial-gradient(circle_at_78%_76%,color-mix(in_srgb,var(--catppuccin-color-peach)_16%,transparent),transparent_34rem),linear-gradient(180deg,color-mix(in_srgb,var(--background)_58%,transparent),var(--background)_88%)]" />
         <div className="absolute inset-0 bg-background/54" />
       </div>
 

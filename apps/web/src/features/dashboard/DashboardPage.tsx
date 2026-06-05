@@ -11,10 +11,10 @@ import { HealthPanel } from "@/features/health/HealthPanel";
 
 const summaryRows = [
   { label: "Collecting", value: "14", dotClass: "bg-primary" },
-  { label: "Ready to match", value: "7", dotClass: "bg-(--ctp-blue)" },
-  { label: "Needs metadata", value: "12", dotClass: "bg-(--ctp-peach)" },
-  { label: "Manual review", value: "8", dotClass: "bg-(--ctp-yellow)" },
-  { label: "Archived", value: "9", dotClass: "bg-(--ctp-rosewater)" },
+  { label: "Ready to match", value: "7", dotClass: "bg-ctp-blue" },
+  { label: "Needs metadata", value: "12", dotClass: "bg-ctp-peach" },
+  { label: "Manual review", value: "8", dotClass: "bg-ctp-yellow" },
+  { label: "Archived", value: "9", dotClass: "bg-ctp-rosewater" },
 ] as const;
 
 const eventRows = [
@@ -30,14 +30,14 @@ const eventRows = [
     detail: "Import panel will request poster and banner assets",
     day: "22",
     month: "Aug",
-    tone: "border-l-(--ctp-peach)",
+    tone: "border-l-ctp-peach",
   },
   {
     title: "Quiet Comet moved to admin review",
     detail: "Duplicate request merged into a single queue item",
     day: "24",
     month: "Aug",
-    tone: "border-l-(--ctp-blue)",
+    tone: "border-l-ctp-blue",
   },
 ] as const;
 
@@ -105,7 +105,7 @@ export function DashboardPage({ user }: { user: PublicUser }) {
                   className="h-full w-full object-cover opacity-86 transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:scale-105"
                   src={`https://picsum.photos/seed/${seed}/900/540`}
                 />
-                <div className="absolute inset-0 bg-[linear-gradient(180deg,transparent_34%,color-mix(in_srgb,var(--ctp-crust)_82%,transparent))]" />
+                <div className="absolute inset-0 bg-[linear-gradient(180deg,transparent_34%,color-mix(in_srgb,var(--catppuccin-color-crust)_82%,transparent))]" />
                 <span className="absolute right-3 top-3 rounded-lg border border-border bg-background/72 px-2 py-1 font-mono text-xs text-foreground backdrop-blur-md">
                   {label}
                 </span>
@@ -162,7 +162,7 @@ function SummaryPanel({ username }: { username: string }) {
         <ShieldCheckIcon aria-hidden="true" className="size-6 text-primary" weight="duotone" />
       </div>
       <div className="mt-6 grid gap-6 sm:grid-cols-[10rem_minmax(0,1fr)] sm:items-center">
-        <div className="relative mx-auto grid size-40 place-items-center rounded-full bg-[conic-gradient(from_210deg,var(--ctp-mauve)_0_30%,var(--ctp-blue)_30%_48%,var(--ctp-peach)_48%_64%,var(--ctp-yellow)_64%_79%,var(--ctp-rosewater)_79%_100%)]">
+        <div className="relative mx-auto grid size-40 place-items-center rounded-full bg-[conic-gradient(from_210deg,var(--catppuccin-color-blue)_0_30%,var(--catppuccin-color-sky)_30%_48%,var(--catppuccin-color-peach)_48%_64%,var(--catppuccin-color-yellow)_64%_79%,var(--catppuccin-color-rosewater)_79%_100%)]">
           <div className="grid size-28 place-items-center rounded-full border border-border bg-card text-center shadow-(--shadow-soft)">
             <span>
               <span className="block font-mono text-4xl font-semibold tracking-tighter text-foreground">
@@ -258,7 +258,7 @@ function DemandPanel() {
         {demandBars.map(([label, height]) => (
           <div className="flex flex-1 flex-col items-center gap-2" key={label}>
             <div
-              className={`w-full rounded-t-xl bg-[linear-gradient(180deg,var(--ctp-peach),color-mix(in_srgb,var(--ctp-mauve)_64%,var(--ctp-base)))] ${height}`}
+              className={`w-full rounded-t-xl bg-[linear-gradient(180deg,var(--catppuccin-color-peach),color-mix(in_srgb,var(--catppuccin-color-blue)_64%,var(--catppuccin-color-base)))] ${height}`}
             />
             <span className="font-mono text-xs text-muted-foreground">{label}</span>
           </div>

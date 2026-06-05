@@ -37,6 +37,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const root = document.documentElement;
     root.dataset.theme = theme;
+    root.classList.remove(...CATPPUCCIN_THEMES.map((option) => option.value));
+    root.classList.add(theme);
     root.style.colorScheme = selectedTheme.dark ? "dark" : "light";
 
     try {

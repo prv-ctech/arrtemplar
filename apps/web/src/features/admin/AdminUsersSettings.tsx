@@ -9,7 +9,7 @@ import {
 } from "@arrtemplar/shared";
 import { ShieldCheckIcon, UserCircleIcon, UserCirclePlusIcon } from "@phosphor-icons/react";
 import { Link } from "@tanstack/react-router";
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -51,6 +51,15 @@ import {
   useUsersQuery,
 } from "./admin-users";
 
+const userActionColumnBaseClassName = [
+  "sticky right-0 w-12 border-l border-border bg-card text-right",
+  "shadow-[-1px_0_0_0_var(--border),-12px_0_0_0_var(--card)]",
+  "sm:static sm:border-l-0 sm:bg-transparent sm:shadow-none",
+].join(" ");
+
+const userActionHeaderClassName = `${userActionColumnBaseClassName} z-30`;
+const userActionCellClassName = `${userActionColumnBaseClassName} z-20`;
+
 export function AdminUsersSettings() {
   const actor = useAuthenticatedRouteUser();
   const usersQuery = useUsersQuery();
@@ -72,17 +81,11 @@ export function AdminUsersSettings() {
   const canToggleStatus = hasRequiredPermission(actor, "users:disable");
   const rows = usersQuery.data ?? [];
   const permissionCatalog = permissionCatalogQuery.data ?? [];
+  const permissionGroups = new Map<PermissionCatalogEntry["category"], PermissionCatalogEntry[]>();
 
-  const permissionCatalogEntries = useMemo(() => permissionCatalog, [permissionCatalog]);
-  const permissionGroups = useMemo(() => {
-    const groups = new Map<PermissionCatalogEntry["category"], PermissionCatalogEntry[]>();
-
-    for (const entry of permissionCatalogEntries) {
-      groups.set(entry.category, [...(groups.get(entry.category) ?? []), entry]);
-    }
-
-    return groups;
-  }, [permissionCatalogEntries]);
+  for (const entry of permissionCatalog) {
+    permissionGroups.set(entry.category, [...(permissionGroups.get(entry.category) ?? []), entry]);
+  }
 
   function handleCreateUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -189,7 +192,7 @@ export function AdminUsersSettings() {
 
   return (
     <div className="space-y-6">
-      <Table containerClassName="max-w-full">
+      <Table className="border-separate border-spacing-0" containerClassName="max-w-full bg-card">
         <TableHeader>
           <TableRow>
             <TableHead>User</TableHead>
@@ -198,7 +201,7 @@ export function AdminUsersSettings() {
             <TableHead>Status</TableHead>
             <TableHead>Created</TableHead>
             <TableHead>Updated</TableHead>
-            <TableHead className="w-12 text-right">
+            <TableHead className={userActionHeaderClassName}>
               {canCreateUsers ? (
                 <Button
                   aria-label="Create user"
@@ -238,7 +241,7 @@ export function AdminUsersSettings() {
                   <TableCell>{user.disabledAt ? "Disabled" : "Active"}</TableCell>
                   <TableCell>{new Date(user.createdAt).toLocaleDateString()}</TableCell>
                   <TableCell>{new Date(user.updatedAt).toLocaleDateString()}</TableCell>
-                  <TableCell className="w-12 text-right">
+                  <TableCell className={userActionCellClassName}>
                     <UserRowActions
                       actor={actor}
                       canChangePasswords={canChangePasswords}

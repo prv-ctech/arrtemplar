@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { type SettingsEntry, SettingsNav } from "../settings/SettingsNav";
 import { SettingsPanel, SettingsRow, SettingsSection } from "../settings/SettingsPrimitives";
 import { ThemePreviewStrip } from "../theme/ThemePreviewStrip";
+import { CATPPUCCIN_PREVIEW_SWATCHES } from "../theme/theme-options";
 import { useTheme } from "../theme/theme-state";
 import { syncUpdatedUserProfileCaches, userProfileQueryKey } from "../user/user-profile-cache";
 import { canAccessAccountSettingsPage } from "./account-settings-access";
@@ -319,7 +320,10 @@ export function ThemeSettings() {
               onClick={() => setTheme(option.value)}
               type="button"
             >
-              <ThemePreviewStrip className="h-8 w-20" swatches={option.swatches} />
+              <ThemePreviewStrip
+                className={cn("h-8 w-20", option.value)}
+                swatches={CATPPUCCIN_PREVIEW_SWATCHES}
+              />
               <span className="min-w-0 flex-1 font-medium">{option.label}</span>
               {isSelected ? (
                 <CheckCircleIcon aria-hidden="true" className="size-4 text-primary" weight="fill" />

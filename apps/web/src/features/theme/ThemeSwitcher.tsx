@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { ThemePreviewStrip } from "./ThemePreviewStrip";
+import { CATPPUCCIN_PREVIEW_SWATCHES } from "./theme-options";
 import { useTheme } from "./theme-state";
 
 export function ThemeSwitcher({ compact = false }: { compact?: boolean }) {
@@ -44,8 +45,11 @@ export function ThemeSwitcher({ compact = false }: { compact?: boolean }) {
             onSelect={() => setTheme(option.value)}
           >
             <ThemePreviewStrip
-              className="mt-0.5 h-9 w-24 shadow-[inset_0_1px_0_color-mix(in_srgb,var(--ctp-base)_70%,transparent)]"
-              swatches={option.swatches}
+              className={cn(
+                "mt-0.5 h-9 w-24 shadow-[inset_0_1px_0_color-mix(in_srgb,var(--catppuccin-color-base)_70%,transparent)]",
+                option.value,
+              )}
+              swatches={CATPPUCCIN_PREVIEW_SWATCHES}
             />
             <span className="min-w-0 flex-1">
               <span className="flex items-center justify-between gap-3 text-sm font-medium text-foreground">
