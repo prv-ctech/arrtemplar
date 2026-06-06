@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { authQueryKey, canAccessSettings, canManageUsers } from "@/features/auth/auth-state";
+import { authQueryKey, canAccessSettings } from "@/features/auth/auth-state";
 import { ThemeSwitcher } from "@/features/theme/ThemeSwitcher";
 import { logout } from "@/lib/api";
 import { queryClient } from "@/lib/query-client";
@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 
 type ShellNavLinkItem = {
   label: string;
-  to: "/dashboard" | "/users";
+  to: "/dashboard";
   icon: ReactNode;
 };
 
@@ -100,15 +100,6 @@ export function AppShell({ children, user }: { children: ReactNode; user: Public
       to: "/dashboard",
       icon: <HouseIcon aria-hidden="true" className="size-5" />,
     },
-    ...(canManageUsers(user)
-      ? [
-          {
-            label: "Users",
-            to: "/users" as const,
-            icon: <UserCircleIcon aria-hidden="true" className="size-5" />,
-          },
-        ]
-      : []),
   ];
 
   const handleSignOut = () => {

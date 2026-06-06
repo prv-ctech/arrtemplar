@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useRef } from "react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,12 +20,11 @@ import { canAccessAccountSettingsPage } from "./account-settings-access";
 import type { AccountSettingsPage } from "./account-settings-types";
 
 type AccountSettingsRouteTarget =
-  | "/profile"
   | "/profile/settings/main"
   | "/profile/settings/password"
   | "/profile/settings/notifications";
 
-type ProfileSettingsPage = Exclude<AccountSettingsPage, "theme">;
+type ProfileSettingsPage = AccountSettingsPage;
 
 type AccountSettingsEntry = SettingsEntry<ProfileSettingsPage> & {
   path: AccountSettingsRouteTarget;
@@ -60,55 +58,6 @@ function createSettingsEntries() {
       to: "/profile/settings/notifications",
     },
   ] satisfies [AccountSettingsEntry, ...AccountSettingsEntry[]];
-}
-
-function ProfileOverview({ user }: { user: PublicUser }) {
-  const navigate = useNavigate();
-
-  return (
-    <Card className="shadow-(--shadow-panel)">
-      <CardHeader>
-        <CardTitle>Profile overview</CardTitle>
-        <CardDescription>
-          Your self-service profile stays separate from application and service settings.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="min-w-0 rounded-2xl border border-border bg-card/72 p-4">
-            <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
-              Username
-            </p>
-            <p className="mt-2 truncate text-sm font-semibold text-foreground">{user.username}</p>
-          </div>
-          <div className="min-w-0 rounded-2xl border border-border bg-card/72 p-4">
-            <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
-              Email
-            </p>
-            <p className="mt-2 truncate text-sm font-semibold text-foreground">{user.email}</p>
-          </div>
-          <div className="min-w-0 rounded-2xl border border-border bg-card/72 p-4">
-            <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
-              Public ID
-            </p>
-            <p className="mt-2 truncate font-mono text-sm text-foreground">{user.id}</p>
-          </div>
-          <div className="min-w-0 rounded-2xl border border-border bg-card/72 p-4">
-            <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
-              Permissions
-            </p>
-            <p className="mt-2 text-sm text-foreground">{user.permissions.length} active</p>
-          </div>
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <Badge variant="outline">Joined {new Date(user.createdAt).toLocaleDateString()}</Badge>
-          <Button onClick={() => navigate({ to: "/profile/settings/main" })} type="button">
-            Profile Settings
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
 }
 
 function MainSettings({ user }: { user: PublicUser }) {
@@ -344,8 +293,6 @@ function ActiveSettingsPage({
   user: PublicUser;
 }) {
   switch (activePage) {
-    case "profile":
-      return <ProfileOverview user={user} />;
     case "main":
       return <MainSettings user={user} />;
     case "password":
@@ -376,10 +323,6 @@ export function AccountSettings({
     );
   }
 
-  if (activePage === "theme") {
-    return <ThemeSettings />;
-  }
-
   const settingsEntries = createSettingsEntries();
 
   function handlePageChange(page: ProfileSettingsPage) {
@@ -390,13 +333,12 @@ export function AccountSettings({
     }
   }
 
-  const heading = activePage === "profile" ? "Profile" : "Profile Settings";
   const activeEntry =
     settingsEntries.find((entry) => entry.id === activePage) ?? settingsEntries[0];
 
   return (
     <div className="flex flex-col">
-      <h1 className="sr-only">{heading}</h1>
+      <h1 className="sr-only">Profile Settings</h1>
       <SettingsNav
         active={activePage}
         entries={settingsEntries}

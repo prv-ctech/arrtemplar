@@ -1,13 +1,13 @@
 import type { AdminUpdateUserPermissionsRequest, UserPermission } from "@arrtemplar/shared";
 import { LockIcon, ShieldCheckIcon, UserCircleIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { Navigate, useNavigate, useParams } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { usePermissionCatalogQuery } from "@/features/admin/admin-users";
-import { hasRequiredPermission } from "@/features/auth/auth-state";
+import { canManageUsers, hasRequiredPermission } from "@/features/auth/auth-state";
 import {
   changeManagedUserPassword,
   getManagedUserProfile,
@@ -24,13 +24,17 @@ export type UserSettingsPage = "main" | "password" | "permissions";
 
 type UserSettingsEntry = SettingsEntry<UserSettingsPage> & {
   to:
-    | "/users/$publicUserId/settings/main"
-    | "/users/$publicUserId/settings/password"
-    | "/users/$publicUserId/settings/permissions";
+    | "/profile/$publicUserId/settings/main"
+    | "/profile/$publicUserId/settings/password"
+    | "/profile/$publicUserId/settings/permissions";
 };
 
 function createUserSettingsEntries(actor: ReturnType<typeof useAuthenticatedRouteUser>) {
   const entries: UserSettingsEntry[] = [];
+
+  if (!canManageUsers(actor)) {
+    return entries;
+  }
 
   if (hasRequiredPermission(actor, "users:update")) {
     entries.push({
@@ -38,7 +42,7 @@ function createUserSettingsEntries(actor: ReturnType<typeof useAuthenticatedRout
       label: "Main",
       icon: <UserCircleIcon aria-hidden="true" className="size-5" />,
       description: "Managed user identity and contact details.",
-      to: "/users/$publicUserId/settings/main",
+      to: "/profile/$publicUserId/settings/main",
     });
   }
 
@@ -48,7 +52,7 @@ function createUserSettingsEntries(actor: ReturnType<typeof useAuthenticatedRout
       label: "Password",
       icon: <LockIcon aria-hidden="true" className="size-5" />,
       description: "Managed user password rotation.",
-      to: "/users/$publicUserId/settings/password",
+      to: "/profile/$publicUserId/settings/password",
     });
   }
 
@@ -58,15 +62,25 @@ function createUserSettingsEntries(actor: ReturnType<typeof useAuthenticatedRout
       label: "Permissions",
       icon: <ShieldCheckIcon aria-hidden="true" className="size-5" />,
       description: "Explicit permission grants for the managed user.",
-      to: "/users/$publicUserId/settings/permissions",
+      to: "/profile/$publicUserId/settings/permissions",
     });
   }
 
-  return entries as [UserSettingsEntry, ...UserSettingsEntry[]];
+  return entries;
+}
+
+function getSelfProfileSettingsRedirect(page: UserSettingsPage) {
+  switch (page) {
+    case "password":
+      return "/profile/settings/password";
+    case "main":
+    case "permissions":
+      return "/profile/settings/main";
+  }
 }
 
 function UserIdentitySettings() {
-  const { publicUserId } = useParams({ from: "/users/$publicUserId/settings/main" });
+  const { publicUserId } = useParams({ from: "/profile/$publicUserId/settings/main" });
   const queryClient = useQueryClient();
   const userQuery = useQuery({
     queryKey: managedUserProfileQueryKey(publicUserId),
@@ -133,7 +147,7 @@ function UserIdentitySettings() {
 }
 
 function UserPasswordSettings() {
-  const { publicUserId } = useParams({ from: "/users/$publicUserId/settings/password" });
+  const { publicUserId } = useParams({ from: "/profile/$publicUserId/settings/password" });
   const mutation = useMutation({
     mutationFn: ({ input, userId }: { userId: string; input: { password: string } }) =>
       changeManagedUserPassword(userId, input),
@@ -175,7 +189,7 @@ function UserPasswordSettings() {
 }
 
 function UserPermissionsSettings() {
-  const { publicUserId } = useParams({ from: "/users/$publicUserId/settings/permissions" });
+  const { publicUserId } = useParams({ from: "/profile/$publicUserId/settings/permissions" });
   const queryClient = useQueryClient();
   const userQuery = useQuery({
     queryKey: managedUserProfileQueryKey(publicUserId),
@@ -263,11 +277,16 @@ export function UserSettings({ activePage }: { activePage: UserSettingsPage }) {
   const { publicUserId } = useParams({
     from:
       activePage === "main"
-        ? "/users/$publicUserId/settings/main"
+        ? "/profile/$publicUserId/settings/main"
         : activePage === "password"
-          ? "/users/$publicUserId/settings/password"
-          : "/users/$publicUserId/settings/permissions",
+          ? "/profile/$publicUserId/settings/password"
+          : "/profile/$publicUserId/settings/permissions",
   });
+
+  if (publicUserId === actor.id) {
+    return <Navigate replace to={getSelfProfileSettingsRedirect(activePage)} />;
+  }
+
   const entries = createUserSettingsEntries(actor);
   const activeEntry = entries.find((entry) => entry.id === activePage);
 

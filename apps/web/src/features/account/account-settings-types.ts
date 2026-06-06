@@ -1,1 +1,1 @@
-export type AccountSettingsPage = "profile" | "main" | "password" | "notifications" | "theme";
+export type AccountSettingsPage = "main" | "password" | "notifications";

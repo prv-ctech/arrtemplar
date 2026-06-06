@@ -93,7 +93,7 @@ describe("permission foundations", () => {
     });
     expect(PERMISSION_CATALOG.find((entry) => entry.permission === "users:manage")).toMatchObject({
       category: "users",
-      route: { surface: "users", path: "/users" },
+      route: { surface: "users", path: "/settings/users" },
       defaultGrant: "explicit",
     });
     expect(PERMISSION_CATALOG.find((entry) => entry.permission === "profile:update")).toMatchObject(

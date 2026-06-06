@@ -1,10 +1,16 @@
-import { createRootRoute, createRoute, createRouter, Navigate } from "@tanstack/react-router";
+import {
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Link,
+  Navigate,
+  useParams,
+} from "@tanstack/react-router";
 import { AccountSettings } from "../features/account/AccountSettings";
-import { UserProfilePage } from "../features/user/UserProfilePage";
+import { PersonalProfileRoute, UserProfilePage } from "../features/user/UserProfilePage";
 import { UserSettings } from "../features/user/UserSettings";
 import { useAuthenticatedRouteUser } from "./authenticated-route-user";
 import { AccountNotificationsRoute } from "./components/account-notifications-route";
-import { AccountProfileRoute } from "./components/account-profile-route";
 import { AccountRoute } from "./components/account-route";
 import { AdminAboutRoute } from "./components/admin-about-route";
 import { AdminGeneralRoute } from "./components/admin-general-route";
@@ -24,6 +30,51 @@ function SettingsIndexRedirect() {
   return <Navigate replace to="/settings/about" />;
 }
 
+function ProfileSettingsIndexRedirect() {
+  return <Navigate replace to="/profile/settings/main" />;
+}
+
+function ManagedProfileSettingsIndexRedirect() {
+  const actor = useAuthenticatedRouteUser();
+  const { publicUserId } = useParams({ from: "/profile/$publicUserId/settings" });
+
+  if (publicUserId === actor.id) {
+    return <Navigate replace to="/profile/settings/main" />;
+  }
+
+  return <Navigate replace params={{ publicUserId }} to="/profile/$publicUserId/settings/main" />;
+}
+
+function RootNotFoundRoute() {
+  return (
+    <main className="grid min-h-dvh place-items-center bg-background px-4 text-foreground">
+      <section className="w-full max-w-md rounded-4xl border border-border bg-card/78 p-6 text-center shadow-(--shadow-soft)">
+        <p className="text-sm font-medium text-primary">Route not found</p>
+        <h1 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-foreground">
+          This page is no longer available.
+        </h1>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          User management now lives in Settings, and profile dashboards live under Profile.
+        </p>
+        <div className="mt-5 flex flex-wrap justify-center gap-2">
+          <Link
+            className="rounded-2xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-(--shadow-button) transition-[background,transform] duration-300 hover:-translate-y-0.5 hover:bg-primary/90 active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            to="/settings/users"
+          >
+            Open Users
+          </Link>
+          <Link
+            className="rounded-2xl border border-border px-4 py-2 text-sm font-medium text-muted-foreground transition-[background,color,transform] duration-300 hover:-translate-y-0.5 hover:bg-card hover:text-foreground active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            to="/profile"
+          >
+            Open Profile
+          </Link>
+        </div>
+      </section>
+    </main>
+  );
+}
+
 function ProfileSettingsMainRoute() {
   const user = useAuthenticatedRouteUser();
 
@@ -36,7 +87,7 @@ function ProfileSettingsPasswordRoute() {
   return <AccountSettings activePage="password" user={user} />;
 }
 
-const rootRoute = createRootRoute({ component: RootLayout });
+const rootRoute = createRootRoute({ component: RootLayout, notFoundComponent: RootNotFoundRoute });
 
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -71,7 +122,13 @@ const profileRoute = createRoute({
 const profileIndexRoute = createRoute({
   getParentRoute: () => profileRoute,
   path: "/",
-  component: AccountProfileRoute,
+  component: PersonalProfileRoute,
+});
+
+const profileSettingsIndexRoute = createRoute({
+  getParentRoute: () => profileRoute,
+  path: "settings",
+  component: ProfileSettingsIndexRedirect,
 });
 
 const profileSettingsMainRoute = createRoute({
@@ -92,38 +149,32 @@ const profileSettingsNotificationsRoute = createRoute({
   component: AccountNotificationsRoute,
 });
 
-const usersRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "users",
-  component: AccountRoute,
-});
-
-const usersIndexRoute = createRoute({
-  getParentRoute: () => usersRoute,
-  path: "/",
-  component: AdminUsersRoute,
-});
-
 const userProfileRoute = createRoute({
-  getParentRoute: () => usersRoute,
+  getParentRoute: () => profileRoute,
   path: "$publicUserId",
   component: UserProfilePage,
 });
 
+const userSettingsIndexRoute = createRoute({
+  getParentRoute: () => profileRoute,
+  path: "$publicUserId/settings",
+  component: ManagedProfileSettingsIndexRedirect,
+});
+
 const userSettingsMainRoute = createRoute({
-  getParentRoute: () => usersRoute,
+  getParentRoute: () => profileRoute,
   path: "$publicUserId/settings/main",
   component: () => <UserSettings activePage="main" />,
 });
 
 const userSettingsPasswordRoute = createRoute({
-  getParentRoute: () => usersRoute,
+  getParentRoute: () => profileRoute,
   path: "$publicUserId/settings/password",
   component: () => <UserSettings activePage="password" />,
 });
 
 const userSettingsPermissionsRoute = createRoute({
-  getParentRoute: () => usersRoute,
+  getParentRoute: () => profileRoute,
   path: "$publicUserId/settings/permissions",
   component: () => <UserSettings activePage="permissions" />,
 });
@@ -164,6 +215,12 @@ const settingsLibraryRoute = createRoute({
   component: AdminLibraryRoute,
 });
 
+const settingsUsersRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "users",
+  component: AdminUsersRoute,
+});
+
 const settingsImportRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "import",
@@ -194,13 +251,12 @@ const routeTree = rootRoute.addChildren([
   authenticatedRoute.addChildren([dashboardRoute]),
   profileRoute.addChildren([
     profileIndexRoute,
+    profileSettingsIndexRoute,
     profileSettingsMainRoute,
     profileSettingsPasswordRoute,
     profileSettingsNotificationsRoute,
-  ]),
-  usersRoute.addChildren([
-    usersIndexRoute,
     userProfileRoute,
+    userSettingsIndexRoute,
     userSettingsMainRoute,
     userSettingsPasswordRoute,
     userSettingsPermissionsRoute,
@@ -211,6 +267,7 @@ const routeTree = rootRoute.addChildren([
     settingsAboutRoute,
     settingsGeneralRoute,
     settingsLibraryRoute,
+    settingsUsersRoute,
     settingsImportRoute,
     settingsNotificationsRoute,
     settingsServicesRoute,

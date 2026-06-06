@@ -8,17 +8,19 @@ Roles are **not** part of the authenticated web contract or database schema. Acc
 
 | Route family | Purpose | Notes |
 | --- | --- | --- |
-| `/app/dashboard` | Shared authenticated dashboard | Default landing path after sign-in. |
-| `/profile` | Signed-in user's own profile overview | Self-service surface only. |
+| `/dashboard` | Shared authenticated dashboard | Default landing path after sign-in. |
+| `/profile` | Signed-in user's own profile dashboard | Self-service dashboard surface only; profile settings are not rendered here. |
+| `/profile/settings` | Signed-in user's profile settings default | Redirects to `/profile/settings/main`. |
 | `/profile/settings/main` | Signed-in user's profile identity settings | Updates username and email only for the signed-in user. |
 | `/profile/settings/password` | Signed-in user's password settings | Changes only the signed-in user's password. |
 | `/profile/settings/notifications` | Signed-in user's notification preferences | Reserved for self-service notification settings. |
-| `/users` | Managed user directory | Requires `users:manage` or `system:admin`. |
-| `/users/:publicUserId` | Managed user profile | Public IDs are locators, not authorization secrets. |
-| `/users/:publicUserId/settings/main` | Managed user identity editor | Requires `users:manage` plus `users:update`. |
-| `/users/:publicUserId/settings/password` | Managed user password editor | Requires `users:manage` plus `users:password`. |
-| `/users/:publicUserId/settings/permissions` | Managed user permission editor | Requires `users:manage` plus `users:permissions`. |
+| `/profile/:publicUserId` | Managed user profile dashboard | Public IDs are locators, not authorization secrets. |
+| `/profile/:publicUserId/settings` | Managed user settings default | Redirects to `/profile/:publicUserId/settings/main`. |
+| `/profile/:publicUserId/settings/main` | Managed user identity editor | Requires `users:manage` plus `users:update`. |
+| `/profile/:publicUserId/settings/password` | Managed user password editor | Requires `users:manage` plus `users:password`. |
+| `/profile/:publicUserId/settings/permissions` | Managed user permission editor | Requires `users:manage` plus `users:permissions`. |
 | `/settings` | Top-level settings shell | Redirects to the first safe/default section. |
+| `/settings/users` | Managed user directory | Requires `users:manage` or `system:admin`. |
 | `/settings/about` | Safe application information | Available to signed-in users through default permissions. |
 | `/settings/theme` | Signed-in user's theme preference | Theme is **exclusive** to `/settings/theme` and affects only the signed-in user. |
 | `/settings/general` | App-wide general settings | Permission-gated. |
@@ -36,13 +38,18 @@ These paths are intentionally **not** part of the application anymore:
 - `/account/services`
 - delegated `/account/*` settings routes
 - `/mod/*`
+- `/users`
+- `/users/*`
 - `/profile/settings/theme`
 
 The profile menu now links to:
 
 - `My Profile` → `/profile`
-- `Profile Settings` → `/profile/settings/main`
 - `Settings` → `/settings`
+
+Profile settings are reached from the profile dashboard action:
+
+- `Profile Settings` → `/profile/settings/main`
 
 ## Permission model
 
@@ -69,7 +76,7 @@ The first created account receives an explicit `system:admin` grant.
 
 Cross-user URLs are never authorized by guessing a public ID.
 
-To access `/users/:publicUserId` or `/users/:publicUserId/settings/*`, the actor must have:
+To access `/profile/:publicUserId` or `/profile/:publicUserId/settings/*`, the actor must have:
 
 1. `users:manage` (or `system:admin`), and
 2. the narrower action permission for the target settings page where applicable.
@@ -106,8 +113,8 @@ The current permission-first API surfaces are:
 - Password hashes, session token hashes, CSRF values, and other private fields are never returned to the client.
 - Password changes, permission changes, and status changes revoke the target user's sessions.
 - The last active `system:admin` grant cannot be removed through managed-user mutations.
-- Self-service account changes belong under `/profile`; cross-user management belongs under `/users`.
+- Self-service account changes belong under `/profile/settings`; cross-user profile dashboards and settings belong under `/profile/:publicUserId`; the managed user directory belongs under `/settings/users`.
 
 ## SPA routing notes
 
-Vite's SPA fallback still applies for nested frontend paths. Production static hosting should continue rewriting unknown frontend paths to `index.html` so direct loads of `/profile`, `/users/Ab3Xy9Qp2`, or `/settings/theme` resolve to the app shell.
+Vite's SPA fallback still applies for nested frontend paths. Production static hosting should continue rewriting unknown frontend paths to `index.html` so direct loads of `/profile`, `/profile/Ab3Xy9Qp2`, or `/settings/theme` resolve to the app shell.

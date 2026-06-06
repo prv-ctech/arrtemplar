@@ -6,15 +6,15 @@ const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..
 const appShellSourcePath = `${workspaceRoot}/apps/web/src/components/layout/AppShell.tsx`;
 
 describe("app shell primary navigation", () => {
-  it("uses dashboard and permission-aware users links without duplicating settings navigation", async () => {
+  it("uses dashboard as the only primary sidebar link and keeps users inside settings", async () => {
     const source = await Bun.file(appShellSourcePath).text();
 
     expect(source).toContain('to="/dashboard"');
     expect(source).toContain('to: "/dashboard"');
     expect(source).not.toContain('"/app/dashboard"');
-    expect(source).toContain('label: "Users"');
-    expect(source).toContain('to: "/users"');
-    expect(source).toContain("canManageUsers(user)");
+    expect(source).not.toContain('label: "Users"');
+    expect(source).not.toContain('to: "/users"');
+    expect(source).not.toContain("canManageUsers(user)");
     expect(source).not.toContain('label: "Settings"');
     expect(source).not.toContain('to: "/settings"');
     expect(source).not.toContain("GearIcon");

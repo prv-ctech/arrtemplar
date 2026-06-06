@@ -67,7 +67,7 @@ describe("permission-first shared auth contracts", () => {
     ).toMatchObject({
       label: "Manage user permissions",
       category: "users",
-      route: { surface: "users", path: "/users/:publicUserId/settings/permissions" },
+      route: { surface: "users", path: "/profile/:publicUserId/settings/permissions" },
       defaultGrant: "explicit",
     });
   });

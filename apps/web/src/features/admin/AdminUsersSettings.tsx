@@ -271,7 +271,7 @@ export function AdminUsersSettings() {
           <DialogHeader>
             <DialogTitle>Create User</DialogTitle>
             <DialogDescription>
-              Create a new local account for the /users directory.
+              Create a new local account for the settings users directory.
             </DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={handleCreateUser}>
@@ -490,11 +490,15 @@ function UserRowActions({
 }) {
   const isActorRow = actor.id === user.id;
   const canRunManagedMutation = !isActorRow;
+  const canChangeManagedPassword = canRunManagedMutation && canChangePasswords;
+  const canEditManagedPermissions = canRunManagedMutation && canEditPermissions;
+  const canToggleManagedStatus =
+    canRunManagedMutation && canToggleStatus && canToggleUserStatus(actor, user);
   const showManagedActions =
-    canRunManagedMutation &&
-    (canChangePasswords ||
-      canEditPermissions ||
-      (canToggleStatus && canToggleUserStatus(actor, user)));
+    canChangeManagedPassword || canEditManagedPermissions || canToggleManagedStatus;
+  const profileLink = isActorRow
+    ? ({ to: "/profile" } as const)
+    : ({ to: "/profile/$publicUserId", params: { publicUserId: user.id } } as const);
 
   return (
     <DropdownMenu>
@@ -515,32 +519,21 @@ function UserRowActions({
       <DropdownMenuContent align="end">
         <DropdownMenuLabel>User actions</DropdownMenuLabel>
         <DropdownMenuItem asChild>
-          <Link to="/users/$publicUserId" params={{ publicUserId: user.id }}>
-            View profile
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          {isActorRow ? (
-            <Link to="/profile/settings/main">Edit settings</Link>
-          ) : (
-            <Link to="/users/$publicUserId/settings/main" params={{ publicUserId: user.id }}>
-              Edit settings
-            </Link>
-          )}
+          <Link {...profileLink}>View profile</Link>
         </DropdownMenuItem>
         {showManagedActions ? <DropdownMenuSeparator /> : null}
-        {canRunManagedMutation && canChangePasswords ? (
+        {canChangeManagedPassword ? (
           <DropdownMenuItem onSelect={() => onChangePassword(user)}>
             Change password
           </DropdownMenuItem>
         ) : null}
-        {canRunManagedMutation && canEditPermissions ? (
+        {canEditManagedPermissions ? (
           <DropdownMenuItem onSelect={() => onEditPermissions(user)}>
             <ShieldCheckIcon aria-hidden="true" className="size-4" />
             Edit permissions
           </DropdownMenuItem>
         ) : null}
-        {canToggleStatus && canToggleUserStatus(actor, user) ? (
+        {canToggleManagedStatus ? (
           <DropdownMenuItem
             onSelect={() => onToggleStatus(user)}
             variant={user.disabledAt ? "default" : "destructive"}

@@ -50,7 +50,7 @@ export const PERMISSION_CATALOG = [
     description: "View the user directory and access cross-user profile and settings pages.",
     risk: "high",
     defaultGrant: "explicit",
-    route: { surface: "users", path: "/users" },
+    route: { surface: "users", path: "/settings/users" },
   },
   {
     permission: "users:create",
@@ -59,7 +59,7 @@ export const PERMISSION_CATALOG = [
     description: "Create local user accounts from the managed users directory.",
     risk: "medium",
     defaultGrant: "explicit",
-    route: { surface: "users", path: "/users" },
+    route: { surface: "users", path: "/settings/users" },
   },
   {
     permission: "users:update",
@@ -68,7 +68,7 @@ export const PERMISSION_CATALOG = [
     description: "Edit another user's identity and account settings details.",
     risk: "high",
     defaultGrant: "explicit",
-    route: { surface: "users", path: "/users/:publicUserId/settings/main" },
+    route: { surface: "users", path: "/profile/:publicUserId/settings/main" },
   },
   {
     permission: "users:password",
@@ -77,7 +77,7 @@ export const PERMISSION_CATALOG = [
     description: "Reset another user's password and revoke their existing sessions.",
     risk: "high",
     defaultGrant: "explicit",
-    route: { surface: "users", path: "/users/:publicUserId/settings/password" },
+    route: { surface: "users", path: "/profile/:publicUserId/settings/password" },
   },
   {
     permission: "users:permissions",
@@ -86,7 +86,7 @@ export const PERMISSION_CATALOG = [
     description: "Grant or revoke explicit permissions for managed users.",
     risk: "critical",
     defaultGrant: "explicit",
-    route: { surface: "users", path: "/users/:publicUserId/settings/permissions" },
+    route: { surface: "users", path: "/profile/:publicUserId/settings/permissions" },
   },
   {
     permission: "users:disable",
@@ -95,7 +95,7 @@ export const PERMISSION_CATALOG = [
     description: "Disable or restore managed user access while preserving audit history.",
     risk: "high",
     defaultGrant: "explicit",
-    route: { surface: "users", path: "/users/:publicUserId" },
+    route: { surface: "users", path: "/profile/:publicUserId" },
   },
   {
     permission: "profile:update",

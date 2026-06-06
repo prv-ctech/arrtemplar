@@ -23,7 +23,7 @@ describe("profile self-service settings layout", () => {
     expect(source).not.toContain('label: "Logs"');
   });
 
-  it("keeps profile identity and password forms plus a dedicated profile overview", async () => {
+  it("keeps profile identity and password forms inside settings without dashboard content", async () => {
     const source = await Bun.file(accountSettingsSourcePath).text();
 
     expect(source).toContain("getUserProfile");
@@ -32,8 +32,10 @@ describe("profile self-service settings layout", () => {
     expect(source).toContain("currentPassword");
     expect(source).toContain("newPassword");
     expect(source).toContain("confirmPassword");
-    expect(source).toContain("Profile overview");
     expect(source).toContain("Profile Settings");
+    expect(source).not.toContain("ProfileOverview");
+    expect(source).not.toContain('case "profile"');
+    expect(source).not.toContain('activePage === "profile"');
     expect(source).toContain("ThemeSettings");
     expect(source).not.toContain("Theme settings");
     expect(source).not.toContain("Personal theme preference");

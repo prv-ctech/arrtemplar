@@ -32,7 +32,7 @@ export type AdminSettingsPage =
   | "users";
 
 type SettingsRouteTarget =
-  | "/users"
+  | "/settings/users"
   | "/settings/about"
   | "/settings/theme"
   | "/settings/general"
@@ -90,7 +90,7 @@ function createSettingsEntries(user: PublicUser) {
       label: "Users",
       icon: <UserIcon aria-hidden="true" className="size-5" />,
       description: "User directory and per-user management surfaces.",
-      path: "/users",
+      path: "/settings/users",
     });
   }
 

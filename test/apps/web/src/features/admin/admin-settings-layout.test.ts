@@ -25,6 +25,8 @@ describe("app settings layout", () => {
     const hooksSource = await readWorkspaceSource(usersHooksSourcePath);
 
     expect(settingsSource).toContain("AdminUsersSettings");
+    expect(settingsSource).toContain('path: "/settings/users"');
+    expect(settingsSource).not.toContain('path: "/users"');
     expect(settingsSource).toContain("ThemeSettings");
     expect(settingsSource).not.toContain("<AccountSettings");
     expect(settingsSource).not.toContain('activePage="theme"');
@@ -63,6 +65,17 @@ describe("app settings layout", () => {
     expect(usersSource).toContain("bg-primary text-primary-foreground");
     expect(usersSource).toContain("shadow-(--shadow-button)");
     expect(usersSource).toContain("pointer-events-none size-4");
+    expect(usersSource).toContain('to: "/profile/$publicUserId"');
+    expect(usersSource).toContain("publicUserId: user.id");
+    expect(usersSource).toContain("View profile");
+    expect(usersSource).toContain('to: "/profile"');
+    expect(usersSource).not.toContain('to="/profile/settings/main"');
+    expect(usersSource).not.toContain('to="/profile/$publicUserId/settings/main"');
+    expect(usersSource).not.toContain("Edit settings");
+    expect(usersSource).not.toContain("UserSettingsActionLink");
+    expect(usersSource).not.toContain("UserProfileActionLink");
+    expect(usersSource).not.toContain('to="/Users/$publicUserId"');
+    expect(usersSource).not.toContain('to="/Users/$publicUserId/settings/main"');
     expect(usersSource).not.toContain("lucide-react");
     expect(usersSource).not.toContain("UserRoundPlus");
     expect(usersSource).toContain("focus-visible:ring-0");
@@ -72,6 +85,7 @@ describe("app settings layout", () => {
     expect(usersSource).not.toContain(
       "Manage local users by public ID, permissions, and account status.",
     );
+    expect(usersSource).not.toContain("/users directory");
     expect(usersSource).not.toContain("<PlusIcon");
     expect(usersSource).not.toContain("<TableHead>Actions</TableHead>");
     expect(usersSource).not.toContain('explicitPermissions.join(", ")');

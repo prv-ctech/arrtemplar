@@ -14,7 +14,7 @@ const SETTINGS_PAGE_IDS = [
   "logs",
 ] as const;
 
-const SPECIAL_PATHS = [{ id: "users", path: "/users" }] as const;
+const SPECIAL_PATHS = [{ id: "users", path: "/settings/users" }] as const;
 
 describe("settings routing metadata", () => {
   it("defines canonical /settings paths for every supported section", async () => {

@@ -19,10 +19,13 @@ describe("settings navigation", () => {
     expect(source).toContain("touch-pan-x");
     expect(source).toContain("touch-manipulation");
     expect(source).toContain("overflow-x-auto");
-    expect(source).toContain("min-h-11");
+    expect(source).toContain("min-h-10");
+    expect(source).toContain("rounded-lg");
+    expect(source).toContain("px-2.5 py-2");
     expect(source).toContain('className="relative z-10 w-full"');
     expect(source).not.toContain("bg-background/95");
     expect(source).not.toContain("group-data-[orientation=horizontal]/tabs:h-auto");
+    expect(source).not.toContain("min-h-11");
     expect(source).not.toContain("KeyboardEvent");
     expect(source).not.toContain("handleTabKeyDown");
   });

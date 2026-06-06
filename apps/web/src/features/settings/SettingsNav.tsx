@@ -85,7 +85,7 @@ export function SettingsNav<TPage extends string>({
                   <SettingsTabsTrigger
                     aria-controls={`${entry.id}-settings-panel`}
                     className={cn(
-                      "h-auto min-h-11 shrink-0 snap-start justify-start gap-2 rounded-xl border border-transparent px-3 py-2.5 text-sm font-medium whitespace-nowrap touch-manipulation",
+                      "h-auto min-h-10 shrink-0 snap-start justify-start gap-2 rounded-lg border border-transparent px-2.5 py-2 text-sm font-medium whitespace-nowrap touch-manipulation",
                       "data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:text-foreground",
                       "**:data-[slot=settings-nav-icon]:transition-colors data-[state=active]:**:data-[slot=settings-nav-icon]:text-primary",
                     )}
