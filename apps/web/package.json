@@ -8,7 +8,8 @@
     "build": "tsc -p tsconfig.json --noEmit && bunx --bun vite build",
     "preview": "bunx --bun vite preview --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "cd ../.. && bun test test/apps/web"
+    "test": "cd ../.. && bun test test/apps/web",
+    "doctor": "npx react-doctor@latest"
   },
   "dependencies": {
     "@arrtemplar/server": "workspace:*",

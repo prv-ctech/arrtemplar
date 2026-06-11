@@ -1,9 +1,17 @@
 import { describe, expect, it } from "bun:test";
-import { readWorkspaceSource } from "./admin-settings-test-sources";
+import { readWorkspaceSource, readWorkspaceSources } from "./admin-settings-test-sources";
 
 const settingsSourcePath = "apps/web/src/features/admin/AdminSettings.tsx";
 const settingsPrimitivesSourcePath = "apps/web/src/features/settings/SettingsPrimitives.tsx";
-const usersSourcePath = "apps/web/src/features/admin/AdminUsersSettings.tsx";
+const usersSourcePaths = [
+  "apps/web/src/features/admin/AdminUsersSettings.tsx",
+  "apps/web/src/features/admin/admin-users-table.tsx",
+  "apps/web/src/features/admin/change-user-password-dialog.tsx",
+  "apps/web/src/features/admin/create-user-dialog.tsx",
+  "apps/web/src/features/admin/edit-user-permissions-dialog.tsx",
+  "apps/web/src/features/admin/user-permission-summary.tsx",
+  "apps/web/src/features/admin/user-row-actions.tsx",
+] as const;
 const usersHooksSourcePath = "apps/web/src/features/admin/admin-users.ts";
 
 describe("app settings layout", () => {
@@ -21,7 +29,7 @@ describe("app settings layout", () => {
 
   it("keeps the users section as a real directory-driven management surface", async () => {
     const settingsSource = await readWorkspaceSource(settingsSourcePath);
-    const usersSource = await readWorkspaceSource(usersSourcePath);
+    const usersSource = await readWorkspaceSources(usersSourcePaths);
     const hooksSource = await readWorkspaceSource(usersHooksSourcePath);
 
     expect(settingsSource).toContain("AdminUsersSettings");

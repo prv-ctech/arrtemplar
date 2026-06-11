@@ -147,10 +147,12 @@ function UserIdentitySettings() {
 
 function UserPasswordSettings() {
   const { publicUserId } = useParams({ from: "/profile/$publicUserId/settings/password" });
+  const queryClient = useQueryClient();
   const mutation = useMutation({
     mutationFn: ({ input, userId }: { userId: string; input: { password: string } }) =>
       changeManagedUserPassword(userId, input),
-    onSuccess: () => {
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: managedUserProfileQueryKey(publicUserId) });
       toast.success("Managed user password updated.");
     },
     onError: (error) => {
