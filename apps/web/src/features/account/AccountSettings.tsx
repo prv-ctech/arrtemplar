@@ -62,12 +62,11 @@ function createSettingsEntries() {
 
 function MainSettings({ user }: { user: PublicUser }) {
   const queryClient = useQueryClient();
-  const profileQuery = useQuery({
+  const { data: profile, isFetching: isProfileFetching } = useQuery({
     queryKey: userProfileQueryKey,
     queryFn: getUserProfile,
     initialData: user,
   });
-  const profile = profileQuery.data;
   const profileMutation = useMutation({
     mutationFn: updateUserProfile,
     onSuccess: async (updatedProfile) => {
@@ -140,7 +139,7 @@ function MainSettings({ user }: { user: PublicUser }) {
       </SettingsSection>
 
       <div className="flex items-center justify-end gap-3">
-        {profileQuery.isFetching ? (
+        {isProfileFetching ? (
           <span className="text-xs text-muted-foreground">Refreshing profile</span>
         ) : null}
         <Button disabled={profileMutation.isPending} type="submit">

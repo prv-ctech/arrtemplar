@@ -23,7 +23,7 @@
     "check:code:fallow": "fallow audit --quiet",
     "check:code:fallow:full": "fallow --summary",
     "check:code:fallow:fix:dry-run": "fallow fix --dry-run",
-    "check:code:react-doctor": "react-doctor apps/web --full --offline --fail-on error",
+    "check:code:react-doctor": "react-doctor --diff false --no-score --blocking error apps/web",
     "check:quality:code": "bun run check:code:biome && bun run check:code:typecheck && bun run check:code:test && bun run check:code:fallow",
     "check:quality:code:full": "bun run check:code:biome && bun run check:code:typecheck && bun run check:code:test && bun run check:code:fallow:full && bun run check:code:react-doctor",
     "format": "biome check --write .",
@@ -32,13 +32,13 @@
     "db:migrate": "bun run --cwd apps/server db:migrate"
   },
   "devDependencies": {
-    "@biomejs/biome": "latest",
-    "@logtape/logtape": "^2.1.0",
-    "@types/bun": "latest",
+    "@biomejs/biome": "^2.4.16",
+    "@logtape/logtape": "^2.1.3",
+    "@types/bun": "^1.3.14",
     "bun-types": "^1.3.14",
-    "fallow": "2.87.0",
-    "react-doctor": "^0.2.16",
-    "typescript": "latest"
+    "fallow": "2.92.1",
+    "react-doctor": "^0.5.1",
+    "typescript": "^6.0.3"
   },
   "module": "index.ts",
   "overrides": {

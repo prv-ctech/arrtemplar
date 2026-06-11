@@ -82,11 +82,10 @@ function getSelfProfileSettingsRedirect(page: UserSettingsPage) {
 function UserIdentitySettings() {
   const { publicUserId } = useParams({ from: "/profile/$publicUserId/settings/main" });
   const queryClient = useQueryClient();
-  const userQuery = useQuery({
+  const { data: user } = useQuery({
     queryKey: managedUserProfileQueryKey(publicUserId),
     queryFn: () => getManagedUserProfile(publicUserId),
   });
-  const user = userQuery.data;
   const mutation = useMutation({
     mutationFn: ({
       input,
@@ -191,7 +190,7 @@ function UserPasswordSettings() {
 function UserPermissionsSettings() {
   const { publicUserId } = useParams({ from: "/profile/$publicUserId/settings/permissions" });
   const queryClient = useQueryClient();
-  const userQuery = useQuery({
+  const { data: user } = useQuery({
     queryKey: managedUserProfileQueryKey(publicUserId),
     queryFn: () => getManagedUserProfile(publicUserId),
   });
@@ -200,10 +199,9 @@ function UserPermissionsSettings() {
     mutationFn: ({ userId, input }: { userId: string; input: AdminUpdateUserPermissionsRequest }) =>
       updateManagedUserPermissions(userId, input),
     onSuccess: async (updatedUser) => {
-      const existingUser = userQuery.data;
-      if (existingUser) {
+      if (user) {
         queryClient.setQueryData(managedUserProfileQueryKey(publicUserId), {
-          ...existingUser,
+          ...user,
           permissions: updatedUser.permissions,
           disabledAt: updatedUser.disabledAt,
           updatedAt: updatedUser.updatedAt,
@@ -219,7 +217,6 @@ function UserPermissionsSettings() {
   });
   const [selectedPermissions, setSelectedPermissions] = useState<Set<UserPermission>>(new Set());
 
-  const user = userQuery.data;
   const catalog = permissionCatalogQuery.data ?? [];
 
   useEffect(() => {

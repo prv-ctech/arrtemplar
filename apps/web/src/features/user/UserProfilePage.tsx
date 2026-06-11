@@ -169,7 +169,11 @@ export function UserProfilePage() {
   const { publicUserId } = useParams({ from: "/profile/$publicUserId" });
   const isSelfProfile = publicUserId === actor.id;
   const canReadManagedProfile = !isSelfProfile && canManageUsers(actor);
-  const userQuery = useQuery({
+  const {
+    data: managedUser,
+    isError: isManagedUserError,
+    isPending: isManagedUserPending,
+  } = useQuery({
     enabled: canReadManagedProfile,
     queryKey: managedUserProfileQueryKey(publicUserId),
     queryFn: () => getManagedUserProfile(publicUserId),
@@ -192,11 +196,11 @@ export function UserProfilePage() {
     );
   }
 
-  if (userQuery.isPending) {
+  if (isManagedUserPending) {
     return <p className="text-sm text-muted-foreground">Loading user profile…</p>;
   }
 
-  if (userQuery.isError || !userQuery.data) {
+  if (isManagedUserError || !managedUser) {
     return (
       <Card className="border-dashed bg-card/54 shadow-(--shadow-soft)">
         <CardHeader>
@@ -209,15 +213,16 @@ export function UserProfilePage() {
     );
   }
 
-  const user = userQuery.data;
-
   return (
     <ProfileDashboard
       action={
         <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
           {hasRequiredPermission(actor, "users:update") ? (
             <Button asChild type="button">
-              <Link params={{ publicUserId: user.id }} to="/profile/$publicUserId/settings/main">
+              <Link
+                params={{ publicUserId: managedUser.id }}
+                to="/profile/$publicUserId/settings/main"
+              >
                 Profile Settings
               </Link>
             </Button>
@@ -225,8 +230,8 @@ export function UserProfilePage() {
         </div>
       }
       description="Managed profile dashboard for cross-user support and administration."
-      title={user.username}
-      user={user}
+      title={managedUser.username}
+      user={managedUser}
     />
   );
 }

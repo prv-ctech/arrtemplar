@@ -11,7 +11,13 @@ const healthTimestampFormatter = new Intl.DateTimeFormat(undefined, {
 });
 
 export function HealthPanel() {
-  const healthQuery = useQuery({
+  const {
+    data: health,
+    error,
+    isError,
+    isPending,
+    refetch,
+  } = useQuery({
     queryKey: ["health"],
     queryFn: getHealth,
     refetchInterval: 30_000,
@@ -31,11 +37,9 @@ export function HealthPanel() {
         </div>
       </CardHeader>
       <CardContent>
-        {healthQuery.isPending ? <HealthLoading /> : null}
-        {healthQuery.isError ? (
-          <HealthError message={healthQuery.error.message} onRetry={() => healthQuery.refetch()} />
-        ) : null}
-        {healthQuery.data ? <HealthReady health={healthQuery.data} /> : null}
+        {isPending ? <HealthLoading /> : null}
+        {isError ? <HealthError message={error.message} onRetry={() => refetch()} /> : null}
+        {health ? <HealthReady health={health} /> : null}
       </CardContent>
     </Card>
   );
