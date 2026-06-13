@@ -21,6 +21,10 @@ describe("app settings layout", () => {
     expect(source).toContain('<h1 className="sr-only">Settings</h1>');
     expect(source).toContain('path: "/settings/about"');
     expect(source).toContain('path: "/settings/theme"');
+    expect(source).toContain('header={activePage === "theme" ? null : undefined}');
+    expect(source).not.toContain("ThemePackHeader");
+    expect(source).not.toContain("CATPPUCCIN_LOGO_SRC");
+    expect(source).not.toContain("Theme preference for the signed-in user.");
     expect(source).toContain('path: "/settings/services"');
     expect(source).not.toContain('path: "/admin/');
     expect(source).not.toContain("Admin settings");
@@ -121,6 +125,7 @@ describe("app settings layout", () => {
   it("uses an opaque selected settings tab surface across Catppuccin flavors", async () => {
     const source = await readWorkspaceSource(settingsPrimitivesSourcePath);
 
+    expect(source).toContain("header === undefined ? defaultHeader : header");
     expect(source).toContain("data-[state=active]:bg-selected");
     expect(source).toContain("data-[state=active]:border-selected-border");
     expect(source).toContain("text-muted-foreground");

@@ -6,12 +6,12 @@ const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..
 const indexHtmlSourcePath = `${workspaceRoot}/apps/web/index.html`;
 const themeStateSourcePath = `${workspaceRoot}/apps/web/src/features/theme/theme-state.tsx`;
 
-describe("Catppuccin theme state", () => {
-  it("applies the official Catppuccin flavor class to the document root", async () => {
+describe("theme state", () => {
+  it("applies the selected app theme class to the document root", async () => {
     const source = await Bun.file(themeStateSourcePath).text();
 
     expect(source).toContain("root.dataset.theme = theme;");
-    expect(source).toMatch(/root\.classList\.remove\(\.\.\.\s*CATPPUCCIN_THEMES\.map\(/s);
+    expect(source).toMatch(/root\.classList\.remove\(\.\.\.\s*APP_THEMES\.map\(/s);
     expect(source).toContain("root.classList.add(theme);");
   });
 

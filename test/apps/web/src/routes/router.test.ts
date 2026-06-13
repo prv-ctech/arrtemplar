@@ -4,17 +4,23 @@ import { fileURLToPath } from "node:url";
 
 const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../../");
 const routerSourcePath = `${workspaceRoot}/apps/web/src/routes/router.tsx`;
+const managedProfileSettingsRedirectSourcePath = `${workspaceRoot}/apps/web/src/routes/components/managed-profile-settings-index-redirect.tsx`;
+const userProfileSourcePath = `${workspaceRoot}/apps/web/src/features/user/UserProfilePage.tsx`;
 
 describe("router route taxonomy", () => {
   it("defines profile dashboard, profile settings, managed profile, and settings route families", async () => {
     const source = await Bun.file(routerSourcePath).text();
+    const managedProfileSettingsRedirectSource = await Bun.file(
+      managedProfileSettingsRedirectSourcePath,
+    ).text();
+    const userProfileSource = await Bun.file(userProfileSourcePath).text();
 
     expect(source).toContain('path: "dashboard"');
     expect(source).toContain('path: "profile"');
     expect(source).toContain("PersonalProfileRoute");
     expect(source).toContain("ProfileSettingsIndexRedirect");
-    expect(source).toContain("publicUserId === actor.id");
-    expect(source).toContain('to="/profile/settings/main"');
+    expect(managedProfileSettingsRedirectSource).toContain("publicUserId === actor.id");
+    expect(userProfileSource).toContain('to="/profile/settings/main"');
     expect(source).toContain('path: "settings/main"');
     expect(source).toContain('path: "settings/password"');
     expect(source).toContain('path: "settings/notifications"');

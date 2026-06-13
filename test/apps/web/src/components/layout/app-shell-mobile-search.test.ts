@@ -26,6 +26,9 @@ describe("app shell primary navigation", () => {
   it("links the account dropdown to profile and settings surfaces without profile settings", async () => {
     const source = await Bun.file(appShellSourcePath).text();
 
+    expect(source).not.toContain("ThemeSwitcher");
+    expect(source).not.toContain("Change Catppuccin color theme");
+    expect(source).not.toContain("Catppuccin flavor");
     expect(source).toContain("My Profile");
     expect(source).toContain("Settings");
     expect(source).toContain('to="/profile"');

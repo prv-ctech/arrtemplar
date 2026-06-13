@@ -7,13 +7,14 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
 import { authQueryKey } from "@/features/auth/auth-state";
 import { changePassword, getUserProfile, updateUserProfile } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { type SettingsEntry, SettingsNav } from "../settings/SettingsNav";
 import { SettingsPanel, SettingsRow, SettingsSection } from "../settings/SettingsPrimitives";
 import { ThemePreviewStrip } from "../theme/ThemePreviewStrip";
-import { CATPPUCCIN_PREVIEW_SWATCHES } from "../theme/theme-options";
+import type { AppTheme, ThemePack } from "../theme/theme-options";
 import { useTheme } from "../theme/theme-state";
 import { syncUpdatedUserProfileCaches, userProfileQueryKey } from "../user/user-profile-cache";
 import { canAccessAccountSettingsPage } from "./account-settings-access";
@@ -247,39 +248,78 @@ function NotificationSettings() {
   );
 }
 
+function ThemePackCard({
+  onThemeChange,
+  pack,
+  selectedTheme,
+}: {
+  onThemeChange: (theme: AppTheme) => void;
+  pack: ThemePack;
+  selectedTheme: AppTheme;
+}) {
+  return (
+    <Card className="w-full overflow-hidden rounded-2xl bg-card/50 shadow-none">
+      <CardHeader className="flex-row items-center gap-3 space-y-0 p-3">
+        <img
+          alt={pack.logoAlt}
+          className="size-11 rounded-full border border-border bg-card/70 p-0.5"
+          src={pack.logoSrc}
+        />
+        <div className="min-w-0 flex-1">
+          <CardTitle className="truncate text-base leading-6">{pack.label}</CardTitle>
+        </div>
+      </CardHeader>
+      <Separator />
+      <CardContent className="p-2.5">
+        <fieldset className="grid grid-cols-2 gap-2">
+          <legend className="sr-only">{pack.label} themes</legend>
+          {pack.themes.map((option) => {
+            const isSelected = option.value === selectedTheme;
+            return (
+              <Button
+                aria-pressed={isSelected}
+                className={cn(
+                  "h-auto min-h-11 justify-start gap-2 rounded-xl px-2.5 py-2 text-left",
+                  "shadow-none hover:translate-y-0 active:translate-y-0",
+                  pack.themes.length === 1 && "col-span-2",
+                  isSelected
+                    ? "border-primary/50 bg-primary/12 text-foreground hover:bg-primary/16"
+                    : "border-border bg-card/72 text-muted-foreground hover:bg-accent hover:text-foreground",
+                )}
+                key={option.value}
+                onClick={() => onThemeChange(option.value)}
+                type="button"
+                variant="outline"
+              >
+                <ThemePreviewStrip
+                  className={cn("h-6 w-12 rounded-md", option.value)}
+                  swatches={option.previewSwatches ?? pack.previewSwatches}
+                />
+                <span className="min-w-0 flex-1 truncate font-medium">{option.label}</span>
+                {isSelected ? (
+                  <CheckCircleIcon
+                    aria-hidden="true"
+                    className="size-3.5 text-primary"
+                    weight="fill"
+                  />
+                ) : null}
+              </Button>
+            );
+          })}
+        </fieldset>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function ThemeSettings() {
-  const { setTheme, theme, themes } = useTheme();
+  const { setTheme, theme, themePacks } = useTheme();
 
   return (
-    <div className="divide-y divide-border rounded-3xl border border-border bg-card/50">
-      {themes.map((option) => {
-        const isSelected = option.value === theme;
-        return (
-          <SettingsRow description={option.description} key={option.value} label={option.label}>
-            <button
-              aria-pressed={isSelected}
-              className={cn(
-                "flex min-w-52 items-center justify-between gap-3 rounded-2xl border px-3 py-2 text-left text-sm transition-[background,border-color,transform] duration-300",
-                "hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:translate-y-px",
-                isSelected
-                  ? "border-primary/50 bg-primary/12 text-foreground"
-                  : "border-border bg-card/72 text-muted-foreground hover:bg-accent hover:text-foreground",
-              )}
-              onClick={() => setTheme(option.value)}
-              type="button"
-            >
-              <ThemePreviewStrip
-                className={cn("h-8 w-20", option.value)}
-                swatches={CATPPUCCIN_PREVIEW_SWATCHES}
-              />
-              <span className="min-w-0 flex-1 font-medium">{option.label}</span>
-              {isSelected ? (
-                <CheckCircleIcon aria-hidden="true" className="size-4 text-primary" weight="fill" />
-              ) : null}
-            </button>
-          </SettingsRow>
-        );
-      })}
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),22rem))] gap-4">
+      {themePacks.map((pack) => (
+        <ThemePackCard key={pack.id} onThemeChange={setTheme} pack={pack} selectedTheme={theme} />
+      ))}
     </div>
   );
 }

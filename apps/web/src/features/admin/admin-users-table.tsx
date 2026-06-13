@@ -21,7 +21,7 @@ const userActionColumnBaseClassName = [
 const userActionHeaderClassName = `${userActionColumnBaseClassName} z-30`;
 const userActionCellClassName = `${userActionColumnBaseClassName} z-20`;
 
-export type AdminUsersTableCapabilities = {
+type AdminUsersTableCapabilities = {
   canChangePasswords: boolean;
   canCreateUsers: boolean;
   canEditPermissions: boolean;

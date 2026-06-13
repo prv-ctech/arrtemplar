@@ -1,7 +1,20 @@
 @import "tailwindcss";
 @import "@catppuccin/tailwindcss/mocha.css";
 
-@custom-variant dark (&:where(.frappe, .frappe *, .macchiato, .macchiato *, .mocha, .mocha *));
+@custom-variant dark (&:where(
+  .frappe,
+  .frappe *,
+  .macchiato,
+  .macchiato *,
+  .mocha,
+  .mocha *,
+  .color-hunt-midnight,
+  .color-hunt-midnight *,
+  .color-hunt-neon-tide,
+  .color-hunt-neon-tide *,
+  .color-hunt-ruby-dusk,
+  .color-hunt-ruby-dusk *
+));
 
 @theme inline {
   --font-sans:
@@ -93,6 +106,146 @@
     var(--catppuccin-color-mauve) 58%,
     var(--catppuccin-color-surface2)
   );
+}
+
+.color-hunt-midnight {
+  color-scheme: dark;
+  --color-hunt-swatch-1: #070f2b;
+  --color-hunt-swatch-2: #1b1a55;
+  --color-hunt-swatch-3: #535c91;
+  --color-hunt-swatch-4: #9290c3;
+  --color-hunt-base: var(--color-hunt-swatch-1);
+  --color-hunt-surface: var(--color-hunt-swatch-2);
+  --color-hunt-muted: var(--color-hunt-swatch-3);
+  --color-hunt-text: color-mix(in srgb, var(--color-hunt-swatch-4) 24%, white);
+  --color-hunt-accent: var(--color-hunt-swatch-4);
+  --color-hunt-primary-foreground: var(--color-hunt-swatch-1);
+}
+
+.color-hunt-slate-ember {
+  color-scheme: light;
+  --color-hunt-swatch-1: #f5f5f5;
+  --color-hunt-swatch-2: #76abae;
+  --color-hunt-swatch-3: #303841;
+  --color-hunt-swatch-4: #ff5722;
+  --color-hunt-base: var(--color-hunt-swatch-1);
+  --color-hunt-surface: color-mix(
+    in srgb,
+    var(--color-hunt-swatch-1) 86%,
+    var(--color-hunt-swatch-2)
+  );
+  --color-hunt-muted: var(--color-hunt-swatch-2);
+  --color-hunt-text: var(--color-hunt-swatch-3);
+  --color-hunt-accent: var(--color-hunt-swatch-4);
+  --color-hunt-primary-foreground: var(--color-hunt-swatch-1);
+}
+
+.color-hunt-soft-sky {
+  color-scheme: light;
+  --color-hunt-swatch-1: #fff9d2;
+  --color-hunt-swatch-2: #ffebcc;
+  --color-hunt-swatch-3: #bfddf0;
+  --color-hunt-swatch-4: #8cc0eb;
+  --color-hunt-base: var(--color-hunt-swatch-1);
+  --color-hunt-surface: var(--color-hunt-swatch-2);
+  --color-hunt-muted: var(--color-hunt-swatch-3);
+  --color-hunt-text: color-mix(in srgb, var(--color-hunt-swatch-4) 30%, black);
+  --color-hunt-accent: var(--color-hunt-swatch-4);
+  --color-hunt-primary-foreground: color-mix(in srgb, var(--color-hunt-swatch-4) 34%, black);
+}
+
+.color-hunt-neon-tide {
+  color-scheme: dark;
+  --color-hunt-swatch-1: #364f6b;
+  --color-hunt-swatch-2: #3fc1c9;
+  --color-hunt-swatch-3: #f5f5f5;
+  --color-hunt-swatch-4: #fc5185;
+  --color-hunt-base: var(--color-hunt-swatch-1);
+  --color-hunt-surface: color-mix(
+    in srgb,
+    var(--color-hunt-swatch-1) 70%,
+    var(--color-hunt-swatch-2)
+  );
+  --color-hunt-muted: var(--color-hunt-swatch-2);
+  --color-hunt-text: var(--color-hunt-swatch-3);
+  --color-hunt-accent: var(--color-hunt-swatch-4);
+  --color-hunt-primary-foreground: var(--color-hunt-swatch-3);
+}
+
+.color-hunt-ruby-dusk {
+  color-scheme: dark;
+  --color-hunt-swatch-1: #2b2e4a;
+  --color-hunt-swatch-2: #e84545;
+  --color-hunt-swatch-3: #903749;
+  --color-hunt-swatch-4: #53354a;
+  --color-hunt-base: var(--color-hunt-swatch-1);
+  --color-hunt-surface: var(--color-hunt-swatch-4);
+  --color-hunt-muted: var(--color-hunt-swatch-3);
+  --color-hunt-text: color-mix(in srgb, var(--color-hunt-swatch-2) 20%, white);
+  --color-hunt-accent: var(--color-hunt-swatch-2);
+  --color-hunt-primary-foreground: color-mix(in srgb, var(--color-hunt-swatch-1) 18%, white);
+}
+
+.color-hunt-midnight,
+.color-hunt-slate-ember,
+.color-hunt-soft-sky,
+.color-hunt-neon-tide,
+.color-hunt-ruby-dusk {
+  --catppuccin-color-base: var(--color-hunt-base);
+  --catppuccin-color-mantle: color-mix(
+    in srgb,
+    var(--color-hunt-base) 88%,
+    var(--color-hunt-surface)
+  );
+  --catppuccin-color-crust: color-mix(
+    in srgb,
+    var(--color-hunt-surface) 80%,
+    var(--color-hunt-base)
+  );
+  --catppuccin-color-surface0: var(--color-hunt-surface);
+  --catppuccin-color-surface1: color-mix(
+    in srgb,
+    var(--color-hunt-surface) 72%,
+    var(--color-hunt-muted)
+  );
+  --catppuccin-color-surface2: var(--color-hunt-muted);
+  --catppuccin-color-overlay0: color-mix(
+    in srgb,
+    var(--color-hunt-muted) 70%,
+    var(--color-hunt-surface)
+  );
+  --catppuccin-color-overlay1: var(--color-hunt-muted);
+  --catppuccin-color-overlay2: var(--color-hunt-accent);
+  --catppuccin-color-subtext0: color-mix(
+    in srgb,
+    var(--color-hunt-text) 72%,
+    var(--color-hunt-muted)
+  );
+  --catppuccin-color-subtext1: color-mix(
+    in srgb,
+    var(--color-hunt-text) 86%,
+    var(--color-hunt-muted)
+  );
+  --catppuccin-color-text: var(--color-hunt-text);
+  --catppuccin-color-lavender: var(--color-hunt-accent);
+  --catppuccin-color-mauve: var(--color-hunt-accent);
+  --catppuccin-color-blue: var(--color-hunt-muted);
+  --catppuccin-color-sky: color-mix(in srgb, var(--color-hunt-muted) 72%, var(--color-hunt-accent));
+  --catppuccin-color-peach: color-mix(
+    in srgb,
+    var(--color-hunt-accent) 82%,
+    var(--color-hunt-base)
+  );
+  --catppuccin-color-yellow: color-mix(in srgb, var(--color-hunt-accent) 54%, wheat);
+  --catppuccin-color-red: color-mix(in srgb, var(--color-hunt-accent) 70%, crimson);
+  --catppuccin-color-green: color-mix(in srgb, var(--color-hunt-muted) 56%, mediumseagreen);
+  --catppuccin-color-teal: color-mix(in srgb, var(--color-hunt-muted) 70%, teal);
+  --catppuccin-color-pink: var(--color-hunt-accent);
+  --catppuccin-color-rosewater: color-mix(in srgb, var(--color-hunt-accent) 72%, white);
+  --catppuccin-color-flamingo: color-mix(in srgb, var(--color-hunt-accent) 74%, white);
+  --primary-foreground: var(--color-hunt-primary-foreground);
+  --selected: color-mix(in srgb, var(--color-hunt-accent) 18%, var(--color-hunt-surface));
+  --selected-border: color-mix(in srgb, var(--color-hunt-accent) 62%, var(--color-hunt-muted));
 }
 
 *,

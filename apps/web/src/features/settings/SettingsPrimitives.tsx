@@ -129,13 +129,22 @@ export function SettingsPanel({
   activeId,
   children,
   description,
+  header,
   title,
 }: {
   activeId: string;
   children: ReactNode;
-  description: string;
-  title: string;
+  description?: string;
+  header?: ReactNode | null;
+  title?: string;
 }) {
+  const defaultHeader = title ? (
+    <div className="mb-8">
+      <h2 className="text-2xl font-semibold tracking-tight text-foreground">{title}</h2>
+      {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
+    </div>
+  ) : null;
+
   return (
     <div
       aria-labelledby={`${activeId}-settings-tab`}
@@ -143,10 +152,7 @@ export function SettingsPanel({
       id={`${activeId}-settings-panel`}
       role="tabpanel"
     >
-      <div className="mb-8">
-        <h2 className="text-2xl font-semibold tracking-tight text-foreground">{title}</h2>
-        <p className="mt-1 text-sm text-muted-foreground">{description}</p>
-      </div>
+      {header === undefined ? defaultHeader : header}
       {children}
     </div>
   );

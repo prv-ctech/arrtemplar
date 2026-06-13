@@ -9,7 +9,7 @@
     "preview": "bunx --bun vite preview --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "cd ../.. && bun test test/apps/web",
-    "doctor": "npx react-doctor@latest"
+    "doctor": "CI=true react-doctor . --diff false --no-score --blocking error"
   },
   "dependencies": {
     "@arrtemplar/server": "workspace:*",

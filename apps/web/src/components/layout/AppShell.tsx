@@ -13,7 +13,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { authQueryKey, canAccessSettings } from "@/features/auth/auth-state";
-import { ThemeSwitcher } from "@/features/theme/ThemeSwitcher";
 import { logout } from "@/lib/api";
 import { queryClient } from "@/lib/query-client";
 import { cn } from "@/lib/utils";
@@ -23,6 +22,14 @@ type ShellNavLinkItem = {
   to: "/dashboard";
   icon: ReactNode;
 };
+
+const shellNavItems: ShellNavLinkItem[] = [
+  {
+    label: "Dashboard",
+    to: "/dashboard",
+    icon: <HouseIcon aria-hidden="true" className="size-5" />,
+  },
+];
 
 type AccountMenuSide = ComponentProps<typeof DropdownMenuContent>["side"];
 
@@ -43,7 +50,6 @@ function ShellActions({
 }: ShellActionsProps) {
   return (
     <div className={cn("flex items-center gap-1.5", className)}>
-      <ThemeSwitcher compact />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
@@ -94,14 +100,6 @@ export function AppShell({ children, user }: { children: ReactNode; user: Public
     },
   });
 
-  const navItems: ShellNavLinkItem[] = [
-    {
-      label: "Dashboard",
-      to: "/dashboard",
-      icon: <HouseIcon aria-hidden="true" className="size-5" />,
-    },
-  ];
-
   const handleSignOut = () => {
     logoutMutation.mutate();
   };
@@ -123,7 +121,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Public
                 aria-label="Primary navigation"
                 className="flex min-w-0 flex-1 items-center justify-center gap-1.5 lg:mt-7 lg:flex-none lg:flex-col"
               >
-                {navItems.map((item) => {
+                {shellNavItems.map((item) => {
                   return (
                     <Link
                       activeProps={{

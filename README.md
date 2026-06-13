@@ -70,7 +70,23 @@ This uses a small Bun-native dev runner instead of Bun workspace `--parallel` mo
 bun run check
 ```
 
-Runs Biome lint/format, TypeScript typecheck, and Bun tests in sequence.
+Runs the focused code review suite in this order: Fallow audit, React Doctor diff scan for
+`apps/web`, TypeScript typecheck, Bun tests, then Biome lint/format as the final cleanup
+surface.
+
+Use the full suite before handoff or review:
+
+```sh
+bun run check:quality:code:full
+```
+
+`bun run check:code:quality:full` is kept as an alias for the same full code-review suite.
+Fallow owns repo-wide code intelligence (dead code, dependency health, duplication,
+complexity, boundaries). React Doctor owns React-specific diagnostics only and has its own
+`apps/web/doctor.config.json` with React Doctor dead-code analysis disabled so it does not
+overlap with Fallow. Biome runs last for formatting and linting. See
+`docs/architecture/code-quality-suite.md` for the detailed tool split, ignore policy, and
+official source links.
 - **Frontend changes** — Vite HMR updates the browser instantly. No page reload needed.
 - **TypeScript contract changes** — Run `bun run dev:typecheck` in a separate terminal for live type-checking across the workspace.
 - **API calls** — The frontend client uses the browser's current origin. Vite proxies `/health` and `/api` to the backend via `http://localhost:3000`.
@@ -94,6 +110,7 @@ bun test
 bun run typecheck
 bun run build
 bun run check
+bun run check:quality:code:full
 ```
 
 Database commands:

@@ -130,7 +130,7 @@ export function DashboardPage({ user }: { user: PublicUser }) {
               </h2>
               <p className="mt-2 max-w-[58ch] text-sm leading-6 text-muted-foreground">
                 The layout borrows the reference rhythm: left rail, compact header, ordered event
-                cards, and image-led media rows. The palette remains native Catppuccin.
+                cards, and image-led media rows. The palette follows the selected theme pack.
               </p>
             </div>
             <ArrowRightIcon aria-hidden="true" className="mt-1 size-5 text-primary" />

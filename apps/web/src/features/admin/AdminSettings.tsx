@@ -59,7 +59,7 @@ function createSettingsEntries(user: PublicUser) {
       id: "theme",
       label: "Theme",
       icon: <PaletteIcon aria-hidden="true" className="size-5" />,
-      description: "Theme preference for the signed-in user.",
+      description: "Catppuccin color pack.",
       path: "/settings/theme",
     },
   ];
@@ -243,6 +243,7 @@ export function AdminSettings({ activePage }: { activePage: AdminSettingsPage })
       <SettingsPanel
         activeId={activePage}
         description={activeEntry.description}
+        header={activePage === "theme" ? null : undefined}
         title={activeEntry.label}
       >
         <ActiveSettingsPage activePage={activePage} />

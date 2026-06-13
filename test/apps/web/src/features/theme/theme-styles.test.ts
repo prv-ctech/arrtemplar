@@ -24,9 +24,11 @@ describe("Catppuccin stylesheet", () => {
 
     expect(source).toContain('@import "tailwindcss";');
     expect(source).toContain('@import "@catppuccin/tailwindcss/mocha.css";');
-    expect(source).toContain(
-      "@custom-variant dark (&:where(.frappe, .frappe *, .macchiato, .macchiato *, .mocha, .mocha *));",
-    );
+    expect(source).toContain("@custom-variant dark (&:where(");
+    expect(source).toContain(".color-hunt-midnight");
+    expect(source).toContain(".color-hunt-midnight *");
+    expect(source).toContain(".color-hunt-neon-tide");
+    expect(source).toContain(".color-hunt-ruby-dusk");
   });
 
   it("does not duplicate official palette variables in app CSS", async () => {
@@ -34,7 +36,30 @@ describe("Catppuccin stylesheet", () => {
 
     expect(source).not.toContain("--ctp-");
     expect(source).not.toContain("html[data-theme=");
-    expect(source).not.toMatch(/--[\w-]+:\s*#[\da-f]{6}/i);
+  });
+
+  it("maps the requested Color Hunt palette into the shared theme variables", async () => {
+    const source = await Bun.file(stylesSourcePath).text();
+
+    const expectedPalettes = [
+      [".color-hunt-midnight", "#070f2b", "#1b1a55", "#535c91", "#9290c3"],
+      [".color-hunt-slate-ember", "#f5f5f5", "#76abae", "#303841", "#ff5722"],
+      [".color-hunt-soft-sky", "#fff9d2", "#ffebcc", "#bfddf0", "#8cc0eb"],
+      [".color-hunt-neon-tide", "#364f6b", "#3fc1c9", "#f5f5f5", "#fc5185"],
+      [".color-hunt-ruby-dusk", "#2b2e4a", "#e84545", "#903749", "#53354a"],
+    ] as const;
+
+    for (const [selector, base, surface, text, accent] of expectedPalettes) {
+      expect(source).toContain(`${selector} {`);
+      expect(source).toContain(`--color-hunt-swatch-1: ${base};`);
+      expect(source).toContain(`--color-hunt-swatch-2: ${surface};`);
+      expect(source).toContain(`--color-hunt-swatch-3: ${text};`);
+      expect(source).toContain(`--color-hunt-swatch-4: ${accent};`);
+    }
+
+    expect(source).toContain("--catppuccin-color-base: var(--color-hunt-base);");
+    expect(source).toContain("--catppuccin-color-surface0: var(--color-hunt-surface);");
+    expect(source).toContain("--catppuccin-color-mauve: var(--color-hunt-accent);");
   });
 
   it("maps app semantic tokens to official Catppuccin variables", async () => {
