@@ -39,7 +39,7 @@ export function SettingsNav<TPage extends string>({
     }
 
     tablist.scrollLeft = savedScrollLeft;
-  }, [scrollStateKey, active]);
+  }, [scrollStateKey]);
 
   function persistScrollPosition() {
     const tablist = tablistRef.current;

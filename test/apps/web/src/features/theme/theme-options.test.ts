@@ -17,7 +17,8 @@ import {
 } from "../../../../../../apps/web/src/features/theme/theme-options";
 
 const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../../../");
-const officialColorHuntLogoPath = `${workspaceRoot}/apps/web/public/brand/color-hunt-logo-face.svg`;
+const officialColorHuntLogoPath = `${workspaceRoot}/apps/web/public/brand/color-hunt-logo-face.png`;
+const staleColorHuntSvgPath = `${workspaceRoot}/apps/web/public/brand/color-hunt-logo-face.svg`;
 const legacyColorHuntLogoPath = `${workspaceRoot}/apps/web/public/brand/color-hunt-mark.svg`;
 
 describe("Catppuccin theme options", () => {
@@ -66,7 +67,7 @@ describe("Catppuccin theme options", () => {
     expect(colorHuntPack).toMatchObject({
       label: "Color Hunt",
       logoAlt: "Color Hunt palette pack",
-      logoSrc: "/brand/color-hunt-logo-face.svg",
+      logoSrc: "/brand/color-hunt-logo-face.png",
     });
     expect(colorHuntPack?.themes.map((theme) => theme.value)).toEqual([
       "color-hunt-midnight",
@@ -88,10 +89,11 @@ describe("Catppuccin theme options", () => {
     ]);
   });
 
-  it("uses the official Color Hunt logo asset instead of the generated mark", async () => {
-    const logoSource = await Bun.file(officialColorHuntLogoPath).text();
+  it("uses the official Color Hunt PNG asset instead of generated marks", async () => {
+    const logoBytes = new Uint8Array(await Bun.file(officialColorHuntLogoPath).arrayBuffer());
 
-    expect(logoSource).toContain("colorhunt-logo-face");
+    expect([...logoBytes.slice(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    expect(await Bun.file(staleColorHuntSvgPath).exists()).toBe(false);
     expect(await Bun.file(legacyColorHuntLogoPath).exists()).toBe(false);
   });
 

@@ -14,26 +14,26 @@
   "dependencies": {
     "@arrtemplar/server": "workspace:*",
     "@arrtemplar/shared": "workspace:*",
-    "@elysia/eden": "latest",
+    "@elysia/eden": "^1.4.10",
     "@phosphor-icons/react": "^2.1.10",
-    "@tanstack/react-query": "latest",
-    "@tanstack/react-router": "latest",
-    "class-variance-authority": "latest",
-    "clsx": "latest",
-    "radix-ui": "^1.4.3",
-    "react": "latest",
-    "react-dom": "latest",
+    "@tanstack/react-query": "^5.101.0",
+    "@tanstack/react-router": "^1.170.15",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "radix-ui": "^1.5.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "sonner": "^2.0.7",
-    "tailwind-merge": "latest"
+    "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
     "@catppuccin/tailwindcss": "^1.0.0",
-    "@tailwindcss/vite": "latest",
-    "@types/react": "latest",
-    "@types/react-dom": "latest",
-    "@vitejs/plugin-react": "latest",
-    "tailwindcss": "latest",
-    "typescript": "latest",
-    "vite": "latest"
+    "@tailwindcss/vite": "^4.3.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
+    "tailwindcss": "^4.3.1",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.16"
   }
 }

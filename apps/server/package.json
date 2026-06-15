@@ -14,20 +14,20 @@
   },
   "dependencies": {
     "@arrtemplar/shared": "workspace:*",
-    "@elysia/cors": "latest",
-    "@elysia/openapi": "latest",
-    "@logtape/drizzle-orm": "^2.1.0",
-    "@logtape/elysia": "^2.1.0",
-    "@logtape/file": "^2.1.0",
-    "@logtape/logtape": "^2.1.0",
-    "@logtape/redaction": "^2.1.0",
+    "@elysia/cors": "^1.4.2",
+    "@elysia/openapi": "^1.4.15",
+    "@logtape/drizzle-orm": "^2.1.4",
+    "@logtape/elysia": "^2.1.4",
+    "@logtape/file": "^2.1.4",
+    "@logtape/logtape": "^2.1.4",
+    "@logtape/redaction": "^2.1.4",
     "drizzle-orm": "^0.45.2",
-    "elysia": "latest",
+    "elysia": "^1.4.28",
     "elysiajs-helmet": "1.0.5"
   },
   "devDependencies": {
     "drizzle-kit": "^0.31.10",
-    "typescript": "latest"
+    "typescript": "^6.0.3"
   },
   "exports": {
     ".": {

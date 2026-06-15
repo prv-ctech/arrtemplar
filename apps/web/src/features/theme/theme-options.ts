@@ -118,7 +118,7 @@ export const THEME_PACKS = [
     id: "color-hunt",
     label: "Color Hunt",
     logoAlt: "Color Hunt palette pack",
-    logoSrc: "/brand/color-hunt-logo-face.svg",
+    logoSrc: "/brand/color-hunt-logo-face.png",
     previewSwatches: COLOR_HUNT_PREVIEW_SWATCHES,
     themes: COLOR_HUNT_THEMES,
   },

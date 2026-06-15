@@ -12,12 +12,8 @@ export function ThemePreviewStrip({ className, swatches, ...props }: ThemePrevie
       className={cn("flex shrink-0 overflow-hidden rounded-xl border border-border", className)}
       {...props}
     >
-      {swatches.map((swatch, index) => (
-        <span
-          className="min-w-0 flex-1"
-          key={`${index}-${swatch}`}
-          style={{ backgroundColor: swatch }}
-        />
+      {swatches.map((swatch) => (
+        <span className="min-w-0 flex-1" key={swatch} style={{ backgroundColor: swatch }} />
       ))}
     </span>
   );

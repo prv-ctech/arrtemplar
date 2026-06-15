@@ -1,20 +1,22 @@
 @import "tailwindcss";
 @import "@catppuccin/tailwindcss/mocha.css";
 
-@custom-variant dark (&:where(
-  .frappe,
-  .frappe *,
-  .macchiato,
-  .macchiato *,
-  .mocha,
-  .mocha *,
-  .color-hunt-midnight,
-  .color-hunt-midnight *,
-  .color-hunt-neon-tide,
-  .color-hunt-neon-tide *,
-  .color-hunt-ruby-dusk,
-  .color-hunt-ruby-dusk *
-));
+@custom-variant dark (
+  &:where(
+    .frappe,
+    .frappe *,
+    .macchiato,
+    .macchiato *,
+    .mocha,
+    .mocha *,
+    .color-hunt-midnight,
+    .color-hunt-midnight *,
+    .color-hunt-neon-tide,
+    .color-hunt-neon-tide *,
+    .color-hunt-ruby-dusk,
+    .color-hunt-ruby-dusk *
+  )
+);
 
 @theme inline {
   --font-sans:

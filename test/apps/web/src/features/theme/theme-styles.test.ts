@@ -24,7 +24,7 @@ describe("Catppuccin stylesheet", () => {
 
     expect(source).toContain('@import "tailwindcss";');
     expect(source).toContain('@import "@catppuccin/tailwindcss/mocha.css";');
-    expect(source).toContain("@custom-variant dark (&:where(");
+    expect(source).toMatch(/@custom-variant\s+dark\s*\(\s*&:where\(/);
     expect(source).toContain(".color-hunt-midnight");
     expect(source).toContain(".color-hunt-midnight *");
     expect(source).toContain(".color-hunt-neon-tide");
