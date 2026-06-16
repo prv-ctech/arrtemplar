@@ -27,10 +27,8 @@
     "check:code:biome": "biome check .",
     "check:quality:code": "bun run check:code:fallow && bun run check:code:react-doctor && bun run check:code:typecheck && bun run check:code:test && bun run check:code:biome",
     "check:quality:code:full": "bun run check:code:fallow:full && bun run check:code:react-doctor:full && bun run check:code:typecheck && bun run check:code:test && bun run check:code:biome",
-    "check:code:quality": "bun run check:quality:code",
-    "check:code:quality:full": "bun run check:quality:code:full",
     "format": "biome check --write .",
-    "write:quality:code": "biome check --write .",
+    "write:quality:code": "fallow fix && biome check --write .",
     "db:generate": "bun run --cwd apps/server db:generate",
     "db:migrate": "bun run --cwd apps/server db:migrate"
   },

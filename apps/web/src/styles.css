@@ -14,7 +14,41 @@
     .color-hunt-neon-tide,
     .color-hunt-neon-tide *,
     .color-hunt-ruby-dusk,
-    .color-hunt-ruby-dusk *
+    .color-hunt-ruby-dusk *,
+    .color-hunt-crimson-depths,
+    .color-hunt-crimson-depths *,
+    .color-hunt-ember-void,
+    .color-hunt-ember-void *,
+    .color-hunt-rose-noir,
+    .color-hunt-rose-noir *,
+    .color-hunt-harvest-signal,
+    .color-hunt-harvest-signal *,
+    .theme-park-aquamarine,
+    .theme-park-aquamarine *,
+    .theme-park-dark,
+    .theme-park-dark *,
+    .theme-park-dracula,
+    .theme-park-dracula *,
+    .theme-park-hotline,
+    .theme-park-hotline *,
+    .theme-park-hotpink,
+    .theme-park-hotpink *,
+    .theme-park-maroon,
+    .theme-park-maroon *,
+    .theme-park-nord,
+    .theme-park-nord *,
+    .theme-park-organizr,
+    .theme-park-organizr *,
+    .theme-park-overseerr,
+    .theme-park-overseerr *,
+    .theme-park-plex,
+    .theme-park-plex *,
+    .theme-park-space-gray,
+    .theme-park-space-gray *,
+    .arrbit-radioactive,
+    .arrbit-radioactive *,
+    .arrbit-retro-gaming,
+    .arrbit-retro-gaming *
   )
 );
 
@@ -188,11 +222,275 @@
   --color-hunt-primary-foreground: color-mix(in srgb, var(--color-hunt-swatch-1) 18%, white);
 }
 
+.color-hunt-crimson-depths {
+  color-scheme: dark;
+  --color-hunt-swatch-1: #050e3c;
+  --color-hunt-swatch-2: #002455;
+  --color-hunt-swatch-3: #dc0000;
+  --color-hunt-swatch-4: #ff3838;
+  --color-hunt-base: var(--color-hunt-swatch-1);
+  --color-hunt-surface: var(--color-hunt-swatch-2);
+  --color-hunt-muted: color-mix(in srgb, var(--color-hunt-swatch-3) 58%, var(--color-hunt-surface));
+  --color-hunt-text: color-mix(in srgb, var(--color-hunt-swatch-4) 18%, white);
+  --color-hunt-accent: var(--color-hunt-swatch-4);
+  --color-hunt-primary-foreground: var(--color-hunt-swatch-1);
+}
+
+.color-hunt-ember-void {
+  color-scheme: dark;
+  --color-hunt-swatch-1: #ff6500;
+  --color-hunt-swatch-2: #1e3e62;
+  --color-hunt-swatch-3: #0b192c;
+  --color-hunt-swatch-4: #000000;
+  --color-hunt-base: var(--color-hunt-swatch-4);
+  --color-hunt-surface: var(--color-hunt-swatch-3);
+  --color-hunt-muted: var(--color-hunt-swatch-2);
+  --color-hunt-text: color-mix(in srgb, var(--color-hunt-swatch-1) 10%, white);
+  --color-hunt-accent: var(--color-hunt-swatch-1);
+  --color-hunt-primary-foreground: var(--color-hunt-swatch-4);
+}
+
+.color-hunt-rose-noir {
+  color-scheme: dark;
+  --color-hunt-swatch-1: #f63049;
+  --color-hunt-swatch-2: #d02752;
+  --color-hunt-swatch-3: #8a244b;
+  --color-hunt-swatch-4: #111f35;
+  --color-hunt-base: var(--color-hunt-swatch-4);
+  --color-hunt-surface: color-mix(
+    in srgb,
+    var(--color-hunt-swatch-4) 72%,
+    var(--color-hunt-swatch-3)
+  );
+  --color-hunt-muted: var(--color-hunt-swatch-3);
+  --color-hunt-text: color-mix(in srgb, var(--color-hunt-swatch-1) 14%, white);
+  --color-hunt-accent: var(--color-hunt-swatch-1);
+  --color-hunt-primary-foreground: var(--color-hunt-swatch-4);
+}
+
+.color-hunt-clay-glow {
+  color-scheme: light;
+  --color-hunt-swatch-1: #f4e7e1;
+  --color-hunt-swatch-2: #ff9b45;
+  --color-hunt-swatch-3: #d5451b;
+  --color-hunt-swatch-4: #521c0d;
+  --color-hunt-base: var(--color-hunt-swatch-1);
+  --color-hunt-surface: color-mix(
+    in srgb,
+    var(--color-hunt-swatch-1) 86%,
+    var(--color-hunt-swatch-2)
+  );
+  --color-hunt-muted: color-mix(in srgb, var(--color-hunt-swatch-3) 54%, var(--color-hunt-base));
+  --color-hunt-text: var(--color-hunt-swatch-4);
+  --color-hunt-accent: var(--color-hunt-swatch-3);
+  --color-hunt-primary-foreground: var(--color-hunt-swatch-1);
+}
+
+.color-hunt-blush-cream {
+  color-scheme: light;
+  --color-hunt-swatch-1: #fffbf1;
+  --color-hunt-swatch-2: #fff2d0;
+  --color-hunt-swatch-3: #ffb2b2;
+  --color-hunt-swatch-4: #e36a6a;
+  --color-hunt-base: var(--color-hunt-swatch-1);
+  --color-hunt-surface: var(--color-hunt-swatch-2);
+  --color-hunt-muted: var(--color-hunt-swatch-3);
+  --color-hunt-text: color-mix(in srgb, var(--color-hunt-swatch-4) 48%, black);
+  --color-hunt-accent: var(--color-hunt-swatch-4);
+  --color-hunt-primary-foreground: var(--color-hunt-swatch-1);
+}
+
+.color-hunt-harvest-signal {
+  color-scheme: dark;
+  --color-hunt-swatch-1: #003049;
+  --color-hunt-swatch-2: #d62828;
+  --color-hunt-swatch-3: #f77f00;
+  --color-hunt-swatch-4: #fcbf49;
+  --color-hunt-base: var(--color-hunt-swatch-1);
+  --color-hunt-surface: color-mix(
+    in srgb,
+    var(--color-hunt-swatch-1) 84%,
+    var(--color-hunt-swatch-2)
+  );
+  --color-hunt-muted: var(--color-hunt-swatch-3);
+  --color-hunt-text: color-mix(in srgb, var(--color-hunt-swatch-4) 22%, white);
+  --color-hunt-accent: var(--color-hunt-swatch-4);
+  --color-hunt-primary-foreground: var(--color-hunt-swatch-1);
+}
+
+.color-hunt-cloud-peach {
+  color-scheme: light;
+  --color-hunt-swatch-1: #c6e7ff;
+  --color-hunt-swatch-2: #d4f6ff;
+  --color-hunt-swatch-3: #fbfbfb;
+  --color-hunt-swatch-4: #ffddae;
+  --color-hunt-base: var(--color-hunt-swatch-3);
+  --color-hunt-surface: color-mix(
+    in srgb,
+    var(--color-hunt-swatch-2) 76%,
+    var(--color-hunt-swatch-3)
+  );
+  --color-hunt-muted: var(--color-hunt-swatch-1);
+  --color-hunt-text: color-mix(in srgb, var(--color-hunt-swatch-1) 34%, black);
+  --color-hunt-accent: var(--color-hunt-swatch-4);
+  --color-hunt-primary-foreground: color-mix(in srgb, var(--color-hunt-swatch-1) 26%, black);
+}
+
+.theme-park-aquamarine {
+  color-scheme: dark;
+  --theme-park-base: #0b3161;
+  --theme-park-surface: #265c74;
+  --theme-park-muted: #47918a;
+  --theme-park-accent: #12afa0;
+  --theme-park-text: #ddd;
+  --theme-park-primary-foreground: var(--theme-park-base);
+}
+
+.theme-park-dark {
+  color-scheme: dark;
+  --theme-park-base: #000000;
+  --theme-park-surface: #2d2d2d;
+  --theme-park-muted: #7a7a7a;
+  --theme-park-accent: #aaaaaa;
+  --theme-park-text: #ddd;
+  --theme-park-primary-foreground: var(--theme-park-base);
+}
+
+.theme-park-dracula {
+  color-scheme: dark;
+  --theme-park-base: #282a36;
+  --theme-park-surface: #1e2029;
+  --theme-park-muted: #6272a4;
+  --theme-park-accent: #50fa7b;
+  --theme-park-text: #f8f8f2;
+  --theme-park-primary-foreground: var(--theme-park-base);
+}
+
+.theme-park-hotline {
+  color-scheme: dark;
+  --theme-park-base: #155fa5;
+  --theme-park-surface: #5e61ab;
+  --theme-park-muted: #f765b8;
+  --theme-park-accent: #f98dc9;
+  --theme-park-text: #ddd;
+  --theme-park-primary-foreground: var(--theme-park-base);
+}
+
+.theme-park-hotpink {
+  color-scheme: dark;
+  --theme-park-base: #004249;
+  --theme-park-surface: #204c80;
+  --theme-park-muted: #fb3f62;
+  --theme-park-accent: #fb3f62;
+  --theme-park-text: #eee;
+  --theme-park-primary-foreground: var(--theme-park-base);
+}
+
+.theme-park-maroon {
+  color-scheme: dark;
+  --theme-park-base: #220a25;
+  --theme-park-surface: #4c1533;
+  --theme-park-muted: #7b154d;
+  --theme-park-accent: #a21c65;
+  --theme-park-text: #dadada;
+  --theme-park-primary-foreground: var(--theme-park-base);
+}
+
+.theme-park-nord {
+  color-scheme: dark;
+  --theme-park-base: #2e3440;
+  --theme-park-surface: #3b4252;
+  --theme-park-muted: #81a1c1;
+  --theme-park-accent: #79b8ca;
+  --theme-park-text: #d8dee9;
+  --theme-park-primary-foreground: var(--theme-park-base);
+}
+
+.theme-park-organizr {
+  color-scheme: dark;
+  --theme-park-base: #1f1f1f;
+  --theme-park-surface: #333333;
+  --theme-park-muted: #999999;
+  --theme-park-accent: #2cabe3;
+  --theme-park-text: #96a2b4;
+  --theme-park-primary-foreground: var(--theme-park-base);
+}
+
+.theme-park-overseerr {
+  color-scheme: dark;
+  --theme-park-base: #111827;
+  --theme-park-surface: #1f2937;
+  --theme-park-muted: #374151;
+  --theme-park-accent: #a78bfa;
+  --theme-park-text: #d1d5db;
+  --theme-park-primary-foreground: var(--theme-park-base);
+}
+
+.theme-park-plex {
+  color-scheme: dark;
+  --theme-park-base: #000000;
+  --theme-park-surface: #282828;
+  --theme-park-muted: #3f3f3f;
+  --theme-park-accent: #e5a00d;
+  --theme-park-text: #ddd;
+  --theme-park-primary-foreground: var(--theme-park-base);
+}
+
+.theme-park-space-gray {
+  color-scheme: dark;
+  --theme-park-base: #253237;
+  --theme-park-surface: #576c75;
+  --theme-park-muted: #607d8b;
+  --theme-park-accent: #81a6b7;
+  --theme-park-text: #bbb;
+  --theme-park-primary-foreground: var(--theme-park-base);
+}
+
+.arrbit-radioactive {
+  color-scheme: dark;
+  --arrbit-swatch-1: #61892f;
+  --arrbit-swatch-2: #86c232;
+  --arrbit-swatch-3: #222629;
+  --arrbit-swatch-4: #474b4f;
+  --arrbit-swatch-5: #6b6e70;
+  --arrbit-base: var(--arrbit-swatch-3);
+  --arrbit-surface: color-mix(in srgb, var(--arrbit-swatch-4) 76%, var(--arrbit-swatch-3));
+  --arrbit-muted: var(--arrbit-swatch-5);
+  --arrbit-accent: var(--arrbit-swatch-2);
+  --arrbit-accent-muted: var(--arrbit-swatch-1);
+  --arrbit-text: color-mix(in srgb, var(--arrbit-swatch-5) 18%, white);
+  --arrbit-primary-foreground: var(--arrbit-swatch-3);
+}
+
+.arrbit-retro-gaming {
+  color-scheme: dark;
+  --arrbit-swatch-1: #8b5cf6;
+  --arrbit-swatch-2: #ec4899;
+  --arrbit-swatch-3: #06b6d4;
+  --arrbit-swatch-4: #1e1b4b;
+  --arrbit-swatch-5: #f5f3ff;
+  --arrbit-primary: color-mix(in srgb, var(--arrbit-swatch-1) 80%, var(--arrbit-swatch-4));
+  --arrbit-secondary: var(--arrbit-swatch-2);
+  --arrbit-accent: var(--arrbit-swatch-3);
+  --arrbit-base: var(--arrbit-swatch-4);
+  --arrbit-surface: color-mix(in srgb, var(--arrbit-swatch-4) 82%, var(--arrbit-swatch-1));
+  --arrbit-muted: color-mix(in srgb, var(--arrbit-swatch-4) 68%, var(--arrbit-swatch-3));
+  --arrbit-text: var(--arrbit-swatch-5);
+  --arrbit-primary-foreground: var(--arrbit-text);
+}
+
 .color-hunt-midnight,
 .color-hunt-slate-ember,
 .color-hunt-soft-sky,
 .color-hunt-neon-tide,
-.color-hunt-ruby-dusk {
+.color-hunt-ruby-dusk,
+.color-hunt-crimson-depths,
+.color-hunt-ember-void,
+.color-hunt-rose-noir,
+.color-hunt-clay-glow,
+.color-hunt-blush-cream,
+.color-hunt-harvest-signal,
+.color-hunt-cloud-peach {
   --catppuccin-color-base: var(--color-hunt-base);
   --catppuccin-color-mantle: color-mix(
     in srgb,
@@ -248,6 +546,138 @@
   --primary-foreground: var(--color-hunt-primary-foreground);
   --selected: color-mix(in srgb, var(--color-hunt-accent) 18%, var(--color-hunt-surface));
   --selected-border: color-mix(in srgb, var(--color-hunt-accent) 62%, var(--color-hunt-muted));
+}
+
+.theme-park-aquamarine,
+.theme-park-dark,
+.theme-park-dracula,
+.theme-park-hotline,
+.theme-park-hotpink,
+.theme-park-maroon,
+.theme-park-nord,
+.theme-park-organizr,
+.theme-park-overseerr,
+.theme-park-plex,
+.theme-park-space-gray {
+  --catppuccin-color-base: var(--theme-park-base);
+  --catppuccin-color-mantle: color-mix(
+    in srgb,
+    var(--theme-park-base) 86%,
+    var(--theme-park-surface)
+  );
+  --catppuccin-color-crust: color-mix(
+    in srgb,
+    var(--theme-park-surface) 82%,
+    var(--theme-park-base)
+  );
+  --catppuccin-color-surface0: var(--theme-park-surface);
+  --catppuccin-color-surface1: color-mix(
+    in srgb,
+    var(--theme-park-surface) 76%,
+    var(--theme-park-muted)
+  );
+  --catppuccin-color-surface2: var(--theme-park-muted);
+  --catppuccin-color-overlay0: color-mix(
+    in srgb,
+    var(--theme-park-muted) 64%,
+    var(--theme-park-surface)
+  );
+  --catppuccin-color-overlay1: var(--theme-park-muted);
+  --catppuccin-color-overlay2: var(--theme-park-accent);
+  --catppuccin-color-subtext0: color-mix(
+    in srgb,
+    var(--theme-park-text) 70%,
+    var(--theme-park-muted)
+  );
+  --catppuccin-color-subtext1: color-mix(
+    in srgb,
+    var(--theme-park-text) 86%,
+    var(--theme-park-muted)
+  );
+  --catppuccin-color-text: var(--theme-park-text);
+  --catppuccin-color-lavender: var(--theme-park-accent);
+  --catppuccin-color-mauve: var(--theme-park-accent);
+  --catppuccin-color-blue: var(--theme-park-muted);
+  --catppuccin-color-sky: color-mix(in srgb, var(--theme-park-muted) 68%, var(--theme-park-accent));
+  --catppuccin-color-peach: color-mix(
+    in srgb,
+    var(--theme-park-accent) 78%,
+    var(--theme-park-base)
+  );
+  --catppuccin-color-yellow: color-mix(in srgb, var(--theme-park-accent) 54%, wheat);
+  --catppuccin-color-red: color-mix(in srgb, var(--theme-park-accent) 68%, crimson);
+  --catppuccin-color-green: color-mix(in srgb, var(--theme-park-accent) 48%, mediumseagreen);
+  --catppuccin-color-teal: color-mix(in srgb, var(--theme-park-muted) 72%, teal);
+  --catppuccin-color-pink: var(--theme-park-accent);
+  --catppuccin-color-rosewater: color-mix(in srgb, var(--theme-park-accent) 68%, white);
+  --catppuccin-color-flamingo: color-mix(in srgb, var(--theme-park-accent) 72%, white);
+  --primary-foreground: var(--theme-park-primary-foreground);
+  --selected: color-mix(in srgb, var(--theme-park-accent) 18%, var(--theme-park-surface));
+  --selected-border: color-mix(in srgb, var(--theme-park-accent) 62%, var(--theme-park-muted));
+}
+
+.arrbit-radioactive {
+  --catppuccin-color-base: var(--arrbit-base);
+  --catppuccin-color-mantle: color-mix(in srgb, var(--arrbit-base) 88%, var(--arrbit-surface));
+  --catppuccin-color-crust: color-mix(in srgb, var(--arrbit-base) 82%, black);
+  --catppuccin-color-surface0: var(--arrbit-surface);
+  --catppuccin-color-surface1: color-mix(in srgb, var(--arrbit-surface) 74%, var(--arrbit-muted));
+  --catppuccin-color-surface2: var(--arrbit-muted);
+  --catppuccin-color-overlay0: color-mix(in srgb, var(--arrbit-muted) 64%, var(--arrbit-surface));
+  --catppuccin-color-overlay1: var(--arrbit-muted);
+  --catppuccin-color-overlay2: var(--arrbit-accent);
+  --catppuccin-color-subtext0: color-mix(in srgb, var(--arrbit-text) 72%, var(--arrbit-muted));
+  --catppuccin-color-subtext1: color-mix(in srgb, var(--arrbit-text) 86%, var(--arrbit-muted));
+  --catppuccin-color-text: var(--arrbit-text);
+  --catppuccin-color-lavender: var(--arrbit-accent);
+  --catppuccin-color-mauve: var(--arrbit-accent);
+  --catppuccin-color-blue: var(--arrbit-muted);
+  --catppuccin-color-sky: color-mix(in srgb, var(--arrbit-muted) 54%, var(--arrbit-accent));
+  --catppuccin-color-peach: color-mix(
+    in srgb,
+    var(--arrbit-accent) 72%,
+    var(--arrbit-accent-muted)
+  );
+  --catppuccin-color-yellow: color-mix(in srgb, var(--arrbit-accent) 72%, wheat);
+  --catppuccin-color-red: color-mix(in srgb, var(--arrbit-accent-muted) 58%, crimson);
+  --catppuccin-color-green: var(--arrbit-accent);
+  --catppuccin-color-teal: color-mix(in srgb, var(--arrbit-accent) 54%, teal);
+  --catppuccin-color-pink: color-mix(in srgb, var(--arrbit-accent) 76%, white);
+  --catppuccin-color-rosewater: color-mix(in srgb, var(--arrbit-accent) 56%, white);
+  --catppuccin-color-flamingo: color-mix(in srgb, var(--arrbit-accent-muted) 58%, white);
+  --primary-foreground: var(--arrbit-primary-foreground);
+  --selected: color-mix(in srgb, var(--arrbit-accent) 18%, var(--arrbit-surface));
+  --selected-border: color-mix(in srgb, var(--arrbit-accent) 66%, var(--arrbit-muted));
+}
+
+.arrbit-retro-gaming {
+  --catppuccin-color-base: var(--arrbit-base);
+  --catppuccin-color-mantle: color-mix(in srgb, var(--arrbit-base) 88%, black);
+  --catppuccin-color-crust: color-mix(in srgb, var(--arrbit-base) 76%, black);
+  --catppuccin-color-surface0: var(--arrbit-surface);
+  --catppuccin-color-surface1: color-mix(in srgb, var(--arrbit-surface) 72%, var(--arrbit-muted));
+  --catppuccin-color-surface2: var(--arrbit-muted);
+  --catppuccin-color-overlay0: color-mix(in srgb, var(--arrbit-muted) 72%, var(--arrbit-surface));
+  --catppuccin-color-overlay1: var(--arrbit-muted);
+  --catppuccin-color-overlay2: var(--arrbit-accent);
+  --catppuccin-color-subtext0: color-mix(in srgb, var(--arrbit-text) 72%, var(--arrbit-muted));
+  --catppuccin-color-subtext1: color-mix(in srgb, var(--arrbit-text) 88%, var(--arrbit-muted));
+  --catppuccin-color-text: var(--arrbit-text);
+  --catppuccin-color-lavender: var(--arrbit-primary);
+  --catppuccin-color-mauve: var(--arrbit-primary);
+  --catppuccin-color-blue: var(--arrbit-accent);
+  --catppuccin-color-sky: var(--arrbit-accent);
+  --catppuccin-color-peach: color-mix(in srgb, var(--arrbit-secondary) 74%, var(--arrbit-accent));
+  --catppuccin-color-yellow: color-mix(in srgb, var(--arrbit-accent) 62%, wheat);
+  --catppuccin-color-red: color-mix(in srgb, var(--arrbit-secondary) 72%, crimson);
+  --catppuccin-color-green: color-mix(in srgb, var(--arrbit-accent) 64%, mediumseagreen);
+  --catppuccin-color-teal: var(--arrbit-accent);
+  --catppuccin-color-pink: var(--arrbit-secondary);
+  --catppuccin-color-rosewater: var(--arrbit-text);
+  --catppuccin-color-flamingo: color-mix(in srgb, var(--arrbit-secondary) 60%, var(--arrbit-text));
+  --primary-foreground: var(--arrbit-primary-foreground);
+  --selected: color-mix(in srgb, var(--arrbit-primary) 22%, var(--arrbit-surface));
+  --selected-border: color-mix(in srgb, var(--arrbit-accent) 62%, var(--arrbit-primary));
 }
 
 *,

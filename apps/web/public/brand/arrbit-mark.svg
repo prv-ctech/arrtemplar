@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Arrbit">
+  <rect width="96" height="96" rx="24" fill="#222629" />
+  <path d="M28 68 48 24l20 44h-9l-4-9H41l-4 9h-9Zm16-17h8l-4-10-4 10Z" fill="#86C232" />
+  <circle cx="48" cy="48" r="36" fill="none" stroke="#61892F" stroke-width="6" stroke-dasharray="32 12" />
+  <circle cx="73" cy="25" r="8" fill="#474B4F" />
+  <circle cx="24" cy="72" r="5" fill="#6B6E70" />
+</svg>

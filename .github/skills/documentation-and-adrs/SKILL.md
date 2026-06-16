@@ -43,7 +43,7 @@ ADRs capture the reasoning behind significant technical decisions. They're the h
 
 ### ADR Template
 
-Store ADRs in `docs/decisions/` with sequential numbering:
+For feature- or idea-specific pre-planning, store ADR drafts and decision context in `docs/brainstorm/[name-slug]/decisions/` after applying the brainstorm routing and overlap check from `using-agent-skills`. If a decision becomes a permanent cross-project ADR, promote it to the repository's permanent ADR location only when the project convention calls for it.
 
 ```markdown
 # ADR-001: Use PostgreSQL for primary database
@@ -250,8 +250,8 @@ For shipped features:
 Special consideration for AI agent context:
 
 - **CLAUDE.md / rules files** — Document project conventions so agents follow them
-- **Spec files** — Keep specs updated so agents build the right thing
-- **ADRs** — Help agents understand why past decisions were made (prevents re-deciding)
+- **Spec files** — Keep specs updated under `docs/brainstorm/[name-slug]/spec/` so agents build the right thing
+- **ADRs** — Keep feature-specific ADR drafts under `docs/brainstorm/[name-slug]/decisions/` so agents understand why past decisions were made
 - **Inline gotchas** — Prevent agents from falling into known traps
 
 ## Common Rationalizations
@@ -278,7 +278,7 @@ Special consideration for AI agent context:
 
 After documenting:
 
-- [ ] ADRs exist for all significant architectural decisions
+- [ ] ADRs or ADR drafts exist for all significant architectural decisions in the appropriate `docs/brainstorm/[name-slug]/decisions/` or permanent ADR location
 - [ ] README covers quick start, commands, and architecture overview
 - [ ] API functions have parameter and return type documentation
 - [ ] Known gotchas are documented inline where they matter

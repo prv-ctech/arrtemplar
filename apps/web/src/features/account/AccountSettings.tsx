@@ -1,8 +1,14 @@
 import type { PublicUser } from "@arrtemplar/shared";
-import { BellIcon, CheckCircleIcon, LockIcon, UserCircleIcon } from "@phosphor-icons/react";
+import {
+  BellIcon,
+  CaretDownIcon,
+  CheckCircleIcon,
+  LockIcon,
+  UserCircleIcon,
+} from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { type FormEvent, useRef } from "react";
+import { type FormEvent, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -257,57 +263,87 @@ function ThemePackCard({
   pack: ThemePack;
   selectedTheme: AppTheme;
 }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const themesContentId = useId();
+
   return (
     <Card className="w-full overflow-hidden rounded-2xl bg-card/50 shadow-none">
-      <CardHeader className="flex-row items-center gap-3 space-y-0 p-3">
-        <img
-          alt={pack.logoAlt}
-          className="size-11 rounded-full border border-border bg-card/70 p-0.5"
-          src={pack.logoSrc}
-        />
-        <div className="min-w-0 flex-1">
-          <CardTitle className="truncate text-base leading-6">{pack.label}</CardTitle>
-        </div>
+      <CardHeader className="p-0">
+        <button
+          aria-controls={themesContentId}
+          aria-expanded={isExpanded}
+          className={cn(
+            "flex w-full cursor-pointer items-center gap-3 p-3 text-left transition-colors duration-200",
+            "hover:bg-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          )}
+          onClick={() => setIsExpanded((current) => !current)}
+          type="button"
+        >
+          <img
+            alt=""
+            aria-hidden="true"
+            className="size-11 rounded-full border border-border bg-card/70 p-0.5"
+            src={pack.logoSrc}
+          />
+          <CardTitle className="min-w-0 flex-1 truncate text-base leading-6">
+            {pack.label}
+          </CardTitle>
+          <ThemePreviewStrip
+            className="hidden h-6 w-12 rounded-md sm:flex"
+            swatches={pack.previewSwatches}
+          />
+          <CaretDownIcon
+            aria-hidden="true"
+            className={cn(
+              "size-4 shrink-0 text-muted-foreground transition-transform duration-200",
+              isExpanded && "rotate-180",
+            )}
+          />
+        </button>
       </CardHeader>
-      <Separator />
-      <CardContent className="p-2.5">
-        <fieldset className="grid grid-cols-2 gap-2">
-          <legend className="sr-only">{pack.label} themes</legend>
-          {pack.themes.map((option) => {
-            const isSelected = option.value === selectedTheme;
-            return (
-              <Button
-                aria-pressed={isSelected}
-                className={cn(
-                  "h-auto min-h-11 justify-start gap-2 rounded-xl px-2.5 py-2 text-left",
-                  "shadow-none hover:translate-y-0 active:translate-y-0",
-                  pack.themes.length === 1 && "col-span-2",
-                  isSelected
-                    ? "border-primary/50 bg-primary/12 text-foreground hover:bg-primary/16"
-                    : "border-border bg-card/72 text-muted-foreground hover:bg-accent hover:text-foreground",
-                )}
-                key={option.value}
-                onClick={() => onThemeChange(option.value)}
-                type="button"
-                variant="outline"
-              >
-                <ThemePreviewStrip
-                  className={cn("h-6 w-12 rounded-md", option.value)}
-                  swatches={option.previewSwatches ?? pack.previewSwatches}
-                />
-                <span className="min-w-0 flex-1 truncate font-medium">{option.label}</span>
-                {isSelected ? (
-                  <CheckCircleIcon
-                    aria-hidden="true"
-                    className="size-3.5 text-primary"
-                    weight="fill"
-                  />
-                ) : null}
-              </Button>
-            );
-          })}
-        </fieldset>
-      </CardContent>
+      {isExpanded ? (
+        <>
+          <Separator />
+          <CardContent className="p-2.5" id={themesContentId}>
+            <fieldset className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,9.75rem),1fr))] gap-2">
+              <legend className="sr-only">{pack.label} themes</legend>
+              {pack.themes.map((option) => {
+                const isSelected = option.value === selectedTheme;
+
+                return (
+                  <Button
+                    aria-pressed={isSelected}
+                    className={cn(
+                      "h-auto min-h-11 justify-start gap-2 rounded-xl px-2.5 py-2 text-left",
+                      "cursor-pointer shadow-none hover:translate-y-0 active:translate-y-0",
+                      isSelected
+                        ? "border-primary/50 bg-primary/12 text-foreground hover:bg-primary/16"
+                        : "border-border bg-card/72 text-muted-foreground hover:bg-accent hover:text-foreground",
+                    )}
+                    key={option.value}
+                    onClick={() => onThemeChange(option.value)}
+                    type="button"
+                    variant="outline"
+                  >
+                    <ThemePreviewStrip
+                      className={cn("h-6 w-12 rounded-md", option.value)}
+                      swatches={option.previewSwatches ?? pack.previewSwatches}
+                    />
+                    <span className="min-w-0 flex-1 truncate font-medium">{option.label}</span>
+                    {isSelected ? (
+                      <CheckCircleIcon
+                        aria-hidden="true"
+                        className="size-3.5 shrink-0 text-primary"
+                        weight="fill"
+                      />
+                    ) : null}
+                  </Button>
+                );
+              })}
+            </fieldset>
+          </CardContent>
+        </>
+      ) : null}
     </Card>
   );
 }
@@ -316,7 +352,7 @@ export function ThemeSettings() {
   const { setTheme, theme, themePacks } = useTheme();
 
   return (
-    <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),22rem))] gap-4">
+    <div className="grid items-start gap-4 grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))]">
       {themePacks.map((pack) => (
         <ThemePackCard key={pack.id} onThemeChange={setTheme} pack={pack} selectedTheme={theme} />
       ))}

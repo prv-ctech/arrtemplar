@@ -24,5 +24,6 @@ data/
 #local docs (we must not share docs, they are not plublic)
 docs/research/
 docs/code-review/
+docs/brainstorm
 docs/plans/
 node_modules
