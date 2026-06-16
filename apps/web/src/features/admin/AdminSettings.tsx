@@ -52,14 +52,12 @@ function createSettingsEntries(user: PublicUser) {
       id: "about",
       label: "About",
       icon: <InfoIcon aria-hidden="true" className="size-5" />,
-      description: "Safe application information and version details.",
       path: "/settings/about",
     },
     {
       id: "theme",
       label: "Theme",
       icon: <PaletteIcon aria-hidden="true" className="size-5" />,
-      description: "Catppuccin color pack.",
       path: "/settings/theme",
     },
   ];
@@ -69,7 +67,6 @@ function createSettingsEntries(user: PublicUser) {
       id: "general",
       label: "General",
       icon: <GearIcon aria-hidden="true" className="size-5" />,
-      description: "Application settings and display preferences.",
       path: "/settings/general",
     });
   }
@@ -79,7 +76,6 @@ function createSettingsEntries(user: PublicUser) {
       id: "library",
       label: "Library",
       icon: <BookOpenIcon aria-hidden="true" className="size-5" />,
-      description: "Metadata import and library curation.",
       path: "/settings/library",
     });
   }
@@ -89,7 +85,6 @@ function createSettingsEntries(user: PublicUser) {
       id: "users",
       label: "Users",
       icon: <UserIcon aria-hidden="true" className="size-5" />,
-      description: "User directory and per-user management surfaces.",
       path: "/settings/users",
     });
   }
@@ -99,7 +94,6 @@ function createSettingsEntries(user: PublicUser) {
       id: "import",
       label: "Import",
       icon: <DownloadSimpleIcon aria-hidden="true" className="size-5" />,
-      description: "Import queue, files, and parser settings.",
       path: "/settings/import",
     });
   }
@@ -109,7 +103,6 @@ function createSettingsEntries(user: PublicUser) {
       id: "notifications",
       label: "Notifications",
       icon: <BellIcon aria-hidden="true" className="size-5" />,
-      description: "App-wide notification channels and delivery settings.",
       path: "/settings/notifications",
     });
   }
@@ -119,7 +112,6 @@ function createSettingsEntries(user: PublicUser) {
       id: "services",
       label: "Services",
       icon: <PlugsConnectedIcon aria-hidden="true" className="size-5" />,
-      description: "External service integrations and connectivity.",
       path: "/settings/services",
     });
   }
@@ -129,7 +121,6 @@ function createSettingsEntries(user: PublicUser) {
       id: "logs",
       label: "Logs",
       icon: <ScrollIcon aria-hidden="true" className="size-5" />,
-      description: "Audit, retention, and operational log settings.",
       path: "/settings/logs",
     });
   }
@@ -240,12 +231,7 @@ export function AdminSettings({ activePage }: { activePage: AdminSettingsPage })
         onSelect={handlePageChange}
       />
 
-      <SettingsPanel
-        activeId={activePage}
-        description={activeEntry.description}
-        header={activePage === "theme" ? null : undefined}
-        title={activeEntry.label}
-      >
+      <SettingsPanel activeId={activePage}>
         <ActiveSettingsPage activePage={activePage} />
       </SettingsPanel>
     </div>

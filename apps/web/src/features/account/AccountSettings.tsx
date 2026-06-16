@@ -44,7 +44,6 @@ function createSettingsEntries() {
       id: "main",
       label: "Main",
       icon: <UserCircleIcon aria-hidden="true" className="size-5" />,
-      description: "Profile identity and contact details.",
       path: "/profile/settings/main",
       to: "/profile/settings/main",
     },
@@ -52,7 +51,6 @@ function createSettingsEntries() {
       id: "password",
       label: "Password",
       icon: <LockIcon aria-hidden="true" className="size-5" />,
-      description: "Change your password for this account.",
       path: "/profile/settings/password",
       to: "/profile/settings/password",
     },
@@ -60,7 +58,6 @@ function createSettingsEntries() {
       id: "notifications",
       label: "Notifications",
       icon: <BellIcon aria-hidden="true" className="size-5" />,
-      description: "Personal notification preferences.",
       path: "/profile/settings/notifications",
       to: "/profile/settings/notifications",
     },
@@ -408,9 +405,6 @@ export function AccountSettings({
     }
   }
 
-  const activeEntry =
-    settingsEntries.find((entry) => entry.id === activePage) ?? settingsEntries[0];
-
   return (
     <div className="flex flex-col">
       <h1 className="sr-only">Profile Settings</h1>
@@ -421,11 +415,7 @@ export function AccountSettings({
         onSelect={handlePageChange}
       />
 
-      <SettingsPanel
-        activeId={activePage}
-        description={activeEntry.description}
-        title={activeEntry.label}
-      >
+      <SettingsPanel activeId={activePage}>
         <ActiveSettingsPage activePage={activePage} user={user} />
       </SettingsPanel>
     </div>

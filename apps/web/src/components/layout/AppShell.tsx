@@ -1,5 +1,11 @@
 import type { PublicUser } from "@arrtemplar/shared";
-import { HouseIcon, MagnifyingGlassIcon, SignOutIcon, UserCircleIcon } from "@phosphor-icons/react";
+import {
+  GearSixIcon,
+  HouseIcon,
+  MagnifyingGlassIcon,
+  SignOutIcon,
+  UserCircleIcon,
+} from "@phosphor-icons/react";
 import { useMutation } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import type { ComponentProps, ReactNode } from "react";
@@ -8,7 +14,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -33,6 +38,10 @@ const shellNavItems: ShellNavLinkItem[] = [
 
 type AccountMenuSide = ComponentProps<typeof DropdownMenuContent>["side"];
 
+function getAccountInitial(username: string) {
+  return username.trim().charAt(0).toUpperCase() || "?";
+}
+
 type ShellActionsProps = {
   accountMenuSide?: AccountMenuSide;
   className?: string;
@@ -48,38 +57,48 @@ function ShellActions({
   onSignOut,
   user,
 }: ShellActionsProps) {
+  const accountInitial = getAccountInitial(user.username);
+
   return (
     <div className={cn("flex items-center gap-1.5", className)}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
             aria-label={`Open account menu for ${user.username}`}
-            className="grid size-10 place-items-center rounded-2xl border border-border bg-card/76 text-muted-foreground shadow-(--shadow-soft) transition-[background,border-color,transform] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 hover:border-primary/45 hover:bg-accent hover:text-foreground active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="grid size-9 place-items-center rounded-full border border-primary/25 bg-primary/10 text-primary transition-[background,border-color,box-shadow,transform] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/16 active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             type="button"
           >
-            <UserCircleIcon aria-hidden="true" className="size-5 text-primary" weight="duotone" />
+            <span aria-hidden="true" className="text-xs font-semibold tracking-[-0.04em]">
+              {accountInitial}
+            </span>
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-72" side={accountMenuSide}>
-          <DropdownMenuLabel>
-            <span className="block truncate text-sm font-semibold text-foreground">
-              {user.username}
-            </span>
-            <span className="mt-1 block truncate text-xs font-normal text-muted-foreground">
-              {user.email}
-            </span>
-          </DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem asChild>
-            <Link to="/profile">My Profile</Link>
+        <DropdownMenuContent
+          align="end"
+          className="w-52 rounded-xl p-1 shadow-(--shadow-soft)"
+          side={accountMenuSide}
+          sideOffset={10}
+        >
+          <DropdownMenuItem asChild className="px-2.5 py-2">
+            <Link to="/profile">
+              <UserCircleIcon aria-hidden="true" className="size-4 text-muted-foreground" />
+              My Profile
+            </Link>
           </DropdownMenuItem>
           {canAccessSettings(user) ? (
-            <DropdownMenuItem asChild>
-              <Link to="/settings">Settings</Link>
+            <DropdownMenuItem asChild className="px-2.5 py-2">
+              <Link to="/settings">
+                <GearSixIcon aria-hidden="true" className="size-4 text-muted-foreground" />
+                Settings
+              </Link>
             </DropdownMenuItem>
           ) : null}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem disabled={isSigningOut} onSelect={onSignOut}>
+          <DropdownMenuSeparator className="my-1" />
+          <DropdownMenuItem
+            className="px-2.5 py-2 text-muted-foreground focus:text-foreground"
+            disabled={isSigningOut}
+            onSelect={onSignOut}
+          >
             <SignOutIcon aria-hidden="true" className="size-4" />
             {isSigningOut ? "Signing out" : "Sign out"}
           </DropdownMenuItem>
@@ -143,7 +162,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Public
             </div>
 
             <ShellActions
-              accountMenuSide="right"
+              accountMenuSide="bottom"
               className="lg:hidden"
               isSigningOut={logoutMutation.isPending}
               onSignOut={handleSignOut}

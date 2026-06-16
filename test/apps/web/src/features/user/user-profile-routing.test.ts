@@ -11,7 +11,7 @@ describe("profile dashboard and managed user routing", () => {
     const source = await Bun.file(userProfileSourcePath).text();
 
     expect(source).toContain("PersonalProfileRoute");
-    expect(source).toContain("Profile Settings");
+    expect(source).toContain("Edit Profile");
     expect(source).toContain('to="/profile/settings/main"');
     expect(source).not.toContain("SettingsNav");
     expect(source).not.toContain("AccountSettings");

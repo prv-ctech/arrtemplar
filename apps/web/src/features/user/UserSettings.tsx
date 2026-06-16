@@ -41,7 +41,6 @@ function createUserSettingsEntries(actor: ReturnType<typeof useAuthenticatedRout
       id: "main",
       label: "Main",
       icon: <UserCircleIcon aria-hidden="true" className="size-5" />,
-      description: "Managed user identity and contact details.",
       to: "/profile/$publicUserId/settings/main",
     });
   }
@@ -51,7 +50,6 @@ function createUserSettingsEntries(actor: ReturnType<typeof useAuthenticatedRout
       id: "password",
       label: "Password",
       icon: <LockIcon aria-hidden="true" className="size-5" />,
-      description: "Managed user password rotation.",
       to: "/profile/$publicUserId/settings/password",
     });
   }
@@ -61,7 +59,6 @@ function createUserSettingsEntries(actor: ReturnType<typeof useAuthenticatedRout
       id: "permissions",
       label: "Permissions",
       icon: <ShieldCheckIcon aria-hidden="true" className="size-5" />,
-      description: "Explicit permission grants for the managed user.",
       to: "/profile/$publicUserId/settings/permissions",
     });
   }
@@ -312,11 +309,7 @@ export function UserSettings({ activePage }: { activePage: UserSettingsPage }) {
         label="User Settings"
         onSelect={handlePageChange}
       />
-      <SettingsPanel
-        activeId={activePage}
-        description={activeEntry.description}
-        title={activeEntry.label}
-      >
+      <SettingsPanel activeId={activePage}>
         {activePage === "main" ? <UserIdentitySettings /> : null}
         {activePage === "password" ? <UserPasswordSettings /> : null}
         {activePage === "permissions" ? <UserPermissionsSettings /> : null}

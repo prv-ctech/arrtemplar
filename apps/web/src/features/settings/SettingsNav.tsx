@@ -8,7 +8,6 @@ export type SettingsEntry<TPage extends string = string> = {
   id: TPage;
   label: string;
   icon: ReactNode;
-  description: string;
 };
 
 export function SettingsNav<TPage extends string>({
