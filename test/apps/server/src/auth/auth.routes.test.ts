@@ -11,7 +11,11 @@ import { sessions, userPermissionGrants, users } from "../../../../../apps/serve
 import {
   CSRF_HEADER_NAME,
   CSRF_HEADER_VALUE,
+  DEFAULT_PROFILE_AVATAR_ID,
+  DEFAULT_PROFILE_BANNER_ID,
   DEFAULT_SIGNED_IN_USER_PERMISSIONS,
+  PROFILE_AVATAR_IDS,
+  PROFILE_BANNER_IDS,
   SYSTEM_ADMIN_PERMISSION,
   USER_PERMISSION_VALUES,
   type UserPermission,
@@ -63,6 +67,8 @@ describe("auth routes", () => {
         id: expect.any(String),
         username: "owner",
         email: "owner@example.local",
+        avatarId: DEFAULT_PROFILE_AVATAR_ID,
+        bannerId: DEFAULT_PROFILE_BANNER_ID,
         permissions: [...USER_PERMISSION_VALUES],
         createdAt: expect.any(String),
         lastLoginAt: null,
@@ -130,6 +136,8 @@ describe("auth routes", () => {
         id: expect.any(String),
         username: "viewer",
         email: "viewer@example.local",
+        avatarId: DEFAULT_PROFILE_AVATAR_ID,
+        bannerId: DEFAULT_PROFILE_BANNER_ID,
         permissions: [...DEFAULT_SIGNED_IN_USER_PERMISSIONS],
         createdAt: expect.any(String),
         lastLoginAt: expect.any(String),
@@ -589,6 +597,47 @@ describe("auth routes", () => {
     expect(passwordResponse.status).toBe(200);
     expect(passwordBody).toEqual({ status: "ok" });
     await expectPasswordReplaced(app, "reader@example.local", "new-secure-password");
+  });
+
+  it("stores only predetermined profile avatar and banner selections", async () => {
+    const { app, database } = await createAuthTestApp();
+    const viewerCookie = await loginAndReadCookie(app, "viewer@example.local");
+    const avatarId = PROFILE_AVATAR_IDS.find((id) => id !== DEFAULT_PROFILE_AVATAR_ID);
+    const bannerId = PROFILE_BANNER_IDS.find((id) => id !== DEFAULT_PROFILE_BANNER_ID);
+
+    if (!avatarId || !bannerId) {
+      throw new Error("Expected alternate profile media options for route tests.");
+    }
+
+    const updateResponse = await app.handle(
+      csrfJsonPutRequest("/api/profile", { avatarId, bannerId }, { cookie: viewerCookie }),
+    );
+    const updateBody = await updateResponse.json();
+
+    expect(updateResponse.status).toBe(200);
+    expect(updateBody.user).toMatchObject({ avatarId, bannerId });
+    expect(findStoredUserByPublicId(database, updateBody.user.id)).toMatchObject({
+      avatarId,
+      bannerId,
+    });
+
+    const profileResponse = await app.handle(
+      new Request("http://localhost/api/profile", { headers: { cookie: viewerCookie } }),
+    );
+    const profileBody = await profileResponse.json();
+
+    expect(profileResponse.status).toBe(200);
+    expect(profileBody.user).toMatchObject({ avatarId, bannerId });
+
+    const invalidResponse = await app.handle(
+      csrfJsonPutRequest(
+        "/api/profile",
+        { avatarId: "custom-upload", bannerId },
+        { cookie: viewerCookie },
+      ),
+    );
+
+    expect(invalidResponse.status).toBe(422);
   });
 });
 

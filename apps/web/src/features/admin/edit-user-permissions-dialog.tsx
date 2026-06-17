@@ -25,6 +25,7 @@ const permissionCategoryOrder: readonly PermissionCatalogEntry["category"][] = [
 ];
 
 const serviceOperatorPermissions: readonly UserPermission[] = [
+  "settings:theme",
   "settings:services",
   "settings:library",
   "settings:import",
@@ -180,7 +181,7 @@ function EditUserPermissionsContent({
                   type="button"
                   variant="outline"
                 >
-                  Admin
+                  Full admin
                 </Button>
                 <Button
                   className={presetButtonClassName}
@@ -188,7 +189,7 @@ function EditUserPermissionsContent({
                   type="button"
                   variant="outline"
                 >
-                  Service ops
+                  Service operator
                 </Button>
                 <Button
                   className={presetButtonClassName}
@@ -255,7 +256,7 @@ function EditUserPermissionsContent({
                         </span>
                         {highRisk ? (
                           <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-600">
-                            High
+                            High risk
                           </span>
                         ) : null}
                       </label>

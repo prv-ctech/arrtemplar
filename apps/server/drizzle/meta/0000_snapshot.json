@@ -1,7 +1,7 @@
 {
-  "version": "1",
+  "version": "6",
   "dialect": "sqlite",
-  "id": "0000_core_tables",
+  "id": "0146bada-341e-4cab-8db0-dace942d9f5e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "audit_logs": {
@@ -369,12 +369,13 @@
       "checkConstraints": {}
     }
   },
-  "schemas": {},
+  "views": {},
   "enums": {},
-  "indices": {},
   "_meta": {
-    "schemas": {},
     "tables": {},
     "columns": {}
+  },
+  "internal": {
+    "indexes": {}
   }
 }

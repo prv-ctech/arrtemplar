@@ -24,6 +24,10 @@ import type {
 import {
   CSRF_HEADER_NAME,
   CSRF_HEADER_VALUE,
+  DEFAULT_PROFILE_AVATAR_ID,
+  DEFAULT_PROFILE_BANNER_ID,
+  isProfileAvatarId,
+  isProfileBannerId,
   isUserPermission,
   PERMISSION_CATALOG_BY_PERMISSION,
 } from "@arrtemplar/shared";
@@ -220,12 +224,16 @@ function normalizePublicUser(user: {
   id: string;
   username: string;
   email: string;
+  avatarId: unknown;
+  bannerId: unknown;
   createdAt: string;
   lastLoginAt: string | null;
   permissions: unknown;
 }): PublicUser {
   return {
     ...user,
+    avatarId: isProfileAvatarId(user.avatarId) ? user.avatarId : DEFAULT_PROFILE_AVATAR_ID,
+    bannerId: isProfileBannerId(user.bannerId) ? user.bannerId : DEFAULT_PROFILE_BANNER_ID,
     permissions: normalizePermissions(user.permissions),
   };
 }
@@ -248,6 +256,8 @@ function normalizeManagedUserProfile(user: {
   id: string;
   username: string;
   email: string;
+  avatarId: unknown;
+  bannerId: unknown;
   disabledAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -256,6 +266,8 @@ function normalizeManagedUserProfile(user: {
 }): ManagedUserProfile {
   return {
     ...user,
+    avatarId: isProfileAvatarId(user.avatarId) ? user.avatarId : DEFAULT_PROFILE_AVATAR_ID,
+    bannerId: isProfileBannerId(user.bannerId) ? user.bannerId : DEFAULT_PROFILE_BANNER_ID,
     permissions: normalizePermissions(user.permissions),
   };
 }

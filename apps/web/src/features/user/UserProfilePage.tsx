@@ -1,20 +1,47 @@
-import type { ManagedUserProfile, PublicUser } from "@arrtemplar/shared";
+import type {
+  ManagedUserProfile,
+  ProfileAvatarId,
+  ProfileBannerId,
+  PublicUser,
+} from "@arrtemplar/shared";
 import { GearSixIcon } from "@phosphor-icons/react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Navigate, useParams } from "@tanstack/react-router";
 import type { ReactNode } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { canManageUsers, hasRequiredPermission } from "@/features/auth/auth-state";
-import { getManagedUserProfile } from "@/lib/api";
+import { authQueryKey, canManageUsers, hasRequiredPermission } from "@/features/auth/auth-state";
+import { getManagedUserProfile, updateManagedUserProfile, updateUserProfile } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { useAuthenticatedRouteUser } from "@/routes/authenticated-route-user";
-import { managedUserProfileQueryKey } from "./user-profile-cache";
+import { ProfileMediaPickerDialog } from "./ProfileMediaPickerDialog";
+import {
+  getProfileAvatarOption,
+  getProfileBannerOption,
+  PROFILE_AVATAR_OPTIONS,
+  PROFILE_BANNER_OPTIONS,
+} from "./profile-media-options";
+import { managedUserProfileQueryKey, syncUpdatedUserProfileCaches } from "./user-profile-cache";
 
 type ProfileDashboardUser = Pick<
   PublicUser | ManagedUserProfile,
-  "createdAt" | "email" | "id" | "lastLoginAt" | "permissions" | "username"
+  | "avatarId"
+  | "bannerId"
+  | "createdAt"
+  | "email"
+  | "id"
+  | "lastLoginAt"
+  | "permissions"
+  | "username"
 > & {
   disabledAt?: string | null;
+};
+
+type ProfileMediaActions = {
+  isSaving: boolean;
+  onAvatarSelect: (avatarId: ProfileAvatarId) => Promise<void>;
+  onBannerSelect: (bannerId: ProfileBannerId) => Promise<void>;
 };
 
 type ActivityInsight = {
@@ -24,46 +51,6 @@ type ActivityInsight = {
   values: number[];
   visual: "bars" | "line";
 };
-
-const profileBannerSvg = encodeURIComponent(`
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 420">
-  <defs>
-    <linearGradient id="sky" x1="0" x2="1" y1="0" y2="1">
-      <stop offset="0" stop-color="#ff79c6"/>
-      <stop offset="0.45" stop-color="#bd93f9"/>
-      <stop offset="1" stop-color="#8be9fd"/>
-    </linearGradient>
-    <linearGradient id="glow" x1="0" x2="1">
-      <stop offset="0" stop-color="#50fa7b" stop-opacity="0.85"/>
-      <stop offset="1" stop-color="#f1fa8c" stop-opacity="0.25"/>
-    </linearGradient>
-  </defs>
-  <rect width="1440" height="420" fill="#1e2029"/>
-  <path d="M0 118c175 60 303 65 496 16 210-53 370-41 557 80 146 94 270 128 387 105V0H0Z" fill="url(#sky)"/>
-  <path d="M0 298c188-84 383-90 584-18 166 60 312 59 476-5 135-53 259-67 380-29v174H0Z" fill="url(#glow)"/>
-  <circle cx="1085" cy="94" r="164" fill="#f8f8f2" opacity="0.12"/>
-  <circle cx="1250" cy="244" r="72" fill="#282a36" opacity="0.28"/>
-</svg>`);
-
-const profileAvatarSvg = encodeURIComponent(`
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
-  <defs>
-    <linearGradient id="hair" x1="0" x2="1" y1="0" y2="1">
-      <stop offset="0" stop-color="#8be9fd"/>
-      <stop offset="0.5" stop-color="#bd93f9"/>
-      <stop offset="1" stop-color="#ff79c6"/>
-    </linearGradient>
-  </defs>
-  <rect width="240" height="240" rx="120" fill="#282a36"/>
-  <circle cx="120" cy="96" r="58" fill="url(#hair)"/>
-  <path d="M54 203c10-48 43-77 66-77s56 29 66 77" fill="#f8f8f2" opacity="0.92"/>
-  <circle cx="101" cy="105" r="8" fill="#282a36"/>
-  <circle cx="139" cy="105" r="8" fill="#282a36"/>
-  <path d="M102 132c12 10 25 10 37 0" fill="none" stroke="#282a36" stroke-linecap="round" stroke-width="8"/>
-</svg>`);
-
-const PROFILE_BANNER_PLACEHOLDER = `data:image/svg+xml;utf8,${profileBannerSvg}`;
-const PROFILE_AVATAR_PLACEHOLDER = `data:image/svg+xml;utf8,${profileAvatarSvg}`;
 
 const activityInsights: ActivityInsight[] = [
   {
@@ -223,29 +210,88 @@ function ProfileFact({
   );
 }
 
-function ProfileDashboard({ action, user }: { action: ReactNode; user: ProfileDashboardUser }) {
+function ProfileDashboard({
+  action,
+  mediaActions,
+  user,
+}: {
+  action: ReactNode;
+  mediaActions?: ProfileMediaActions | undefined;
+  user: ProfileDashboardUser;
+}) {
+  const avatar = getProfileAvatarOption(user.avatarId);
+  const banner = getProfileBannerOption(user.bannerId);
+
+  const bannerImage = (
+    <>
+      <img alt={banner.alt} className="size-full object-cover" decoding="async" src={banner.src} />
+      <div className="absolute inset-0 bg-linear-to-t from-card via-card/20 to-transparent" />
+    </>
+  );
+  const avatarImage = (
+    <img alt={avatar.alt} className="size-full object-cover" decoding="async" src={avatar.src} />
+  );
+
   return (
     <section className="-mx-4 -my-5 min-h-[calc(100dvh-4.25rem)] overflow-hidden bg-card/82 sm:-mx-6 lg:-mx-8 lg:-my-7 lg:min-h-dvh">
-      <div className="relative h-28 overflow-hidden sm:h-36">
-        <img
-          alt=""
-          className="size-full object-cover"
-          decoding="async"
-          src={PROFILE_BANNER_PLACEHOLDER}
-        />
-        <div className="absolute inset-0 bg-linear-to-t from-card via-card/20 to-transparent" />
+      <div className="relative h-40 overflow-hidden sm:h-52 lg:h-56">
+        {mediaActions ? (
+          <ProfileMediaPickerDialog
+            disabled={mediaActions.isSaving}
+            kind="banner"
+            onSelect={(id) => mediaActions.onBannerSelect(id as ProfileBannerId)}
+            options={PROFILE_BANNER_OPTIONS}
+            selectedId={banner.id}
+            trigger={
+              <button
+                aria-label="Change profile banner"
+                className="group relative size-full cursor-pointer overflow-hidden text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-70"
+                disabled={mediaActions.isSaving}
+                type="button"
+              >
+                {bannerImage}
+                <span className="absolute right-3 bottom-3 rounded-full border border-border bg-background/78 px-2 py-1 text-xs font-medium text-foreground opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                  Change banner
+                </span>
+              </button>
+            }
+          />
+        ) : (
+          bannerImage
+        )}
       </div>
 
       <div className="px-4 pb-4 sm:px-6 sm:pb-6">
         <div className="-mt-10 flex items-end justify-between gap-3 sm:-mt-12">
-          <div className="relative size-24 shrink-0 overflow-hidden rounded-full border-4 border-card bg-background shadow-(--shadow-soft) sm:size-28">
-            <img
-              alt="Placeholder profile avatar"
-              className="size-full object-cover"
-              decoding="async"
-              src={PROFILE_AVATAR_PLACEHOLDER}
+          {mediaActions ? (
+            <ProfileMediaPickerDialog
+              disabled={mediaActions.isSaving}
+              kind="avatar"
+              onSelect={(id) => mediaActions.onAvatarSelect(id as ProfileAvatarId)}
+              options={PROFILE_AVATAR_OPTIONS}
+              selectedId={avatar.id}
+              trigger={
+                <button
+                  aria-label="Change profile avatar"
+                  className={cn(
+                    "group relative size-24 shrink-0 cursor-pointer overflow-hidden rounded-full border-4 border-card bg-background shadow-(--shadow-soft)",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card disabled:pointer-events-none disabled:opacity-70 sm:size-28",
+                  )}
+                  disabled={mediaActions.isSaving}
+                  type="button"
+                >
+                  {avatarImage}
+                  <span className="absolute inset-x-0 bottom-0 bg-background/80 px-2 py-1 text-[0.65rem] font-medium text-foreground opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                    Change
+                  </span>
+                </button>
+              }
             />
-          </div>
+          ) : (
+            <div className="relative size-24 shrink-0 overflow-hidden rounded-full border-4 border-card bg-background shadow-(--shadow-soft) sm:size-28">
+              {avatarImage}
+            </div>
+          )}
           <div className="pb-1 sm:pb-2">{action}</div>
         </div>
 
@@ -292,6 +338,18 @@ function ProfileDashboard({ action, user }: { action: ReactNode; user: ProfileDa
 
 export function PersonalProfileRoute() {
   const user = useAuthenticatedRouteUser();
+  const queryClient = useQueryClient();
+  const mediaMutation = useMutation({
+    mutationFn: updateUserProfile,
+    onSuccess: async (updatedProfile) => {
+      syncUpdatedUserProfileCaches(queryClient, updatedProfile);
+      await queryClient.invalidateQueries({ queryKey: authQueryKey });
+      toast.success("Profile media updated.");
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Profile media update failed.");
+    },
+  });
 
   return (
     <ProfileDashboard
@@ -307,6 +365,19 @@ export function PersonalProfileRoute() {
           </Link>
         </Button>
       }
+      mediaActions={
+        hasRequiredPermission(user, "profile:update")
+          ? {
+              isSaving: mediaMutation.isPending,
+              onAvatarSelect: async (avatarId) => {
+                await mediaMutation.mutateAsync({ avatarId });
+              },
+              onBannerSelect: async (bannerId) => {
+                await mediaMutation.mutateAsync({ bannerId });
+              },
+            }
+          : undefined
+      }
       user={user}
     />
   );
@@ -315,8 +386,11 @@ export function PersonalProfileRoute() {
 export function UserProfilePage() {
   const actor = useAuthenticatedRouteUser();
   const { publicUserId } = useParams({ from: "/profile/$publicUserId" });
+  const queryClient = useQueryClient();
   const isSelfProfile = publicUserId === actor.id;
   const canReadManagedProfile = !isSelfProfile && canManageUsers(actor);
+  const canUpdateManagedProfile =
+    canReadManagedProfile && hasRequiredPermission(actor, "users:update");
   const {
     data: managedUser,
     isError: isManagedUserError,
@@ -325,6 +399,22 @@ export function UserProfilePage() {
     enabled: canReadManagedProfile,
     queryKey: managedUserProfileQueryKey(publicUserId),
     queryFn: () => getManagedUserProfile(publicUserId),
+  });
+  const managedMediaMutation = useMutation({
+    mutationFn: ({
+      avatarId,
+      bannerId,
+    }: {
+      avatarId?: ProfileAvatarId;
+      bannerId?: ProfileBannerId;
+    }) => updateManagedUserProfile(publicUserId, createProfileMediaUpdate(avatarId, bannerId)),
+    onSuccess: (updatedUser) => {
+      queryClient.setQueryData(managedUserProfileQueryKey(publicUserId), updatedUser);
+      toast.success("Profile media updated.");
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Profile media update failed.");
+    },
   });
 
   if (isSelfProfile) {
@@ -382,7 +472,37 @@ export function UserProfilePage() {
           ) : null}
         </div>
       }
+      mediaActions={
+        canUpdateManagedProfile
+          ? {
+              isSaving: managedMediaMutation.isPending,
+              onAvatarSelect: async (avatarId) => {
+                await managedMediaMutation.mutateAsync({ avatarId });
+              },
+              onBannerSelect: async (bannerId) => {
+                await managedMediaMutation.mutateAsync({ bannerId });
+              },
+            }
+          : undefined
+      }
       user={managedUser}
     />
   );
+}
+
+function createProfileMediaUpdate(
+  avatarId?: ProfileAvatarId,
+  bannerId?: ProfileBannerId,
+): { avatarId?: ProfileAvatarId; bannerId?: ProfileBannerId } {
+  const update: { avatarId?: ProfileAvatarId; bannerId?: ProfileBannerId } = {};
+
+  if (avatarId) {
+    update.avatarId = avatarId;
+  }
+
+  if (bannerId) {
+    update.bannerId = bannerId;
+  }
+
+  return update;
 }

@@ -1,4 +1,8 @@
-import { USER_PERMISSION_VALUES } from "@arrtemplar/shared";
+import {
+  DEFAULT_PROFILE_AVATAR_ID,
+  DEFAULT_PROFILE_BANNER_ID,
+  USER_PERMISSION_VALUES,
+} from "@arrtemplar/shared";
 import { type InferInsertModel, type InferSelectModel, sql } from "drizzle-orm";
 import { index, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
@@ -17,6 +21,8 @@ export const users = sqliteTable(
     publicId: text("public_id").notNull(),
     username: text("username").notNull(),
     email: text("email").notNull(),
+    avatarId: text("avatar_id").notNull().default(DEFAULT_PROFILE_AVATAR_ID),
+    bannerId: text("banner_id").notNull().default(DEFAULT_PROFILE_BANNER_ID),
     passwordHash: text("password_hash").notNull(),
     disabledAt: text("disabled_at"),
     createdAt: text("created_at").notNull().default(timestampNow),

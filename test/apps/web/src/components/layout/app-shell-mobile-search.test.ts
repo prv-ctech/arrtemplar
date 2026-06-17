@@ -37,4 +37,12 @@ describe("app shell primary navigation", () => {
     expect(source).not.toContain("Profile Settings");
     expect(source).not.toContain('to="/profile/settings/main"');
   });
+
+  it("renders the account menu trigger from the current user profile avatar", async () => {
+    const source = await Bun.file(appShellSourcePath).text();
+
+    expect(source).toContain("getProfileAvatarOption(user.avatarId)");
+    expect(source).toContain("src={accountAvatar.src}");
+    expect(source).not.toContain("getAccountInitial(user.username)");
+  });
 });

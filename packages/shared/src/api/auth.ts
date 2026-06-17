@@ -1,9 +1,12 @@
 import type { PermissionCatalogEntry, UserPermission } from "./permissions";
+import type { ProfileAvatarId, ProfileBannerId } from "./profile-media";
 
 export type PublicUser = {
   id: string;
   username: string;
   email: string;
+  avatarId: ProfileAvatarId;
+  bannerId: ProfileBannerId;
   permissions: UserPermission[];
   createdAt: string;
   lastLoginAt: string | null;
@@ -22,6 +25,8 @@ export type AdminUserSummary = ManagedUserSummary;
 
 export type ManagedUserProfile = ManagedUserSummary & {
   email: string;
+  avatarId: ProfileAvatarId;
+  bannerId: ProfileBannerId;
   lastLoginAt: string | null;
 };
 
@@ -45,6 +50,8 @@ export type CreateLocalUserRequest = {
 export type CreateUserRequest = CreateLocalUserRequest;
 
 export type UpdateUserProfileRequest = {
+  avatarId?: ProfileAvatarId;
+  bannerId?: ProfileBannerId;
   username?: string;
   email?: string;
 };

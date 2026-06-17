@@ -18,6 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { authQueryKey, canAccessSettings } from "@/features/auth/auth-state";
+import { getProfileAvatarOption } from "@/features/user/profile-media-options";
 import { logout } from "@/lib/api";
 import { queryClient } from "@/lib/query-client";
 import { cn } from "@/lib/utils";
@@ -38,10 +39,6 @@ const shellNavItems: ShellNavLinkItem[] = [
 
 type AccountMenuSide = ComponentProps<typeof DropdownMenuContent>["side"];
 
-function getAccountInitial(username: string) {
-  return username.trim().charAt(0).toUpperCase() || "?";
-}
-
 type ShellActionsProps = {
   accountMenuSide?: AccountMenuSide;
   className?: string;
@@ -57,7 +54,7 @@ function ShellActions({
   onSignOut,
   user,
 }: ShellActionsProps) {
-  const accountInitial = getAccountInitial(user.username);
+  const accountAvatar = getProfileAvatarOption(user.avatarId);
 
   return (
     <div className={cn("flex items-center gap-1.5", className)}>
@@ -65,12 +62,16 @@ function ShellActions({
         <DropdownMenuTrigger asChild>
           <button
             aria-label={`Open account menu for ${user.username}`}
-            className="grid size-9 place-items-center rounded-full border border-primary/25 bg-primary/10 text-primary transition-[background,border-color,box-shadow,transform] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/16 active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="grid size-9 place-items-center overflow-hidden rounded-full border border-primary/25 bg-background p-0.5 transition-[border-color,box-shadow,transform] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 hover:border-primary/50 active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             type="button"
           >
-            <span aria-hidden="true" className="text-xs font-semibold tracking-[-0.04em]">
-              {accountInitial}
-            </span>
+            <img
+              alt=""
+              aria-hidden="true"
+              className="size-full rounded-full object-cover"
+              decoding="async"
+              src={accountAvatar.src}
+            />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent

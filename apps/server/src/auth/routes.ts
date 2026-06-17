@@ -10,16 +10,21 @@ import type {
   ManagedUsersListResponse,
   PermissionCatalogResponse,
   PublicUser,
+  UpdateUserProfileRequest,
   UpdateUserProfileResponse,
   UserProfileResponse,
 } from "@arrtemplar/shared";
 import {
+  isProfileAvatarId,
+  isProfileBannerId,
   isUserPermission,
   PERMISSION_CATALOG,
   PERMISSION_CATEGORIES,
   PERMISSION_DEFAULT_GRANTS,
   PERMISSION_RISK_VALUES,
   PERMISSION_ROUTE_SURFACES,
+  PROFILE_AVATAR_IDS,
+  PROFILE_BANNER_IDS,
   USER_PERMISSION_VALUES,
 } from "@arrtemplar/shared";
 import { Elysia, t } from "elysia";
@@ -60,6 +65,18 @@ const permissionRouteSurfaceSchema = t.Union(
     ...ReturnType<typeof t.Literal>[],
   ],
 );
+const profileAvatarIdSchema = t.Union(
+  PROFILE_AVATAR_IDS.map((avatarId) => t.Literal(avatarId)) as [
+    ReturnType<typeof t.Literal>,
+    ...ReturnType<typeof t.Literal>[],
+  ],
+);
+const profileBannerIdSchema = t.Union(
+  PROFILE_BANNER_IDS.map((bannerId) => t.Literal(bannerId)) as [
+    ReturnType<typeof t.Literal>,
+    ...ReturnType<typeof t.Literal>[],
+  ],
+);
 
 const permissionRouteSchema = t.Object({
   surface: permissionRouteSurfaceSchema,
@@ -70,6 +87,8 @@ const publicUserSchema = t.Object({
   id: publicUserIdSchema,
   username: t.String(),
   email: t.String({ format: "email" }),
+  avatarId: profileAvatarIdSchema,
+  bannerId: profileBannerIdSchema,
   permissions: t.Array(userPermissionSchema),
   createdAt: t.String({ format: "date-time" }),
   lastLoginAt: t.Union([t.String({ format: "date-time" }), t.Null()]),
@@ -87,6 +106,8 @@ const managedUserSummarySchema = t.Object({
 const managedUserProfileSchema = t.Object({
   ...managedUserSummarySchema.properties,
   email: t.String({ format: "email" }),
+  avatarId: profileAvatarIdSchema,
+  bannerId: profileBannerIdSchema,
   lastLoginAt: t.Union([t.String({ format: "date-time" }), t.Null()]),
 });
 
@@ -118,6 +139,8 @@ const createLocalUserRequestSchema = t.Object({
 });
 
 const updateUserProfileRequestSchema = t.Object({
+  avatarId: t.Optional(profileAvatarIdSchema),
+  bannerId: t.Optional(profileBannerIdSchema),
   username: t.Optional(t.String({ minLength: 1, maxLength: 80, pattern: ".*\\S.*" })),
   email: t.Optional(t.String({ format: "email" })),
 });
@@ -328,7 +351,7 @@ function createProfileRoutes(authService: AuthService) {
       ({ body, cookie, request, status }) => {
         const result = authService.updateUserProfile(
           readSessionToken(cookie[SESSION_COOKIE_NAME].value),
-          body,
+          normalizeUpdateUserProfileRequest(body),
           createRequestContext(request),
         );
 
@@ -507,11 +530,17 @@ function createUsersRoutes(authService: AuthService) {
     )
     .put(
       "/users/:publicUserId/settings/main",
-      createManagedUserMutationHandler<Parameters<AuthService["updateManagedUserProfile"]>[1]>(
-        authService,
-        (publicUserId, input, user, context) =>
-          authService.updateManagedUserProfile(publicUserId, input, user, context),
-      ),
+      ({ body, cookie, params, request, status }) =>
+        runManagedUserMutation(
+          authService,
+          cookie[SESSION_COOKIE_NAME].value,
+          params.publicUserId,
+          normalizeUpdateUserProfileRequest(body),
+          request,
+          status,
+          (publicUserId, input, user, context) =>
+            authService.updateManagedUserProfile(publicUserId, input, user, context),
+        ),
       {
         params: managedUserParamsSchema,
         body: updateUserProfileRequestSchema,
@@ -756,6 +785,20 @@ function createManagedUserMutationHandler<TBody>(
       status,
       mutate,
     );
+}
+
+function normalizeUpdateUserProfileRequest(input: {
+  avatarId?: unknown;
+  bannerId?: unknown;
+  email?: string;
+  username?: string;
+}): UpdateUserProfileRequest {
+  return {
+    ...(isProfileAvatarId(input.avatarId) ? { avatarId: input.avatarId } : {}),
+    ...(isProfileBannerId(input.bannerId) ? { bannerId: input.bannerId } : {}),
+    ...(input.email ? { email: input.email } : {}),
+    ...(input.username ? { username: input.username } : {}),
+  };
 }
 
 function writeSessionCookie(

@@ -8,6 +8,8 @@ import {
   hasRequiredPermission,
 } from "../../../../../../apps/web/src/features/auth/auth-state";
 import {
+  DEFAULT_PROFILE_AVATAR_ID,
+  DEFAULT_PROFILE_BANNER_ID,
   DEFAULT_SIGNED_IN_USER_PERMISSIONS,
   PERMISSION_CATALOG,
   type PublicUser,
@@ -22,6 +24,8 @@ const baseUser: PublicUser = {
   id: "abcABC123",
   username: "operator",
   email: "operator@example.local",
+  avatarId: DEFAULT_PROFILE_AVATAR_ID,
+  bannerId: DEFAULT_PROFILE_BANNER_ID,
   permissions: [...DEFAULT_SIGNED_IN_USER_PERMISSIONS],
   createdAt: "2026-05-27T00:00:00.000Z",
   lastLoginAt: null,

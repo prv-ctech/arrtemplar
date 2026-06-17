@@ -125,13 +125,7 @@ export function SettingsRow({
   );
 }
 
-export function SettingsPanel({
-  activeId,
-  children,
-}: {
-  activeId: string;
-  children: ReactNode;
-}) {
+export function SettingsPanel({ activeId, children }: { activeId: string; children: ReactNode }) {
   return (
     <div
       aria-labelledby={`${activeId}-settings-tab`}

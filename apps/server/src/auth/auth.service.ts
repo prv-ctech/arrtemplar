@@ -8,8 +8,12 @@ import {
   type ChangePasswordResponse,
   type CreateAdminRequest,
   type CreateLocalUserRequest,
+  DEFAULT_PROFILE_AVATAR_ID,
+  DEFAULT_PROFILE_BANNER_ID,
   DEFAULT_SIGNED_IN_USER_PERMISSIONS,
   hasPermissionGrant,
+  isProfileAvatarId,
+  isProfileBannerId,
   isUserPermission,
   type LoginRequest,
   type ManagedUserProfile,
@@ -345,13 +349,15 @@ export class AuthService {
       mutate: (tx, targetUser, actorUser, now) => {
         const username = input.username?.trim();
         const email = input.email ? normalizeEmail(input.email) : undefined;
+        const avatarId = input.avatarId;
+        const bannerId = input.bannerId;
         const existingUser = findUserByUsernameOrEmail(tx, username, email);
 
         if (existingUser && existingUser.id !== targetUser.id) {
           return { ok: false, status: 409, body: userAlreadyExistsError };
         }
 
-        if (!username && !email) {
+        if (!username && !email && !avatarId && !bannerId) {
           return {
             ok: true,
             user: toManagedUserProfile(targetUser, readEffectivePermissions(tx, targetUser)),
@@ -362,6 +368,8 @@ export class AuthService {
           .set({
             ...(username ? { username } : {}),
             ...(email ? { email } : {}),
+            ...(avatarId ? { avatarId } : {}),
+            ...(bannerId ? { bannerId } : {}),
             updatedAt: now,
           })
           .where(eq(users.id, targetUser.id))
@@ -378,7 +386,12 @@ export class AuthService {
           actorUserId: actorUser.id,
           context,
           createdAt: now,
-          metadata: { username: updatedUser.username, email: updatedUser.email },
+          metadata: {
+            username: updatedUser.username,
+            email: updatedUser.email,
+            avatarId: updatedUser.avatarId,
+            bannerId: updatedUser.bannerId,
+          },
           targetUser: updatedUser,
         });
 
@@ -629,13 +642,15 @@ export class AuthService {
 
     const username = input.username?.trim();
     const email = input.email ? normalizeEmail(input.email) : undefined;
+    const avatarId = input.avatarId;
+    const bannerId = input.bannerId;
     const existingUser = this.findUserByUsernameOrEmail(username, email);
 
     if (existingUser && existingUser.id !== currentSession.user.id) {
       return { ok: false, status: 409, body: userAlreadyExistsError };
     }
 
-    if (!username && !email) {
+    if (!username && !email && !avatarId && !bannerId) {
       return {
         ok: true,
         user: toPublicUser(
@@ -651,6 +666,8 @@ export class AuthService {
       .set({
         ...(username ? { username } : {}),
         ...(email ? { email } : {}),
+        ...(avatarId ? { avatarId } : {}),
+        ...(bannerId ? { bannerId } : {}),
         updatedAt: now,
       })
       .where(eq(users.id, currentSession.user.id))
@@ -671,7 +688,12 @@ export class AuthService {
       actorUserId: currentSession.user.id,
       targetType: "user",
       targetId: currentSession.user.id,
-      metadata: { username: updatedUser.username, email: updatedUser.email },
+      metadata: {
+        username: updatedUser.username,
+        email: updatedUser.email,
+        avatarId: updatedUser.avatarId,
+        bannerId: updatedUser.bannerId,
+      },
       ipAddress: context.ipAddress,
     });
 
@@ -991,6 +1013,8 @@ function toPublicUser(user: User, permissions: UserPermission[]): PublicUser {
     id: user.publicId,
     username: user.username,
     email: user.email,
+    avatarId: isProfileAvatarId(user.avatarId) ? user.avatarId : DEFAULT_PROFILE_AVATAR_ID,
+    bannerId: isProfileBannerId(user.bannerId) ? user.bannerId : DEFAULT_PROFILE_BANNER_ID,
     permissions,
     createdAt: user.createdAt,
     lastLoginAt: user.lastLoginAt,
@@ -1012,6 +1036,8 @@ function toManagedUserProfile(user: User, permissions: UserPermission[]): Manage
   return {
     ...toManagedUserSummary(user, permissions),
     email: user.email,
+    avatarId: isProfileAvatarId(user.avatarId) ? user.avatarId : DEFAULT_PROFILE_AVATAR_ID,
+    bannerId: isProfileBannerId(user.bannerId) ? user.bannerId : DEFAULT_PROFILE_BANNER_ID,
     lastLoginAt: user.lastLoginAt,
   };
 }
@@ -1204,6 +1230,8 @@ async function createUserRecord(
     publicId: generatePublicUserId(),
     username: input.username.trim(),
     email: normalizeEmail(input.email),
+    avatarId: DEFAULT_PROFILE_AVATAR_ID,
+    bannerId: DEFAULT_PROFILE_BANNER_ID,
     passwordHash: await hashPassword(input.password),
     disabledAt: null,
     createdAt: now.toISOString(),

@@ -5,12 +5,18 @@ import {
   syncUpdatedUserProfileCaches,
   userProfileQueryKey,
 } from "../../../../../../apps/web/src/features/user/user-profile-cache";
-import type { PublicUser } from "../../../../../../packages/shared/src";
+import {
+  DEFAULT_PROFILE_AVATAR_ID,
+  DEFAULT_PROFILE_BANNER_ID,
+  type PublicUser,
+} from "../../../../../../packages/shared/src";
 
 const oldUser: PublicUser = {
   id: "user-1",
   username: "old-name",
   email: "old@example.local",
+  avatarId: DEFAULT_PROFILE_AVATAR_ID,
+  bannerId: DEFAULT_PROFILE_BANNER_ID,
   permissions: ["settings:view"],
   createdAt: "2026-05-22T00:00:00.000Z",
   lastLoginAt: null,
@@ -20,10 +26,12 @@ const updatedUser: PublicUser = {
   ...oldUser,
   username: "new-name",
   email: "new@example.local",
+  avatarId: "demon-slayer-nezuko",
+  bannerId: "violet-tide",
 };
 
 describe("syncUpdatedUserProfileCaches", () => {
-  it("updates both the self profile and current auth user caches after a profile save", () => {
+  it("updates both the self profile and current auth user caches after a profile media save", () => {
     const { queryClient, getData } = createQueryClientStub();
     queryClient.setQueryData(userProfileQueryKey, oldUser);
     queryClient.setQueryData(authQueryKey, oldUser);
