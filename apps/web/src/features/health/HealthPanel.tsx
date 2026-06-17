@@ -25,23 +25,53 @@ export function HealthPanel() {
 
   return (
     <Card className="h-full overflow-hidden bg-card/78">
-      <CardHeader>
-        <div className="flex items-center gap-3">
-          <div className="rounded-2xl border border-primary/25 bg-primary/10 p-2 text-primary">
-            <ActivityIcon aria-hidden="true" className="size-5" weight="duotone" />
-          </div>
-          <div>
-            <CardTitle>Backend health</CardTitle>
-            <CardDescription>Live status from the Elysia API.</CardDescription>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {isPending ? <HealthLoading /> : null}
-        {isError ? <HealthError message={error.message} onRetry={() => refetch()} /> : null}
-        {health ? <HealthReady health={health} /> : null}
-      </CardContent>
+      <HealthPanelHeader />
+      <HealthPanelContent
+        errorMessage={error?.message}
+        health={health}
+        isError={isError}
+        isPending={isPending}
+        onRetry={() => refetch()}
+      />
     </Card>
+  );
+}
+
+function HealthPanelHeader() {
+  return (
+    <CardHeader>
+      <div className="flex items-center gap-3">
+        <div className="rounded-2xl border border-primary/25 bg-primary/10 p-2 text-primary">
+          <ActivityIcon aria-hidden="true" className="size-5" weight="duotone" />
+        </div>
+        <div>
+          <CardTitle>Backend health</CardTitle>
+          <CardDescription>Live status from the Elysia API.</CardDescription>
+        </div>
+      </div>
+    </CardHeader>
+  );
+}
+
+function HealthPanelContent({
+  errorMessage,
+  health,
+  isError,
+  isPending,
+  onRetry,
+}: {
+  errorMessage?: string | undefined;
+  health?: { name: string; version: string; status: string; timestamp: string } | undefined;
+  isError: boolean;
+  isPending: boolean;
+  onRetry: () => void;
+}) {
+  return (
+    <CardContent>
+      {isPending ? <HealthLoading /> : null}
+      {isError && errorMessage ? <HealthError message={errorMessage} onRetry={onRetry} /> : null}
+      {health ? <HealthReady health={health} /> : null}
+    </CardContent>
   );
 }
 

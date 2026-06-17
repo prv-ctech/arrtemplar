@@ -76,10 +76,13 @@ describe("app settings layout", () => {
     expect(usersSource).toContain("bg-primary text-primary-foreground");
     expect(usersSource).toContain("shadow-(--shadow-button)");
     expect(usersSource).toContain("pointer-events-none size-4");
-    expect(usersSource).toContain('to: "/profile/$publicUserId"');
-    expect(usersSource).toContain("publicUserId: user.id");
+    expect(usersSource).toContain('to="/profile/$publicUserId"');
+    expect(usersSource).toContain("publicUserId: userId");
     expect(usersSource).toContain("View profile");
-    expect(usersSource).toContain('to: "/profile"');
+    expect(usersSource).toContain('to="/profile"');
+    expect(usersSource).toContain("function UserActionsTrigger");
+    expect(usersSource).toContain("<DropdownMenuTrigger");
+    expect(usersSource).toContain("cursor-pointer place-items-center");
     expect(usersSource).not.toContain('to="/profile/settings/main"');
     expect(usersSource).not.toContain('to="/profile/$publicUserId/settings/main"');
     expect(usersSource).not.toContain("Edit settings");

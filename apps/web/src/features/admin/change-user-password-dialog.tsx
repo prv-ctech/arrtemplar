@@ -60,15 +60,30 @@ export function ChangeUserPasswordDialog({ onClose, user }: ChangeUserPasswordDi
             Update the password for {user?.username ?? "this user"}.
           </DialogDescription>
         </DialogHeader>
-        <form className="space-y-4" onSubmit={handlePasswordSubmit}>
-          <Input name="password" placeholder="New password" required type="password" />
-          <DialogFooter>
-            <Button disabled={changePasswordMutation.isPending} type="submit">
-              {changePasswordMutation.isPending ? "Saving" : "Save Password"}
-            </Button>
-          </DialogFooter>
-        </form>
+        <ChangeUserPasswordForm
+          isPending={changePasswordMutation.isPending}
+          onSubmit={handlePasswordSubmit}
+        />
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ChangeUserPasswordForm({
+  isPending,
+  onSubmit,
+}: {
+  isPending: boolean;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <form className="space-y-4" onSubmit={onSubmit}>
+      <Input name="password" placeholder="New password" required type="password" />
+      <DialogFooter>
+        <Button disabled={isPending} type="submit">
+          {isPending ? "Saving" : "Save Password"}
+        </Button>
+      </DialogFooter>
+    </form>
   );
 }

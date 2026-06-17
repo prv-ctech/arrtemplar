@@ -271,12 +271,7 @@ export function UserSettings({ activePage }: { activePage: UserSettingsPage }) {
   const actor = useAuthenticatedRouteUser();
   const navigate = useNavigate();
   const { publicUserId } = useParams({
-    from:
-      activePage === "main"
-        ? "/profile/$publicUserId/settings/main"
-        : activePage === "password"
-          ? "/profile/$publicUserId/settings/password"
-          : "/profile/$publicUserId/settings/permissions",
+    from: getUserSettingsRoute(activePage),
   });
 
   if (publicUserId === actor.id) {
@@ -287,11 +282,7 @@ export function UserSettings({ activePage }: { activePage: UserSettingsPage }) {
   const activeEntry = entries.find((entry) => entry.id === activePage);
 
   if (!activeEntry) {
-    return (
-      <div className="rounded-3xl border border-dashed border-border bg-card/54 p-6 text-sm text-muted-foreground">
-        This user settings page is not available for the signed-in account.
-      </div>
-    );
+    return <UnavailableUserSettingsPage />;
   }
 
   function handlePageChange(page: UserSettingsPage) {
@@ -310,10 +301,38 @@ export function UserSettings({ activePage }: { activePage: UserSettingsPage }) {
         onSelect={handlePageChange}
       />
       <SettingsPanel activeId={activePage}>
-        {activePage === "main" ? <UserIdentitySettings /> : null}
-        {activePage === "password" ? <UserPasswordSettings /> : null}
-        {activePage === "permissions" ? <UserPermissionsSettings /> : null}
+        <ActiveUserSettingsPage activePage={activePage} />
       </SettingsPanel>
     </div>
   );
+}
+
+function getUserSettingsRoute(page: UserSettingsPage) {
+  switch (page) {
+    case "main":
+      return "/profile/$publicUserId/settings/main";
+    case "password":
+      return "/profile/$publicUserId/settings/password";
+    case "permissions":
+      return "/profile/$publicUserId/settings/permissions";
+  }
+}
+
+function UnavailableUserSettingsPage() {
+  return (
+    <div className="rounded-3xl border border-dashed border-border bg-card/54 p-6 text-sm text-muted-foreground">
+      This user settings page is not available for the signed-in account.
+    </div>
+  );
+}
+
+function ActiveUserSettingsPage({ activePage }: { activePage: UserSettingsPage }) {
+  switch (activePage) {
+    case "main":
+      return <UserIdentitySettings />;
+    case "password":
+      return <UserPasswordSettings />;
+    case "permissions":
+      return <UserPermissionsSettings />;
+  }
 }

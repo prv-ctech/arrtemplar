@@ -7,21 +7,21 @@ import type {
 import { GearSixIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Navigate, useParams } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { authQueryKey, canManageUsers, hasRequiredPermission } from "@/features/auth/auth-state";
-import { getManagedUserProfile, updateManagedUserProfile, updateUserProfile } from "@/lib/api";
-import { cn } from "@/lib/utils";
-import { useAuthenticatedRouteUser } from "@/routes/authenticated-route-user";
-import { ProfileMediaPickerDialog } from "./ProfileMediaPickerDialog";
 import {
   getProfileAvatarOption,
   getProfileBannerOption,
   PROFILE_AVATAR_OPTIONS,
   PROFILE_BANNER_OPTIONS,
-} from "./profile-media-options";
+} from "@/features/user/profile-media-options";
+import { getManagedUserProfile, updateManagedUserProfile, updateUserProfile } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import { useAuthenticatedRouteUser } from "@/routes/authenticated-route-user";
+import { ProfileMediaPickerDialog } from "./ProfileMediaPickerDialog";
 import { managedUserProfileQueryKey, syncUpdatedUserProfileCaches } from "./user-profile-cache";
 
 type ProfileDashboardUser = Pick<
@@ -42,6 +42,10 @@ type ProfileMediaActions = {
   isSaving: boolean;
   onAvatarSelect: (avatarId: ProfileAvatarId) => Promise<void>;
   onBannerSelect: (bannerId: ProfileBannerId) => Promise<void>;
+};
+
+type ProfileMediaTriggerButtonProps = ComponentProps<"button"> & {
+  children: ReactNode;
 };
 
 type ActivityInsight = {
@@ -224,115 +228,230 @@ function ProfileDashboard({
 
   const bannerImage = (
     <>
-      <img alt={banner.alt} className="size-full object-cover" decoding="async" src={banner.src} />
-      <div className="absolute inset-0 bg-linear-to-t from-card via-card/20 to-transparent" />
+      <img
+        alt={banner.alt}
+        className="pointer-events-none size-full object-cover"
+        decoding="async"
+        src={banner.src}
+      />
+      <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-card via-card/20 to-transparent" />
     </>
   );
   const avatarImage = (
-    <img alt={avatar.alt} className="size-full object-cover" decoding="async" src={avatar.src} />
+    <img
+      alt={avatar.alt}
+      className="pointer-events-none size-full object-cover"
+      decoding="async"
+      src={avatar.src}
+    />
   );
 
   return (
     <section className="-mx-4 -my-5 min-h-[calc(100dvh-4.25rem)] overflow-hidden bg-card/82 sm:-mx-6 lg:-mx-8 lg:-my-7 lg:min-h-dvh">
-      <div className="relative h-40 overflow-hidden sm:h-52 lg:h-56">
-        {mediaActions ? (
-          <ProfileMediaPickerDialog
-            disabled={mediaActions.isSaving}
-            kind="banner"
-            onSelect={(id) => mediaActions.onBannerSelect(id as ProfileBannerId)}
-            options={PROFILE_BANNER_OPTIONS}
-            selectedId={banner.id}
-            trigger={
-              <button
-                aria-label="Change profile banner"
-                className="group relative size-full cursor-pointer overflow-hidden text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-70"
-                disabled={mediaActions.isSaving}
-                type="button"
-              >
-                {bannerImage}
-                <span className="absolute right-3 bottom-3 rounded-full border border-border bg-background/78 px-2 py-1 text-xs font-medium text-foreground opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-                  Change banner
-                </span>
-              </button>
-            }
-          />
-        ) : (
-          bannerImage
-        )}
-      </div>
+      <ProfileBanner bannerImage={bannerImage} mediaActions={mediaActions} selectedId={banner.id} />
 
       <div className="px-4 pb-4 sm:px-6 sm:pb-6">
-        <div className="-mt-10 flex items-end justify-between gap-3 sm:-mt-12">
-          {mediaActions ? (
-            <ProfileMediaPickerDialog
-              disabled={mediaActions.isSaving}
-              kind="avatar"
-              onSelect={(id) => mediaActions.onAvatarSelect(id as ProfileAvatarId)}
-              options={PROFILE_AVATAR_OPTIONS}
-              selectedId={avatar.id}
-              trigger={
-                <button
-                  aria-label="Change profile avatar"
-                  className={cn(
-                    "group relative size-24 shrink-0 cursor-pointer overflow-hidden rounded-full border-4 border-card bg-background shadow-(--shadow-soft)",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card disabled:pointer-events-none disabled:opacity-70 sm:size-28",
-                  )}
-                  disabled={mediaActions.isSaving}
-                  type="button"
-                >
-                  {avatarImage}
-                  <span className="absolute inset-x-0 bottom-0 bg-background/80 px-2 py-1 text-[0.65rem] font-medium text-foreground opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-                    Change
-                  </span>
-                </button>
-              }
-            />
-          ) : (
-            <div className="relative size-24 shrink-0 overflow-hidden rounded-full border-4 border-card bg-background shadow-(--shadow-soft) sm:size-28">
-              {avatarImage}
-            </div>
-          )}
-          <div className="pb-1 sm:pb-2">{action}</div>
-        </div>
-
-        <div className="mt-3">
-          <div className="min-w-0">
-            <h1 className="text-xs font-medium uppercase tracking-[0.16em] text-primary">
-              Profile dashboard
-            </h1>
-          </div>
-        </div>
-
-        <dl className="mt-5 grid overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-2 lg:grid-cols-4">
-          <ProfileFact label="Email" value={user.email} />
-          <ProfileFact label="Public ID" mono value={user.id} />
-          <ProfileFact label="Joined" value={formatDate(user.createdAt)} />
-          <ProfileFact label="Permissions" value={`${user.permissions.length} grants`} />
-        </dl>
-
-        <div className="mt-5 border-t border-border pt-5">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h2 className="text-base font-semibold tracking-tight text-foreground">
-                Personal activity
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                Placeholder visuals for future media stats.
-              </p>
-            </div>
-            <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-              Sample data
-            </p>
-          </div>
-
-          <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {activityInsights.map((insight) => (
-              <ActivityInsightCard key={insight.label} {...insight} />
-            ))}
-          </div>
-        </div>
+        <ProfileAvatarRow
+          action={action}
+          avatarImage={avatarImage}
+          mediaActions={mediaActions}
+          selectedId={avatar.id}
+        />
+        <ProfileDashboardTitle />
+        <ProfileFacts user={user} />
+        <ProfileActivitySection />
       </div>
     </section>
+  );
+}
+
+function ProfileBanner({
+  bannerImage,
+  mediaActions,
+  selectedId,
+}: {
+  bannerImage: ReactNode;
+  mediaActions?: ProfileMediaActions | undefined;
+  selectedId: ProfileBannerId;
+}) {
+  return (
+    <div className="relative h-40 overflow-hidden sm:h-52 lg:h-56">
+      {mediaActions ? (
+        <ProfileMediaPickerDialog
+          disabled={mediaActions.isSaving}
+          kind="banner"
+          onSelect={(id) => mediaActions.onBannerSelect(id as ProfileBannerId)}
+          options={PROFILE_BANNER_OPTIONS}
+          selectedId={selectedId}
+          trigger={
+            <ProfileBannerButton disabled={mediaActions.isSaving}>
+              {bannerImage}
+            </ProfileBannerButton>
+          }
+        />
+      ) : (
+        bannerImage
+      )}
+    </div>
+  );
+}
+
+function ProfileBannerButton({
+  children,
+  className,
+  ref,
+  type = "button",
+  ...props
+}: ProfileMediaTriggerButtonProps) {
+  return (
+    <button
+      {...props}
+      aria-label="Change profile banner"
+      className={cn(
+        "group relative size-full cursor-pointer overflow-hidden text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-70",
+        className,
+      )}
+      ref={ref}
+      type={type}
+    >
+      {children}
+      <span className="pointer-events-none absolute right-3 bottom-3 rounded-full border border-border bg-background/78 px-2 py-1 text-xs font-medium text-foreground opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+        Change banner
+      </span>
+    </button>
+  );
+}
+
+function ProfileAvatarRow({
+  action,
+  avatarImage,
+  mediaActions,
+  selectedId,
+}: {
+  action: ReactNode;
+  avatarImage: ReactNode;
+  mediaActions?: ProfileMediaActions | undefined;
+  selectedId: ProfileAvatarId;
+}) {
+  return (
+    <div className="-mt-10 flex items-end justify-between gap-3 sm:-mt-12">
+      <ProfileAvatar
+        avatarImage={avatarImage}
+        mediaActions={mediaActions}
+        selectedId={selectedId}
+      />
+      <div className="pb-1 sm:pb-2">{action}</div>
+    </div>
+  );
+}
+
+function ProfileAvatar({
+  avatarImage,
+  mediaActions,
+  selectedId,
+}: {
+  avatarImage: ReactNode;
+  mediaActions?: ProfileMediaActions | undefined;
+  selectedId: ProfileAvatarId;
+}) {
+  if (!mediaActions) {
+    return (
+      <div className="relative size-24 shrink-0 overflow-hidden rounded-full border-4 border-card bg-background shadow-(--shadow-soft) sm:size-28">
+        {avatarImage}
+      </div>
+    );
+  }
+
+  return (
+    <ProfileMediaPickerDialog
+      disabled={mediaActions.isSaving}
+      kind="avatar"
+      onSelect={(id) => mediaActions.onAvatarSelect(id as ProfileAvatarId)}
+      options={PROFILE_AVATAR_OPTIONS}
+      selectedId={selectedId}
+      trigger={
+        <ProfileAvatarButton disabled={mediaActions.isSaving}>{avatarImage}</ProfileAvatarButton>
+      }
+    />
+  );
+}
+
+function ProfileAvatarButton({
+  children,
+  className,
+  ref,
+  type = "button",
+  ...props
+}: ProfileMediaTriggerButtonProps) {
+  return (
+    <button
+      {...props}
+      aria-label="Change profile avatar"
+      className={cn(
+        "group relative size-24 shrink-0 cursor-pointer overflow-hidden rounded-full border-4 border-card bg-background shadow-(--shadow-soft)",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card disabled:pointer-events-none disabled:opacity-70 sm:size-28",
+        className,
+      )}
+      ref={ref}
+      type={type}
+    >
+      {children}
+      <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-background/80 px-2 py-1 text-[0.65rem] font-medium text-foreground opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+        Change
+      </span>
+    </button>
+  );
+}
+
+function ProfileDashboardTitle() {
+  return (
+    <div className="mt-3">
+      <div className="min-w-0">
+        <h1 className="text-xs font-medium uppercase tracking-[0.16em] text-primary">
+          Profile dashboard
+        </h1>
+      </div>
+    </div>
+  );
+}
+
+function ProfileFacts({ user }: { user: ProfileDashboardUser }) {
+  return (
+    <dl className="mt-5 grid overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-2 lg:grid-cols-4">
+      <ProfileFact label="Email" value={user.email} />
+      <ProfileFact label="Public ID" mono value={user.id} />
+      <ProfileFact label="Joined" value={formatDate(user.createdAt)} />
+      <ProfileFact label="Permissions" value={`${user.permissions.length} grants`} />
+    </dl>
+  );
+}
+
+function ProfileActivitySection() {
+  return (
+    <div className="mt-5 border-t border-border pt-5">
+      <ProfileActivityHeader />
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {activityInsights.map((insight) => (
+          <ActivityInsightCard key={insight.label} {...insight} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ProfileActivityHeader() {
+  return (
+    <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <h2 className="text-base font-semibold tracking-tight text-foreground">
+          Personal activity
+        </h2>
+        <p className="text-sm text-muted-foreground">Placeholder visuals for future media stats.</p>
+      </div>
+      <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+        Sample data
+      </p>
+    </div>
   );
 }
 
@@ -386,9 +505,23 @@ export function PersonalProfileRoute() {
 export function UserProfilePage() {
   const actor = useAuthenticatedRouteUser();
   const { publicUserId } = useParams({ from: "/profile/$publicUserId" });
+
+  if (publicUserId === actor.id) {
+    return <Navigate replace to="/profile" />;
+  }
+
+  return <ManagedUserProfileDashboard actor={actor} publicUserId={publicUserId} />;
+}
+
+function ManagedUserProfileDashboard({
+  actor,
+  publicUserId,
+}: {
+  actor: PublicUser;
+  publicUserId: string;
+}) {
   const queryClient = useQueryClient();
-  const isSelfProfile = publicUserId === actor.id;
-  const canReadManagedProfile = !isSelfProfile && canManageUsers(actor);
+  const canReadManagedProfile = canManageUsers(actor);
   const canUpdateManagedProfile =
     canReadManagedProfile && hasRequiredPermission(actor, "users:update");
   const {
@@ -417,21 +550,8 @@ export function UserProfilePage() {
     },
   });
 
-  if (isSelfProfile) {
-    return <Navigate replace to="/profile" />;
-  }
-
   if (!canReadManagedProfile) {
-    return (
-      <Card className="border-dashed bg-card/54 shadow-(--shadow-soft)">
-        <CardHeader>
-          <CardTitle>User profile unavailable</CardTitle>
-          <CardDescription>
-            The requested user profile is not available for the signed-in account.
-          </CardDescription>
-        </CardHeader>
-      </Card>
-    );
+    return <ManagedProfileUnavailableCard reason="permission" />;
   }
 
   if (isManagedUserPending) {
@@ -439,39 +559,12 @@ export function UserProfilePage() {
   }
 
   if (isManagedUserError || !managedUser) {
-    return (
-      <Card className="border-dashed bg-card/54 shadow-(--shadow-soft)">
-        <CardHeader>
-          <CardTitle>User profile unavailable</CardTitle>
-          <CardDescription>
-            The requested user profile could not be loaded or you no longer have access.
-          </CardDescription>
-        </CardHeader>
-      </Card>
-    );
+    return <ManagedProfileUnavailableCard reason="load" />;
   }
 
   return (
     <ProfileDashboard
-      action={
-        <div className="flex flex-wrap justify-end gap-2">
-          {hasRequiredPermission(actor, "users:update") ? (
-            <Button
-              asChild
-              className="h-8 rounded-xl px-2.5 text-xs shadow-none sm:h-9 sm:px-3"
-              type="button"
-            >
-              <Link
-                params={{ publicUserId: managedUser.id }}
-                to="/profile/$publicUserId/settings/main"
-              >
-                <GearSixIcon aria-hidden="true" className="size-4" />
-                Edit Profile
-              </Link>
-            </Button>
-          ) : null}
-        </div>
-      }
+      action={<ManagedProfileAction actor={actor} publicUserId={managedUser.id} />}
       mediaActions={
         canUpdateManagedProfile
           ? {
@@ -487,6 +580,50 @@ export function UserProfilePage() {
       }
       user={managedUser}
     />
+  );
+}
+
+function ManagedProfileUnavailableCard({ reason }: { reason: "load" | "permission" }) {
+  return (
+    <Card className="border-dashed bg-card/54 shadow-(--shadow-soft)">
+      <CardHeader>
+        <CardTitle>User profile unavailable</CardTitle>
+        <CardDescription>{getManagedProfileUnavailableMessage(reason)}</CardDescription>
+      </CardHeader>
+    </Card>
+  );
+}
+
+function getManagedProfileUnavailableMessage(reason: "load" | "permission") {
+  if (reason === "permission") {
+    return "The requested user profile is not available for the signed-in account.";
+  }
+
+  return "The requested user profile could not be loaded or you no longer have access.";
+}
+
+function ManagedProfileAction({
+  actor,
+  publicUserId,
+}: {
+  actor: PublicUser;
+  publicUserId: string;
+}) {
+  return (
+    <div className="flex flex-wrap justify-end gap-2">
+      {hasRequiredPermission(actor, "users:update") ? (
+        <Button
+          asChild
+          className="h-8 rounded-xl px-2.5 text-xs shadow-none sm:h-9 sm:px-3"
+          type="button"
+        >
+          <Link params={{ publicUserId }} to="/profile/$publicUserId/settings/main">
+            <GearSixIcon aria-hidden="true" className="size-4" />
+            Edit Profile
+          </Link>
+        </Button>
+      ) : null}
+    </div>
   );
 }
 

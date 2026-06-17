@@ -69,6 +69,8 @@ type EditUserPermissionsDialogProps = {
   user: AdminUserSummary | null;
 };
 
+type PermissionGroups = Map<PermissionCatalogEntry["category"], PermissionCatalogEntry[]>;
+
 export function EditUserPermissionsDialog({ onClose, user }: EditUserPermissionsDialogProps) {
   function handleOpenChange(open: boolean) {
     if (!open) {
@@ -133,150 +135,259 @@ function EditUserPermissionsContent({
 
   return (
     <DialogContent className={permissionsDialogContentClassName}>
-      <DialogHeader className="pr-8">
-        <DialogTitle>Edit Permissions</DialogTitle>
-        <DialogDescription>
-          {user.username} has {selectedPermissions.size} explicit grant
-          {selectedPermissions.size === 1 ? "" : "s"}. High-risk grants are marked.
-        </DialogDescription>
-      </DialogHeader>
-      <Card className="w-full overflow-hidden rounded-xl bg-card/40 shadow-none">
-        <CardHeader className="p-0">
-          <button
-            aria-controls={presetsContentId}
-            aria-expanded={arePresetsExpanded}
-            className={presetCardTriggerClassName}
-            onClick={() => setArePresetsExpanded((current) => !current)}
-            type="button"
-          >
-            <CardTitle className="min-w-0 flex-1 text-sm leading-5">Presets</CardTitle>
-            <span className="hidden text-xs text-muted-foreground sm:inline">
-              Apply common grants
-            </span>
-            <CaretDownIcon
-              aria-hidden="true"
-              className={cn(
-                "size-4 shrink-0 text-muted-foreground transition-transform duration-200",
-                arePresetsExpanded && "rotate-180",
-              )}
-            />
-          </button>
-        </CardHeader>
-        {arePresetsExpanded ? (
-          <>
-            <Separator />
-            <CardContent className="p-2" id={presetsContentId}>
-              <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,7rem),1fr))] gap-2">
-                <Button
-                  className={presetButtonClassName}
-                  onClick={() => applyPreset([])}
-                  type="button"
-                  variant="outline"
-                >
-                  Default
-                </Button>
-                <Button
-                  className={presetButtonClassName}
-                  onClick={() => applyPreset(["system:admin"])}
-                  type="button"
-                  variant="outline"
-                >
-                  Full admin
-                </Button>
-                <Button
-                  className={presetButtonClassName}
-                  onClick={() => applyPreset(serviceOperatorPermissions)}
-                  type="button"
-                  variant="outline"
-                >
-                  Service operator
-                </Button>
-                <Button
-                  className={presetButtonClassName}
-                  onClick={() => applyPreset(userManagerPermissions)}
-                  type="button"
-                  variant="outline"
-                >
-                  User manager
-                </Button>
-              </div>
-            </CardContent>
-          </>
-        ) : null}
-      </Card>
-      <fieldset className="min-h-0 overflow-y-auto overscroll-contain pr-1">
-        <legend className="sr-only">Available permission grants</legend>
-        <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
-          {permissionCategoryOrder.map((category) => {
-            const entries = permissionGroups.get(category);
-
-            if (!entries?.length) {
-              return null;
-            }
-
-            return (
-              <section
-                aria-labelledby={`permission-category-${category}`}
-                className="min-w-0 rounded-xl border border-border bg-card/35 p-3"
-                key={category}
-              >
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <h3
-                    className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground"
-                    id={`permission-category-${category}`}
-                  >
-                    {category}
-                  </h3>
-                  <span className="text-xs text-muted-foreground">{entries.length}</span>
-                </div>
-                <div className="divide-y divide-border/70">
-                  {entries.map((entry) => {
-                    const checked = selectedPermissions.has(entry.permission);
-                    const highRisk = entry.risk === "critical" || entry.risk === "high";
-
-                    return (
-                      <label
-                        className={permissionRowClassName}
-                        key={entry.permission}
-                        title={entry.description}
-                      >
-                        <input
-                          checked={checked}
-                          className="size-4 accent-primary"
-                          onChange={() => togglePermission(entry.permission)}
-                          type="checkbox"
-                        />
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-medium text-foreground">
-                            {entry.label}
-                          </span>
-                          <span className="block truncate font-mono text-[11px] text-muted-foreground">
-                            {entry.permission}
-                          </span>
-                        </span>
-                        {highRisk ? (
-                          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-600">
-                            High risk
-                          </span>
-                        ) : null}
-                      </label>
-                    );
-                  })}
-                </div>
-              </section>
-            );
-          })}
-        </div>
-      </fieldset>
-      <DialogFooter className="border-t border-border pt-3">
-        <Button
-          disabled={updatePermissionsMutation.isPending}
-          onClick={savePermissions}
-          type="button"
-        >
-          {updatePermissionsMutation.isPending ? "Saving" : "Save Permissions"}
-        </Button>
-      </DialogFooter>
+      <PermissionsDialogHeader grantCount={selectedPermissions.size} username={user.username} />
+      <PermissionsPresetCard
+        arePresetsExpanded={arePresetsExpanded}
+        onApplyPreset={applyPreset}
+        onToggle={() => setArePresetsExpanded((current) => !current)}
+        presetsContentId={presetsContentId}
+      />
+      <PermissionCategoryGrid
+        onTogglePermission={togglePermission}
+        permissionGroups={permissionGroups}
+        selectedPermissions={selectedPermissions}
+      />
+      <PermissionsDialogFooter
+        isSaving={updatePermissionsMutation.isPending}
+        onSave={savePermissions}
+      />
     </DialogContent>
+  );
+}
+
+function PermissionsDialogHeader({
+  grantCount,
+  username,
+}: {
+  grantCount: number;
+  username: string;
+}) {
+  return (
+    <DialogHeader className="pr-8">
+      <DialogTitle>Edit Permissions</DialogTitle>
+      <DialogDescription>
+        {username} has {grantCount} explicit grant{grantCount === 1 ? "" : "s"}. High-risk grants
+        are marked.
+      </DialogDescription>
+    </DialogHeader>
+  );
+}
+
+function PermissionsPresetCard({
+  arePresetsExpanded,
+  onApplyPreset,
+  onToggle,
+  presetsContentId,
+}: {
+  arePresetsExpanded: boolean;
+  onApplyPreset: (permissions: readonly UserPermission[]) => void;
+  onToggle: () => void;
+  presetsContentId: string;
+}) {
+  return (
+    <Card className="w-full overflow-hidden rounded-xl bg-card/40 shadow-none">
+      <CardHeader className="p-0">
+        <PresetCardTrigger
+          arePresetsExpanded={arePresetsExpanded}
+          onToggle={onToggle}
+          presetsContentId={presetsContentId}
+        />
+      </CardHeader>
+      {arePresetsExpanded ? (
+        <PresetCardContent onApplyPreset={onApplyPreset} presetsContentId={presetsContentId} />
+      ) : null}
+    </Card>
+  );
+}
+
+function PresetCardTrigger({
+  arePresetsExpanded,
+  onToggle,
+  presetsContentId,
+}: {
+  arePresetsExpanded: boolean;
+  onToggle: () => void;
+  presetsContentId: string;
+}) {
+  return (
+    <button
+      aria-controls={presetsContentId}
+      aria-expanded={arePresetsExpanded}
+      className={presetCardTriggerClassName}
+      onClick={onToggle}
+      type="button"
+    >
+      <CardTitle className="min-w-0 flex-1 text-sm leading-5">Presets</CardTitle>
+      <span className="hidden text-xs text-muted-foreground sm:inline">Apply common grants</span>
+      <CaretDownIcon
+        aria-hidden="true"
+        className={cn(
+          "size-4 shrink-0 text-muted-foreground transition-transform duration-200",
+          arePresetsExpanded && "rotate-180",
+        )}
+      />
+    </button>
+  );
+}
+
+function PresetCardContent({
+  onApplyPreset,
+  presetsContentId,
+}: {
+  onApplyPreset: (permissions: readonly UserPermission[]) => void;
+  presetsContentId: string;
+}) {
+  return (
+    <>
+      <Separator />
+      <CardContent className="p-2" id={presetsContentId}>
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,7rem),1fr))] gap-2">
+          <PresetButton label="Default" onClick={() => onApplyPreset([])} />
+          <PresetButton label="Full admin" onClick={() => onApplyPreset(["system:admin"])} />
+          <PresetButton
+            label="Service operator"
+            onClick={() => onApplyPreset(serviceOperatorPermissions)}
+          />
+          <PresetButton
+            label="User manager"
+            onClick={() => onApplyPreset(userManagerPermissions)}
+          />
+        </div>
+      </CardContent>
+    </>
+  );
+}
+
+function PresetButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <Button className={presetButtonClassName} onClick={onClick} type="button" variant="outline">
+      {label}
+    </Button>
+  );
+}
+
+function PermissionCategoryGrid({
+  onTogglePermission,
+  permissionGroups,
+  selectedPermissions,
+}: {
+  onTogglePermission: (permission: UserPermission) => void;
+  permissionGroups: PermissionGroups;
+  selectedPermissions: ReadonlySet<UserPermission>;
+}) {
+  return (
+    <fieldset className="min-h-0 overflow-y-auto overscroll-contain pr-1">
+      <legend className="sr-only">Available permission grants</legend>
+      <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
+        {permissionCategoryOrder.map((category) => (
+          <PermissionCategorySection
+            category={category}
+            entries={permissionGroups.get(category) ?? []}
+            key={category}
+            onTogglePermission={onTogglePermission}
+            selectedPermissions={selectedPermissions}
+          />
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+function PermissionCategorySection({
+  category,
+  entries,
+  onTogglePermission,
+  selectedPermissions,
+}: {
+  category: PermissionCatalogEntry["category"];
+  entries: PermissionCatalogEntry[];
+  onTogglePermission: (permission: UserPermission) => void;
+  selectedPermissions: ReadonlySet<UserPermission>;
+}) {
+  if (!entries.length) {
+    return null;
+  }
+
+  return (
+    <section
+      aria-labelledby={`permission-category-${category}`}
+      className="min-w-0 rounded-xl border border-border bg-card/35 p-3"
+    >
+      <PermissionCategoryHeader category={category} count={entries.length} />
+      <div className="divide-y divide-border/70">
+        {entries.map((entry) => (
+          <PermissionRow
+            checked={selectedPermissions.has(entry.permission)}
+            entry={entry}
+            key={entry.permission}
+            onTogglePermission={onTogglePermission}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function PermissionCategoryHeader({
+  category,
+  count,
+}: {
+  category: PermissionCatalogEntry["category"];
+  count: number;
+}) {
+  return (
+    <div className="mb-2 flex items-center justify-between gap-3">
+      <h3
+        className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground"
+        id={`permission-category-${category}`}
+      >
+        {category}
+      </h3>
+      <span className="text-xs text-muted-foreground">{count}</span>
+    </div>
+  );
+}
+
+function PermissionRow({
+  checked,
+  entry,
+  onTogglePermission,
+}: {
+  checked: boolean;
+  entry: PermissionCatalogEntry;
+  onTogglePermission: (permission: UserPermission) => void;
+}) {
+  const highRisk = entry.risk === "critical" || entry.risk === "high";
+
+  return (
+    <label className={permissionRowClassName} title={entry.description}>
+      <input
+        checked={checked}
+        className="size-4 accent-primary"
+        onChange={() => onTogglePermission(entry.permission)}
+        type="checkbox"
+      />
+      <span className="min-w-0">
+        <span className="block truncate text-sm font-medium text-foreground">{entry.label}</span>
+        <span className="block truncate font-mono text-[11px] text-muted-foreground">
+          {entry.permission}
+        </span>
+      </span>
+      {highRisk ? (
+        <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-600">
+          High risk
+        </span>
+      ) : null}
+    </label>
+  );
+}
+
+function PermissionsDialogFooter({ isSaving, onSave }: { isSaving: boolean; onSave: () => void }) {
+  return (
+    <DialogFooter className="border-t border-border pt-3">
+      <Button disabled={isSaving} onClick={onSave} type="button">
+        {isSaving ? "Saving" : "Save Permissions"}
+      </Button>
+    </DialogFooter>
   );
 }

@@ -63,7 +63,8 @@ describe("profile self-service settings layout", () => {
     expect(source).not.toContain("palettes");
     expect(source).toContain("useState(false)");
     expect(source).toContain("aria-expanded={isExpanded}");
-    expect(source).toContain("onClick={() => setIsExpanded((current) => !current)}");
+    expect(source).toContain("onToggle={() => setIsExpanded((current) => !current)}");
+    expect(source).toContain("onClick={onToggle}");
     expect(source).toContain("isExpanded ? (");
     expect(source).not.toContain("DropdownMenu");
     expect(source).toContain("pack.previewSwatches");

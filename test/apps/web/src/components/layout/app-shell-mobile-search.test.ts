@@ -42,7 +42,12 @@ describe("app shell primary navigation", () => {
     const source = await Bun.file(appShellSourcePath).text();
 
     expect(source).toContain("getProfileAvatarOption(user.avatarId)");
-    expect(source).toContain("src={accountAvatar.src}");
+    expect(source).toContain("avatarSrc={accountAvatar.src}");
+    expect(source).toContain("src={avatarSrc}");
+    expect(source).toContain("function AccountMenuTrigger");
+    expect(source).toContain("<DropdownMenuTrigger");
+    expect(source).toContain("cursor-pointer place-items-center");
+    expect(source).toContain("pointer-events-none size-full rounded-full object-cover");
     expect(source).not.toContain("getAccountInitial(user.username)");
   });
 });

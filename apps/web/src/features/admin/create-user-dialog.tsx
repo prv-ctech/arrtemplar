@@ -51,17 +51,29 @@ export function CreateUserDialog({ onOpenChange, open }: CreateUserDialogProps) 
             Create a new local account for the settings users directory.
           </DialogDescription>
         </DialogHeader>
-        <form className="space-y-4" onSubmit={handleCreateUser}>
-          <Input name="username" placeholder="Username" required />
-          <Input name="email" placeholder="user@example.local" required type="email" />
-          <Input name="password" placeholder="Password" required type="password" />
-          <DialogFooter>
-            <Button disabled={createUserMutation.isPending} type="submit">
-              {createUserMutation.isPending ? "Creating" : "Create User"}
-            </Button>
-          </DialogFooter>
-        </form>
+        <CreateUserForm isPending={createUserMutation.isPending} onSubmit={handleCreateUser} />
       </DialogContent>
     </Dialog>
+  );
+}
+
+function CreateUserForm({
+  isPending,
+  onSubmit,
+}: {
+  isPending: boolean;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <form className="space-y-4" onSubmit={onSubmit}>
+      <Input name="username" placeholder="Username" required />
+      <Input name="email" placeholder="user@example.local" required type="email" />
+      <Input name="password" placeholder="Password" required type="password" />
+      <DialogFooter>
+        <Button disabled={isPending} type="submit">
+          {isPending ? "Creating" : "Create User"}
+        </Button>
+      </DialogFooter>
+    </form>
   );
 }

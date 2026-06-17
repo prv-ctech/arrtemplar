@@ -13,6 +13,11 @@ describe("profile dashboard and managed user routing", () => {
     expect(source).toContain("PersonalProfileRoute");
     expect(source).toContain("Edit Profile");
     expect(source).toContain('to="/profile/settings/main"');
+    expect(source).toContain("function ProfileBannerButton");
+    expect(source).toContain("function ProfileAvatarButton");
+    expect(source).toContain("...props");
+    expect(source).toContain("ref={ref}");
+    expect(source).toContain("pointer-events-none size-full object-cover");
     expect(source).not.toContain("SettingsNav");
     expect(source).not.toContain("AccountSettings");
   });
