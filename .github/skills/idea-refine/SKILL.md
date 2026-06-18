@@ -11,13 +11,13 @@ Refines raw ideas into sharp, actionable concepts worth building through structu
 
 1.  **Understand & Expand (Divergent):** Restate the idea, ask sharpening questions, and generate variations.
 2.  **Evaluate & Converge:** Cluster ideas, stress-test them, and surface hidden assumptions.
-3.  **Sharpen & Ship:** Produce a concrete markdown one-pager moving work forward.
+3.  **Sharpen & Ship:** Produce a concrete one-pager-style recommendation moving work forward.
 
 ## Usage
 
 This skill is primarily an interactive dialogue. Invoke it with an idea, and the agent will guide you through the process.
 
-No initializer is required. When the user confirms saving the artifact, create the needed folders under `docs/brainstorm/[name-slug]/ideas/`.
+No initializer is required.
 
 **Trigger Phrases:**
 - "Help me refine this idea"
@@ -26,7 +26,7 @@ No initializer is required. When the user confirms saving the artifact, create t
 
 ## Output
 
-The final output is a markdown one-pager saved to `docs/brainstorm/[name-slug]/ideas/idea-one-pager.md` (after user confirmation and the brainstorm overlap check), containing:
+The final output is a concise one-pager-style recommendation, delivered in chat by default, containing:
 - Problem Statement
 - Recommended Direction
 - Key Assumptions
@@ -113,7 +113,7 @@ After the user reacts to Phase 1 (indicates which ideas resonate, pushes back, a
 
 #### Phase 3: Sharpen & Ship
 
-Produce a concrete artifact — a markdown one-pager that moves work forward:
+Produce a concrete artifact — a one-pager-style recommendation that moves work forward:
 
 ```markdown
 # [Idea Name]
@@ -143,7 +143,7 @@ Produce a concrete artifact — a markdown one-pager that moves work forward:
 
 **The "Not Doing" list is arguably the most valuable part.** Focus is about saying no to good ideas. Make the trade-offs explicit.
 
-Use `vscode_askQuestions` to ask the user if they'd like to save this to `docs/brainstorm/[name-slug]/ideas/idea-one-pager.md` (or a location of their choosing). Apply the brainstorm overlap check before creating a new folder. Only save if they confirm through the tool.
+If the active agent or the user explicitly requires this to be persisted, follow those instructions for destination and naming. Do not invent a repo markdown path from this skill alone.
 
 ### Anti-patterns to Avoid
 
@@ -180,5 +180,5 @@ After completing an ideation session:
 - [ ] Multiple directions were explored, not just the first idea
 - [ ] Hidden assumptions are explicitly listed with validation strategies
 - [ ] A "Not Doing" list makes trade-offs explicit
-- [ ] The output is a concrete artifact (markdown one-pager), not just conversation
+- [ ] The output is a concrete one-pager-style recommendation, not just conversation
 - [ ] The user confirmed the final direction before any implementation work

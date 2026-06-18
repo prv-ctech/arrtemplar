@@ -91,7 +91,7 @@ Don't deprecate without a working alternative. The replacement must:
 3. Run the migration verification script: `npx migrate-check`
 ```
 
-Save deprecation and migration planning drafts to `docs/brainstorm/[name-slug]/migration/migration-guide.md` after applying the brainstorm routing and overlap check from `using-agent-skills`.
+If the task or active agent requires a persisted migration guide, follow those instructions for destination and format.
 
 ### Step 3: Migrate Incrementally
 
@@ -201,7 +201,7 @@ Zombie code is code that nobody owns but everybody depends on. It's not actively
 After completing a deprecation:
 
 - [ ] Replacement is production-proven and covers all critical use cases
-- [ ] Migration guide exists with concrete steps and examples, saved under `docs/brainstorm/[name-slug]/migration/` when it is a feature-specific planning draft
+- [ ] Migration guide exists with concrete steps and examples when the task or active agent requires one
 - [ ] All active consumers have been migrated (verified by metrics/logs)
 - [ ] Old code, tests, documentation, and configuration are fully removed
 - [ ] No references to the deprecated system remain in the codebase

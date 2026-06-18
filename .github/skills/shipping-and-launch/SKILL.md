@@ -264,7 +264,7 @@ Every deployment needs a rollback plan before it happens:
 - Database rollback: < 15 minutes
 ```
 
-Save launch and rollback planning drafts to `docs/brainstorm/[name-slug]/launch/launch-plan.md` after applying the brainstorm routing and overlap check from `using-agent-skills`.
+If the task or active agent requires a persisted launch or rollback plan, follow those instructions for destination and format.
 ## See Also
 
 - For security pre-launch checks, see `references/security-checklist.md`
@@ -298,7 +298,7 @@ Before deploying:
 - [ ] Pre-launch checklist completed (all sections green)
 - [ ] Feature flag configured (if applicable)
 - [ ] Rollback plan documented
-- [ ] Launch planning draft is saved to `docs/brainstorm/[name-slug]/launch/launch-plan.md` when created
+- [ ] Launch planning artifact exists when the task or active agent requires one
 - [ ] Monitoring dashboards set up
 - [ ] Team notified of deployment
 

@@ -41,45 +41,14 @@ Task arrives
     └── Deploying/launching? ─────────→ shipping-and-launch
 ```
 
-## Brainstorm Documentation Routing
+## Artifact Ownership
 
-When any loaded skill produces repository markdown for discovery, research, intent capture, ideation, specs, API/interface drafts, migration planning, launch planning, or other pre-implementation documentation, save it under the centralized brainstorm tree:
+Skills define workflow, decision criteria, and content quality. Skills do **not** decide whether to create repository markdown artifacts, where to save them, or what file name to use.
 
-```text
-docs/brainstorm/[name-slug]/
-```
-
-Always translate downstream skill doc paths into the corresponding feature folder under `docs/brainstorm/[name-slug]/`. If a skill mentions legacy root paths such as `docs/intent/`, `docs/ideas/`, `docs/specs/`, or `docs/plans/`, do not use those literal paths; save the artifact in the matching `docs/brainstorm/[name-slug]/...` location listed below. The only exception is the executable implementation plan, which belongs in `docs/plans/[name-slug]/implementation-plan.md`.
-
-### Derive `[name-slug]`
-
-- Derive the slug from the user's actual feature, idea, or problem statement after applying the appropriate intent/idea/spec skill.
-- Use lowercase kebab-case with a concrete feature noun, e.g. `plex-oauth-feature` for "implement Plex auth" or `external-oauth-feature` for "support Google and other OAuth providers".
-- Prefer the smallest slug that still distinguishes the idea from existing brainstorms.
-
-### Check for Overlap First
-
-Before creating a new brainstorm folder:
-
-1. Inspect existing folders under `docs/brainstorm/` for the same feature area, provider, user problem, or architectural direction.
-2. If the new idea clearly extends an existing brainstorm, use `vscode_askQuestions` to ask whether to update the existing folder as the next revision or create a separate `-v2` folder.
-3. If the user chooses to update, append or revise the relevant files in the existing folder and clearly mark the new details as a revision.
-4. If the user chooses a new branch of thinking, create `docs/brainstorm/[existing-slug]-v2/` or another user-approved slug.
-
-### Standard Artifact Locations
-
-- Intent/interview output: `docs/brainstorm/[name-slug]/intent/intent.md`
-- Idea refinement output: `docs/brainstorm/[name-slug]/ideas/idea-one-pager.md`
-- Research/source notes: `docs/brainstorm/[name-slug]/research/research.md`
-- Feature spec: `docs/brainstorm/[name-slug]/spec/spec.md`
-- API/interface contract draft: `docs/brainstorm/[name-slug]/spec/api-contract.md`
-- Decision/ADR draft: `docs/brainstorm/[name-slug]/decisions/adr-draft.md`
-- Migration/deprecation draft: `docs/brainstorm/[name-slug]/migration/migration-guide.md`
-- Launch/rollback draft: `docs/brainstorm/[name-slug]/launch/launch-plan.md`
-
-Create subfolders only when the corresponding artifact exists. Do not scatter pre-planning markdown across unrelated `docs/` folders.
-
-Executable implementation plans are not brainstorm artifacts. When `planning-and-task-breakdown` produces the implementation source of truth, save it to `docs/plans/[name-slug]/implementation-plan.md` and keep its phase/task status current throughout execution.
+- Default to delivering skill output in chat.
+- Only create or update repo markdown when the user explicitly asks for it or the active agent instructions require it.
+- When an agent requires a saved artifact, follow the agent's instructions for path, naming, and persistence rules.
+- If another skill mentions an old report/spec/plan path, treat it as historical context rather than an automatic write instruction.
 
 ## Core Operating Behaviors
 

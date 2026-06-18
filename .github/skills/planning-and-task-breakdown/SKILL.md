@@ -9,8 +9,6 @@ description: Breaks work into ordered tasks and multi-agent-safe implementation 
 
 Decompose work into small, verifiable tasks with explicit acceptance criteria. Good task breakdown is the difference between an agent that completes work reliably and one that produces a tangled mess. Every task should be small enough to implement, test, and verify in a single focused session.
 
-The implementation plan is the source of truth for execution. It must be saved under `docs/plans/[name-slug]/implementation-plan.md`, kept current as work starts and completes, and written so a fresh agent can safely resume without guessing.
-
 ## When to Use
 
 - You have a spec and need to break it into implementable units
@@ -40,7 +38,7 @@ Before writing any code, operate in read-only mode:
 - Map dependencies between components
 - Note risks and unknowns
 
-**Do NOT write code during planning.** The output is a plan document, not implementation.
+**Do NOT write code during planning.** The output is a plan, not implementation.
 
 ### Step 2: Identify the Dependency Graph
 
@@ -156,15 +154,13 @@ Add explicit checkpoints:
 
 ### Step 6: Maintain Execution State
 
-The plan document is live state, not a static artifact. Every implementation agent must update it before and after work:
+When a coordinator chooses to track execution state, keep status updates narrow and explicit:
 
 - Before starting: mark the phase/task `in_progress`, record the agent/session, timestamp, and files being claimed.
-- While working: if a task needs an unowned file or a future dependency, stop and update the plan as `blocked`; do not improvise around the conflict.
+- While working: if a task needs an unowned file or a future dependency, stop and mark the task as `blocked`; do not improvise around the conflict.
 - After finishing: mark the task `completed`, record the exact verification performed, then mark the checkpoint `verified` only after its verification passes.
-- Before resuming: read the latest plan from disk and trust it over prior conversation state.
+- Before resuming: use the latest approved plan state over prior conversation state.
 - Never rewrite another active phase's status or owned-file list unless acting as the coordinator.
-
-If multiple agents are active, the plan file is the coordination channel. It is the only shared file all agents may update, and updates must be limited to that agent's status block unless a coordinator is intentionally re-planning.
 
 ## Task Sizing Guidelines
 
@@ -189,8 +185,6 @@ If a task is L or larger, it should be broken into smaller tasks. An agent perfo
 ````markdown
 # Implementation Plan: [Feature/Project Name]
 
-**Plan path:** docs/plans/[name-slug]/implementation-plan.md
-**Source spec:** docs/brainstorm/[name-slug]/spec/spec.md
 **Status:** draft | approved | in_progress | blocked | completed
 **Current phase:** Phase [N] — [Name]
 **Last updated:** [ISO timestamp]
@@ -312,8 +306,6 @@ Phase 3: Integration checkpoint depends on Phase 1 + Phase 2
 - [Question needing human input]
 ````
 
-Save implementation plans to `docs/plans/[name-slug]/implementation-plan.md`. Use the same `[name-slug]` as the related brainstorm/spec when one exists. Unlike brainstorm documents, `docs/plans/` contains executable implementation plans and live status.
-
 ## Parallelization Opportunities
 
 When multiple agents or sessions are available:
@@ -371,4 +363,3 @@ Before starting implementation, confirm:
 - [ ] Parallel-safe phases have disjoint owned files and no cross-phase dependencies
 - [ ] Sequential-only phases are ordered before dependents start
 - [ ] The plan includes a current phase/task status log
-- [ ] The plan is saved to `docs/plans/[name-slug]/implementation-plan.md` unless the user explicitly chose a different location

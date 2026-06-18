@@ -65,7 +65,7 @@ interface TaskAPI {
 }
 ```
 
-If the contract is captured as a markdown draft before implementation, save it to `docs/brainstorm/[name-slug]/spec/api-contract.md` after applying the brainstorm routing and overlap check from `using-agent-skills`.
+If the task or active agent requires a persisted contract draft before implementation, follow those instructions for where and how to save it.
 
 ### 2. Consistent Error Semantics
 
@@ -300,4 +300,4 @@ After designing an API:
 - [ ] List endpoints support pagination
 - [ ] New fields are additive and optional (backward compatible)
 - [ ] Naming follows consistent conventions across all endpoints
-- [ ] API documentation or types are committed alongside the implementation, and pre-planning contract drafts are saved to `docs/brainstorm/[name-slug]/spec/api-contract.md` when created
+- [ ] API documentation or types are committed alongside the implementation, and any persisted contract draft follows the active agent or task instructions

@@ -37,7 +37,7 @@ This skill needs a live, responsive user. **Do not invoke in non-interactive con
 
 ## User Input Tooling
 
-Every interview question, confirmation, and save/persist prompt must use VS Code's native `vscode_askQuestions` tool. Do not write the question only in markdown/plain chat and wait for a reply.
+Every interview question and confirmation must use VS Code's native `vscode_askQuestions` tool. Do not write the question only in markdown/plain chat and wait for a reply.
 
 - Ask exactly one interview question per `vscode_askQuestions` call.
 - Put your guess and reasoning in the question message or supporting message so the user can react to it in the VS Code chat UI.
@@ -144,8 +144,6 @@ This is a checkable test, not a vibe. It also has a floor: if you've gone severa
 
 The output of this skill is a **confirmed statement of intent**: the restate from Step 4, with an explicit yes from Step 5. That's the deliverable. Specs, plans, and task lists are downstream; they consume the intent this skill produces.
 
-If the user wants the intent to persist (a multi-session project, a handoff to another collaborator), use `vscode_askQuestions` to offer saving it to `docs/brainstorm/[name-slug]/intent/intent.md`. Before saving, apply the brainstorm routing and overlap check from `using-agent-skills`. Only save if they confirm through the tool.
-
 ## Example
 
 A short before-and-after.
@@ -217,7 +215,6 @@ Two questions in, the agent has discovered the actual ask isn't "a dashboard." I
 - The user gives a sophistication-signaling answer ("scalable", "clean", "modern") and you accept it without probing whether it's what they actually want
 - Three or more rounds without your confidence visibly rising: you're asking the wrong questions, step back and reframe
 - A confidence number below ~70% with no reason attached: the user can't help close the gap if they don't know what's missing
-- Saving the intent doc before the user has confirmed (the doc itself implies a yes the user didn't give)
 - Skipping the "Out of scope" line in the restate (silent disagreement about non-goals is half of misalignment)
 
 ## Verification

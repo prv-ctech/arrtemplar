@@ -33,7 +33,7 @@ SPECIFY ──→ PLAN ──→ TASKS ──→ IMPLEMENT
 
 ## User Input Tooling
 
-Every clarifying question, assumption correction, target confirmation, phase review, approval gate, and save/persist choice must use VS Code's native `vscode_askQuestions` tool. Do not write the question only in markdown/plain chat and wait for a reply.
+Every clarifying question, assumption correction, target confirmation, phase review, and approval gate must use VS Code's native `vscode_askQuestions` tool. Do not write the question only in markdown/plain chat and wait for a reply.
 
 - Use `vscode_askQuestions` for the Specify, Plan, Tasks, and Implement review gates.
 - Use options such as `Approve`, `Request changes`, and `Clarify` when reviewing artifacts.
@@ -63,20 +63,23 @@ Don't silently fill in ambiguous requirements. The spec's entire purpose is to s
 
 2. **Commands** — Full executable commands with flags, not just tool names.
    ```
-   Build: npm run build
-   Test: npm test -- --coverage
-   Lint: npm run lint --fix
-   Dev: npm run dev
+   Build: bun run build
+   Test: DATABASE_URL=data/db/arrtemplar-test.sqlite bun test --coverage test
+   Typecheck: bun run typecheck
+   Lint: biome check .
+   Fix: biome check --write .
+   Dev: bun run dev
    ```
 
 3. **Project Structure** — Where source code lives, where tests go, where docs belong.
    ```
-   src/           → Application source code
-   src/components → React components
-   src/lib        → Shared utilities
-   tests/         → Unit and integration tests
-   e2e/           → End-to-end tests
-   docs/brainstorm/[name-slug]/ → Pre-planning documentation for this feature or idea
+   apps/server/src/        → Bun/Elysia API source code
+   apps/web/src/           → React frontend source code
+   apps/web/src/components → Reusable UI and layout components
+   apps/web/src/features   → Feature-specific frontend modules
+   packages/shared/src/    → Shared API contracts and constants
+   test/                   → Unit and integration tests
+   docs/                   → Architecture, plans, reviews, and project docs
    ```
 
 4. **Code Style** — One real code snippet showing your style beats three paragraphs describing it. Include naming conventions, formatting rules, and examples of good output.
@@ -122,8 +125,6 @@ Don't silently fill in ambiguous requirements. The spec's entire purpose is to s
 ## Open Questions
 [Anything unresolved that needs human input]
 ```
-
-Save feature specs to `docs/brainstorm/[name-slug]/spec/spec.md` after applying the brainstorm routing and overlap check from `using-agent-skills`.
 
 **Reframe instructions as success criteria.** When receiving vague requirements, translate them into concrete conditions:
 
@@ -210,4 +211,3 @@ Before proceeding to implementation, confirm:
 - [ ] The human has reviewed and approved the spec through `vscode_askQuestions`
 - [ ] Success criteria are specific and testable
 - [ ] Boundaries (Always/Ask First/Never) are defined
-- [ ] The spec is saved to `docs/brainstorm/[name-slug]/spec/spec.md` unless the user explicitly chose a different location

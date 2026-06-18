@@ -9,6 +9,28 @@ description: Hardens code against vulnerabilities. Use when handling user input,
 
 Security-first development practices for web applications. Treat every external input as hostile, every secret as sacred, and every authorization check as mandatory. Security isn't a phase — it's a constraint on every line of code that touches user data, authentication, or external systems.
 
+## Verified Workspace Stack
+
+Use guidance that matches this repository, not generic Node/Express examples:
+
+- **Runtime and package manager:** use `bun`, `bun ci`, `bun audit`, Bun Shell, `Bun.env`, `Bun.password`, `Bun.CSRF`, and Web APIs.
+- **HTTP server:** Elysia `1.4.x`; use Elysia route schemas, guards, lifecycle hooks, plugins, and `status()` responses.
+- **Validation:** Elysia `t` / TypeBox is the default validation layer. Do not introduce Zod for route validation unless the user explicitly approves a validator change.
+- **Security headers and CORS:** Use the existing `elysiajs-helmet` and `@elysia/cors` patterns, especially `apps/server/src/security/headers.ts` and `apps/server/src/security/cors.ts`.
+- **Frontend:** Vite `8` with React. Only `VITE_*` env vars are exposed to the browser, so no `VITE_*` variable may contain secrets.
+- **Database:** Drizzle ORM. Use Drizzle parameterization and existing schema/query patterns; never concatenate user input into SQL.
+
+### Stale Stack Patterns to Remove
+
+If you see these in proposed guidance or examples, replace them before acting:
+
+- `npm audit`, `npm ci`, or `npm install` → `bun audit`, `bun ci`, `bun install --frozen-lockfile`, `bun add`.
+- Express middleware examples → Elysia plugins, guards, lifecycle hooks, and route options.
+- Zod route schemas → Elysia `t` / TypeBox route schemas.
+- `bcrypt` / `argon2` packages → `Bun.password.hash()` and `Bun.password.verify()`.
+- Node-only SSRF examples using `node:dns/promises` as the default → Bun/Web `URL` + allowlisted hosts + `fetch` controls; use network egress controls for arbitrary URLs.
+- `process.env` examples in server code → `Bun.env` unless interacting with a dependency API that requires `process.env`.
+
 ## When to Use
 
 - Building anything that accepts user input
@@ -17,6 +39,36 @@ Security-first development practices for web applications. Treat every external 
 - Integrating with external APIs or services
 - Adding file uploads, webhooks, or callbacks
 - Handling payment or PII data
+
+## Mandatory Audit Report
+
+When invoked by the user or a supervising agent to perform a security audit, write a concise AI-readable report under `docs/audit/security/` before finishing. Create the directory if it does not exist.
+
+Use one report per audit, named with the current date and a short scope slug: `docs/audit/security/YYYY-MM-DD-<scope>.md`. If continuing the same audit, update the existing report instead of creating duplicates.
+
+Keep the report minimal, structured, and action-oriented so another AI agent can resume without rereading the whole codebase:
+
+```markdown
+# Security Audit: <scope>
+
+Date: YYYY-MM-DD
+Trigger: user | super-agent
+Scope: <files, routes, features, or trust boundaries reviewed>
+
+## Affected Areas
+- `<path>` — <why it matters>
+
+## Findings
+- `<id>` — <severity> — <status> — `<path>:<line>` — <issue> — <required fix>
+
+## Next Actions
+- <ordered action with owner/context>
+
+## Verification
+- <checks run or checks still required>
+```
+
+If there are no findings, still write the report with `Findings: none` and list the checks performed. Do not include secrets, full tokens, raw private data, or noisy logs. Include only the file paths, exact affected surfaces, severity, remediation steps, and verification commands/results needed for a follow-up AI agent.
 
 ## Process: Threat Model First
 
@@ -47,10 +99,11 @@ If you can't name the trust boundaries for a feature, you're not ready to secure
 - **Parameterize all database queries** — never concatenate user input into SQL
 - **Encode output** to prevent XSS (use framework auto-escaping, don't bypass it)
 - **Use HTTPS** for all external communication
-- **Hash passwords** with bcrypt/scrypt/argon2 (never store plaintext)
-- **Set security headers** (CSP, HSTS, X-Frame-Options, X-Content-Type-Options)
+- **Hash passwords** with Bun-native `Bun.password.hash()` / `Bun.password.verify()` using Argon2id unless a legacy hash migration requires bcrypt compatibility
+- **Set security headers** with `elysiajs-helmet` and repo-approved CSP, HSTS, frame, referrer, CORP, COOP, and permissions-policy settings
 - **Use httpOnly, secure, sameSite cookies** for sessions
-- **Run `npm audit`** (or equivalent) before every release
+- **Run `bun audit`** before every release; use `bun audit --prod` for production dependency gates and `bun audit --audit-level=high` for high-severity blocking
+- **Run `bun ci`** in CI so installs use the committed `bun.lock` and fail when `package.json` and the lockfile disagree
 
 ### Ask First (Requires Human Approval)
 
@@ -84,36 +137,36 @@ These are prevention patterns, not a ranking. For the 2021 ordering, see the qui
 // BAD: SQL injection via string concatenation
 const query = `SELECT * FROM users WHERE id = '${userId}'`;
 
-// GOOD: Parameterized query
-const user = await db.query('SELECT * FROM users WHERE id = $1', [userId]);
+// GOOD: Drizzle query builder parameterizes values
+const user = await db.query.users.findFirst({
+	where: eq(users.publicUserId, publicUserId),
+});
 
-// GOOD: ORM with parameterized input
-const user = await prisma.user.findUnique({ where: { id: userId } });
+// GOOD: Drizzle sql template parameterizes interpolated values
+const rows = await db.all(sql`select * from users where public_user_id = ${publicUserId}`);
 ```
 
 ### Broken Authentication
 
 ```typescript
-// Password hashing
-import { hash, compare } from 'bcrypt';
+// Password hashing: Bun defaults to Argon2id and stores parameters in PHC format.
+const passwordHash = await Bun.password.hash(plaintextPassword, {
+	algorithm: "argon2id",
+});
 
-const SALT_ROUNDS = 12;
-const hashedPassword = await hash(plaintext, SALT_ROUNDS);
-const isValid = await compare(plaintext, hashedPassword);
+const isValid = await Bun.password.verify(plaintextPassword, passwordHash);
 
-// Session management
-app.use(session({
-  secret: process.env.SESSION_SECRET,  // From environment, not code
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    httpOnly: true,     // Not accessible via JavaScript
-    secure: true,       // HTTPS only
-    sameSite: 'lax',    // CSRF protection
-    maxAge: 24 * 60 * 60 * 1000,  // 24 hours
-  },
-}));
+// Cookie/session policy: keep session tokens server-issued and browser-protected.
+cookie.session.set({
+	value: sessionToken,
+	httpOnly: true,
+	secure: Bun.env.NODE_ENV === "production",
+	sameSite: "lax",
+	path: "/",
+});
 ```
+
+OWASP recommends Argon2id for new password storage, with bcrypt reserved mostly for legacy systems. Bun's `Bun.password.hash()` automatically salts hashes and encodes the algorithm/parameters in the hash so `verify()` can detect the correct verifier. Use async hashing APIs on request paths; the sync variants block the runtime.
 
 ### Cross-Site Scripting (XSS)
 
@@ -134,59 +187,60 @@ const clean = DOMPurify.sanitize(userInput);
 ```typescript
 // Always check authorization, not just authentication
 app.patch('/api/tasks/:id', authenticate, async (req, res) => {
-  const task = await taskService.findById(req.params.id);
+	const task = await taskService.findById(req.params.id);
 
-  // Check that the authenticated user owns this resource
-  if (task.ownerId !== req.user.id) {
-    return res.status(403).json({
-      error: { code: 'FORBIDDEN', message: 'Not authorized to modify this task' }
-    });
-  }
+	// Check that the authenticated user owns this resource
+	if (task.ownerId !== req.user.id) {
+		return res.status(403).json({
+			error: { code: 'FORBIDDEN', message: 'Not authorized to modify this task' }
+		});
+	}
 
-  // Proceed with update
-  const updated = await taskService.update(req.params.id, req.body);
-  return res.json(updated);
+	// Proceed with update
+	const updated = await taskService.update(req.params.id, req.body);
+	return res.json(updated);
 });
 ```
 
 ### Security Misconfiguration
 
 ```typescript
-// Security headers (use helmet for Express)
-import helmet from 'helmet';
-app.use(helmet());
+import { cors } from "@elysia/cors";
+import { Elysia } from "elysia";
+import { elysiaHelmet } from "elysiajs-helmet";
 
-// Content Security Policy
-app.use(helmet.contentSecurityPolicy({
-  directives: {
-    defaultSrc: ["'self'"],
-    scriptSrc: ["'self'"],
-    styleSrc: ["'self'", "'unsafe-inline'"],  // Tighten if possible
-    imgSrc: ["'self'", 'data:', 'https:'],
-    connectSrc: ["'self'"],
-  },
-}));
+const allowedOrigin = Bun.env.WEB_ORIGIN ?? "http://localhost:5173";
 
-// CORS — restrict to known origins
-app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS?.split(',') || 'http://localhost:3000',
-  credentials: true,
-}));
+new Elysia()
+	.use(elysiaHelmet(securityHeaderConfig))
+	.use(
+		cors({
+			origin: allowedOrigin,
+			methods: corsAllowedMethods,
+			allowedHeaders: corsAllowedHeaders,
+			credentials: true,
+		}),
+	)
+	.onAfterHandle(removeRejectedOriginCredentials(allowedOrigin));
 ```
+
+Keep CORS origin allowlists explicit. Elysia CORS defaults can allow broad sharing, and Vite warns that `server.cors: true` or `server.allowedHosts: true` can expose source through DNS rebinding. If credentials are enabled, never allow wildcard origins.
 
 ### Sensitive Data Exposure
 
 ```typescript
 // Never return sensitive fields in API responses
 function sanitizeUser(user: UserRecord): PublicUser {
-  const { passwordHash, resetToken, ...publicFields } = user;
-  return publicFields;
+	const { passwordHash, resetToken, ...publicFields } = user;
+	return publicFields;
 }
 
 // Use environment variables for secrets
-const API_KEY = process.env.STRIPE_API_KEY;
+const API_KEY = Bun.env.STRIPE_API_KEY;
 if (!API_KEY) throw new Error('STRIPE_API_KEY not configured');
 ```
+
+For Vite client code, never put secrets in variables prefixed with `VITE_`; Vite bundles `VITE_*` values into client-side source at build time. Put secret-backed operations behind the Elysia API instead.
 
 ### Server-Side Request Forgery (SSRF)
 
@@ -196,87 +250,88 @@ Any time the server fetches a URL the user influenced — webhooks, "import from
 // BAD: fetch whatever the user gives you
 await fetch(req.body.webhookUrl);
 
-// GOOD: allowlist scheme + host, reject if ANY resolved IP is private, forbid redirects
-import { lookup } from 'node:dns/promises';
-import ipaddr from 'ipaddr.js';
+// GOOD: construct outbound targets from a fixed allowlist, not arbitrary input
+const allowedWebhookOrigins = new Set(["https://hooks.example.com"]);
+const allowedWebhookPaths = new Set(["/arrtemplar/events"]);
 
-const ALLOWED_HOSTS = new Set(['hooks.example.com']);
+function assertAllowedWebhookUrl(raw: string): URL {
+	const url = new URL(raw);
 
-async function assertSafeUrl(raw: string): Promise<URL> {
-  const url = new URL(raw);
-  if (url.protocol !== 'https:') throw new Error('https only');
-  if (!ALLOWED_HOSTS.has(url.hostname)) throw new Error('host not allowed');
-  // Resolve ALL records; a single private/reserved address fails the check.
-  const addrs = await lookup(url.hostname, { all: true });
-  if (addrs.some((a) => ipaddr.parse(a.address).range() !== 'unicast')) {
-    throw new Error('private/reserved IP');
-  }
-  return url;
+	if (url.protocol !== "https:") throw new Error("https only");
+	if (!allowedWebhookOrigins.has(url.origin)) throw new Error("origin not allowed");
+	if (!allowedWebhookPaths.has(url.pathname)) throw new Error("path not allowed");
+	if (url.username || url.password) throw new Error("credentials in URL are not allowed");
+
+	for (const param of url.searchParams.keys()) {
+		if (!new Set(["eventId"]).has(param)) throw new Error("query parameter not allowed");
+	}
+
+	return url;
 }
 
-await fetch(await assertSafeUrl(req.body.webhookUrl), { redirect: 'error' });
+await fetch(assertAllowedWebhookUrl(req.body.webhookUrl), {
+	method: "POST",
+	redirect: "error",
+	signal: AbortSignal.timeout(5_000),
+});
 ```
 
-The `range() !== 'unicast'` check covers loopback, link-local `169.254.169.254` (cloud metadata, the #1 SSRF target), private, and unique-local ranges across IPv4 and IPv6.
-
-**Caveat — this still has a TOCTOU gap.** `fetch` resolves DNS again after the check, so an attacker using a short-TTL record can rebind to an internal IP between validation and connection. For high-risk surfaces, resolve once and connect to the pinned IP, or put a filtering agent in front (`request-filtering-agent` / `ssrf-req-filter`).
+Do not implement a generic "fetch any URL" feature in app code. Bun `fetch()` supports `http:`, `https:`, `file:`, `data:`, `blob:`, and `s3:` style inputs, plus proxy and Unix socket options; that is useful, but it increases SSRF blast radius if any part is user-controlled. OWASP's safest SSRF pattern is a strict allowlist for trusted integrations. For arbitrary URL fetches, require explicit human approval and use network-level egress filtering or a dedicated SSRF-filtering proxy; URL parsing alone is not enough to stop DNS rebinding or internal metadata access.
 
 ## Input Validation Patterns
 
 ### Schema Validation at Boundaries
 
 ```typescript
-import { z } from 'zod';
+import { Elysia, t } from "elysia";
 
-const CreateTaskSchema = z.object({
-  title: z.string().min(1).max(200).trim(),
-  description: z.string().max(2000).optional(),
-  priority: z.enum(['low', 'medium', 'high']).default('medium'),
-  dueDate: z.string().datetime().optional(),
+const CreateTaskBody = t.Object({
+	title: t.String({ minLength: 1, maxLength: 200 }),
+	description: t.Optional(t.String({ maxLength: 2_000 })),
+	priority: t.UnionEnum(["low", "medium", "high"]),
 });
 
-// Validate at the route handler
-app.post('/api/tasks', async (req, res) => {
-  const result = CreateTaskSchema.safeParse(req.body);
-  if (!result.success) {
-    return res.status(422).json({
-      error: {
-        code: 'VALIDATION_ERROR',
-        message: 'Invalid input',
-        details: result.error.flatten(),
-      },
-    });
-  }
-  // result.data is now typed and validated
-  const task = await taskService.create(result.data);
-  return res.status(201).json(task);
-});
+new Elysia().post(
+	"/api/tasks",
+	async ({ body, status }) => {
+		const task = await taskService.create(body);
+		return status(201, task);
+	},
+	{
+		body: CreateTaskBody,
+		response: {
+			201: t.Object({ id: t.String(), title: t.String() }),
+		},
+	},
+);
 ```
+
+Elysia route schemas validate `body`, `query`, `params`, `headers`, `cookie`, and `response` at the boundary, infer TypeScript types, and generate OpenAPI schema from one source of truth. Use `guard()` for shared validation across groups of routes, and keep error responses generic so validation failures do not expose internal details.
 
 ### File Upload Safety
 
 ```typescript
-// Restrict file types and sizes
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
-const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+import { Elysia, t } from "elysia";
 
-function validateUpload(file: UploadedFile) {
-  if (!ALLOWED_TYPES.includes(file.mimetype)) {
-    throw new ValidationError('File type not allowed');
-  }
-  if (file.size > MAX_SIZE) {
-    throw new ValidationError('File too large (max 5MB)');
-  }
-  // Don't trust the file extension — check magic bytes if critical
-}
+new Elysia().post(
+	"/api/profile/avatar",
+	({ body }) => saveAvatar(body.avatar),
+	{
+		body: t.Object({
+			avatar: t.File({ maxSize: "5m" }),
+		}),
+	},
+);
 ```
 
-## Triaging npm audit Results
+Use Elysia `t.File()` / `t.Files()` for file upload schemas, cap file size, restrict expected media types, and validate content by magic number when type matters. Do not trust client-provided extensions or `Content-Type` alone.
+
+## Triaging `bun audit` Results
 
 Not all audit findings require immediate action. Use this decision tree:
 
 ```
-npm audit reports a vulnerability
+bun audit reports a vulnerability
 ├── Severity: critical or high
 │   ├── Is the vulnerable code reachable in your app?
 │   │   ├── YES --> Fix immediately (update, patch, or replace the dependency)
@@ -288,60 +343,69 @@ npm audit reports a vulnerability
 │   ├── Reachable in production? --> Fix in the next release cycle
 │   └── Dev-only? --> Fix when convenient, track in backlog
 └── Severity: low
-    └── Track and fix during regular dependency updates
+		└── Track and fix during regular dependency updates
 ```
 
 **Key questions:**
 - Is the vulnerable function actually called in your code path?
 - Is the dependency a runtime dependency or dev-only?
 - Is the vulnerability exploitable given your deployment context (e.g., a server-side vulnerability in a client-only app)?
+- Does `bun audit --prod` still report it after excluding dev-only dependencies?
+- Is the package from the default npm registry? Bun skips packages installed from registries other than the default registry during `bun audit`.
 
 When you defer a fix, document the reason and set a review date.
 
 ### Supply-Chain Hygiene
 
-`npm audit` catches known CVEs; it won't catch a malicious or typosquatted package. Also:
+`bun audit` catches known vulnerabilities; it won't catch every malicious, compromised, or typosquatted package. Also:
 
-- **Commit the lockfile** and install with `npm ci` (not `npm install`) in CI — reproducible builds, no silent version drift.
+- **Commit `bun.lock`** and install with `bun ci` or `bun install --frozen-lockfile` in CI — reproducible builds, no silent version drift.
 - **Review new dependencies before adding them** — maintenance, download counts, and whether they truly earn their place. Every dependency is attack surface (OWASP **A06: Vulnerable Components**, **LLM03: Supply Chain**).
-- **Be wary of `postinstall` scripts** in unfamiliar packages — they run arbitrary code at install time.
+- **Keep Bun's lifecycle-script protections intact** — Bun does not run arbitrary dependency lifecycle scripts unless a package is listed in `trustedDependencies`; only add trusted packages after review.
+- **Use `minimumReleaseAge`** in `bunfig.toml` for hardened install paths so brand-new package versions are filtered during resolution.
+- **Use Bun's security scanner API** when an approved scanner is configured; scanners can fail installs on fatal findings and automatically disable auto-install for security.
 - **Watch for typosquats** — `cross-env` vs `crossenv`, `react-dom` vs `reactdom`.
 
 ## Rate Limiting
 
 ```typescript
-import rateLimit from 'express-rate-limit';
+const loginRateLimiter = new LoginRateLimiter(5, 15 * 60 * 1000);
 
-// General API rate limit
-app.use('/api/', rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100,                   // 100 requests per window
-  standardHeaders: true,
-  legacyHeaders: false,
-}));
+new Elysia().post("/api/auth/login", ({ body, request, status }) => {
+	const key = deriveLoginRateLimitKey(request, body.email);
 
-// Stricter limit for auth endpoints
-app.use('/api/auth/', rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,  // 10 attempts per 15 minutes
-}));
+	if (loginRateLimiter.isBlocked(key)) {
+		return status(429, {
+			error: { code: "RATE_LIMITED", message: "Too many login attempts." },
+		});
+	}
+
+	// On failed login: loginRateLimiter.recordFailure(key)
+	// On successful login: loginRateLimiter.clear(key)
+});
 ```
+
+Keep authentication limits stricter than general API limits. If adopting an Elysia rate-limit plugin for broader API throttling, review its storage model and proxy handling first. Only trust `X-Forwarded-*`, `CF-Connecting-IP`, or similar headers after the deployment restricts inbound traffic to the trusted proxy; otherwise use the direct client IP.
 
 ## Secrets Management
 
 ```
 .env files:
-  ├── .env.example  → Committed (template with placeholder values)
-  ├── .env          → NOT committed (contains real secrets)
-  └── .env.local    → NOT committed (local overrides)
+	├── .env.example  → Committed (template with placeholder values)
+	├── .env          → NOT committed (contains real secrets)
+	└── .env.local    → NOT committed (local overrides)
 
 .gitignore must include:
-  .env
-  .env.local
-  .env.*.local
-  *.pem
-  *.key
+	.env
+	.env.local
+	.env.*.local
+	*.pem
+	*.key
 ```
+
+Bun automatically loads `.env`, mode-specific `.env.*`, and `.env.local` files unless disabled with `--no-env-file` or `env = false` in `bunfig.toml`. In production and CI, prefer explicit system environment variables and avoid automatic local `.env` loading. Vite also loads `.env` files, but only `VITE_*` variables are available to browser code; never prefix secrets with `VITE_`.
+
+Do not set `NODE_TLS_REJECT_UNAUTHORIZED=0`, `tls.rejectUnauthorized: false`, `BUN_CONFIG_VERBOSE_FETCH`, or `fetch({ verbose: true })` in production. These settings can weaken TLS validation or leak headers and URLs into logs.
 
 **Always check before committing:**
 ```bash
@@ -369,21 +433,18 @@ await db.query(sql);                                   // arbitrary query execut
 container.innerHTML = await llm.reply(userMessage);   // stored XSS, via the model
 
 // GOOD: model output is data — parse defensively, then validate, then encode
-let intent;
-try {
-  intent = CommandSchema.parse(JSON.parse(await llm.replyJson(userMessage)));
-} catch {
-  throw new ValidationError('unexpected model output'); // JSON.parse or schema failed
-}
+const intent = await parseAndValidateModelIntent(await llm.replyJson(userMessage));
 await runAllowlistedAction(intent.action, intent.params);
 container.textContent = await llm.reply(userMessage);
 ```
+
+For route inputs that include model output, validate with Elysia `t` / TypeBox at the API boundary. For non-route model output, parse JSON defensively, validate against an explicit allowlist schema, and reject unknown actions or parameters. If a model output influences a Bun Shell command, remember that Bun Shell escapes interpolated strings by default but cannot prevent argument injection against the target program; validate allowed commands and flags before execution.
 
 ## Security Review Checklist
 
 ```markdown
 ### Authentication
-- [ ] Passwords hashed with bcrypt/scrypt/argon2 (salt rounds ≥ 12)
+- [ ] Passwords hashed and verified with async `Bun.password` Argon2id APIs
 - [ ] Session tokens are httpOnly, secure, sameSite
 - [ ] Login has rate limiting
 - [ ] Password reset tokens expire
@@ -394,7 +455,7 @@ container.textContent = await llm.reply(userMessage);
 - [ ] Admin actions require admin role verification
 
 ### Input
-- [ ] All user input validated at the boundary
+- [ ] All user input validated at Elysia route boundaries with `t` / TypeBox
 - [ ] SQL queries are parameterized
 - [ ] HTML output is encoded/escaped
 - [ ] Server-side URL fetches are allowlisted (no SSRF to internal services)
@@ -405,20 +466,24 @@ container.textContent = await llm.reply(userMessage);
 - [ ] PII encrypted at rest (if applicable)
 
 ### Infrastructure
-- [ ] Security headers configured (CSP, HSTS, etc.)
-- [ ] CORS restricted to known origins
-- [ ] Dependencies audited for vulnerabilities
+- [ ] `elysiajs-helmet` security headers configured (CSP, HSTS, frame, referrer, CORP, COOP, permissions policy)
+- [ ] `@elysia/cors` restricted to known origins; no wildcard credentials
+- [ ] Vite dev/preview `allowedHosts` and `cors` are explicit, never `true`
+- [ ] Dependencies audited with `bun audit` / `bun audit --prod`
 - [ ] Error messages don't expose internals
 
 ### Supply Chain
-- [ ] Lockfile committed; CI installs with `npm ci`
-- [ ] New dependencies reviewed (maintenance, downloads, postinstall scripts)
+- [ ] `bun.lock` committed; CI installs with `bun ci` or `bun install --frozen-lockfile`
+- [ ] New dependencies reviewed before `bun add`
+- [ ] `trustedDependencies` entries reviewed and justified
+- [ ] Bun security scanner / `minimumReleaseAge` considered for release pipelines
 
 ### AI / LLM (if used)
 - [ ] Model output treated as untrusted (no eval/SQL/innerHTML/shell)
 - [ ] Secrets and other users' data kept out of prompts
 - [ ] Tool/agent permissions scoped; destructive actions require confirmation
 ```
+
 ## See Also
 
 For detailed security checklists and pre-commit verification steps, see `references/security-checklist.md`.
@@ -447,17 +512,7 @@ For detailed security checklists and pre-commit verification steps, see `referen
 - Server fetches user-supplied URLs without an allowlist (SSRF)
 - LLM/model output passed into a query, the DOM, a shell, or `eval`
 - Secrets, PII, or the full system prompt placed inside an LLM context window
-
-## Verification
-
-After implementing security-relevant code:
-
-- [ ] `npm audit` shows no critical or high vulnerabilities
-- [ ] No secrets in source code or git history
-- [ ] All user input validated at system boundaries
-- [ ] Authentication and authorization checked on every protected endpoint
-- [ ] Security headers present in response (check with browser DevTools)
-- [ ] Error responses don't expose internal details
-- [ ] Rate limiting active on auth endpoints
-- [ ] Server-side URL fetches validated against an allowlist (no SSRF)
-- [ ] LLM/model output validated and encoded before use (if AI features present)
+- `VITE_*` variables containing API keys, tokens, database URLs, or private service URLs
+- Vite `server.allowedHosts: true`, `server.cors: true`, or broad `/@fs/` access
+- `Bun.CSRF.generate()` without an explicit production secret and session binding
+- `Bun Shell` commands that start `bash -c` or pass unvalidated user-controlled flags to external programs
