@@ -15,6 +15,7 @@ type ProfileMediaOption = {
   label: string;
   group?: string;
   src: string;
+  previewSrc?: string;
   alt: string;
 };
 
@@ -105,7 +106,7 @@ export function ProfileMediaPickerDialog({
                         aria-hidden="true"
                         className="pointer-events-none size-full rounded-xl bg-background object-cover"
                         decoding="async"
-                        src={option.src}
+                        src={option.previewSrc ?? option.src}
                       />
                       {selected || saving ? (
                         <span className="pointer-events-none absolute top-1.5 right-1.5 rounded-full border border-background bg-primary p-0.5 text-primary-foreground shadow-(--shadow-soft)">

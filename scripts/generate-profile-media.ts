@@ -2,6 +2,7 @@ import { $, Glob } from "bun";
 import {
   getProfileAvatarAssetPath,
   getProfileBannerAssetPath,
+  getProfileBannerPreviewAssetPath,
   PROFILE_AVATAR_IDS,
   PROFILE_BANNER_IDS,
   type ProfileBannerId,
@@ -68,12 +69,24 @@ async function generateProfileMedia() {
       throw new Error(`Missing reference banner for ${bannerId}.`);
     }
 
+    const previewAssetPath = getProfileBannerPreviewAssetPath(bannerId);
+
+    if (!previewAssetPath) {
+      throw new Error(`Missing preview asset path for raster banner ${bannerId}.`);
+    }
+
     await ensureOutputDirectory(assetPath);
+    await ensureOutputDirectory(previewAssetPath);
     await Bun.file(sourcePath)
       .image()
       .resize(1920, 640, { fit: "inside", filter: "lanczos3", withoutEnlargement: true })
       .webp({ quality: 90 })
       .write(Bun.fileURLToPath(new URL(assetPath, profileMediaUrl)));
+    await Bun.file(sourcePath)
+      .image()
+      .resize(522, 174, { fit: "inside", filter: "lanczos3", withoutEnlargement: true })
+      .webp({ quality: 76 })
+      .write(Bun.fileURLToPath(new URL(previewAssetPath, profileMediaUrl)));
   }
 
   console.log(

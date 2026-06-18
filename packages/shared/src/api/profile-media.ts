@@ -98,15 +98,36 @@ export function getProfileAvatarAssetPath(id: ProfileAvatarId): string {
 }
 
 export function getProfileBannerAssetPath(id: ProfileBannerId): string {
-  const group = getProfileMediaAnimeGroup(id);
+  const asset = getProfileBannerAnimeAsset(id);
 
-  if (!group) {
+  if (!asset) {
     return `banners/custom/${id}.svg`;
   }
 
-  const fileSlug = id.slice(group.prefix.length);
+  return `banners/anime/${asset.group.slug}/${asset.fileSlug}-full.webp`;
+}
 
-  return `banners/anime/${group.slug}/${fileSlug}.webp`;
+export function getProfileBannerPreviewAssetPath(id: ProfileBannerId): string | null {
+  const asset = getProfileBannerAnimeAsset(id);
+
+  if (!asset) {
+    return null;
+  }
+
+  return `banners/anime/${asset.group.slug}/${asset.fileSlug}-preview.webp`;
+}
+
+function getProfileBannerAnimeAsset(id: ProfileBannerId): {
+  group: (typeof PROFILE_MEDIA_ANIME_GROUPS)[number];
+  fileSlug: string;
+} | null {
+  const group = getProfileMediaAnimeGroup(id);
+
+  if (!group) {
+    return null;
+  }
+
+  return { group, fileSlug: id.slice(group.prefix.length) };
 }
 
 function requireProfileMediaAnimeGroup(

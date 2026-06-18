@@ -227,15 +227,12 @@ function ProfileDashboard({
   const banner = getProfileBannerOption(user.bannerId);
 
   const bannerImage = (
-    <>
-      <img
-        alt={banner.alt}
-        className="pointer-events-none size-full object-cover"
-        decoding="async"
-        src={banner.src}
-      />
-      <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-card via-card/20 to-transparent" />
-    </>
+    <img
+      alt={banner.alt}
+      className="pointer-events-none size-full object-cover"
+      decoding="async"
+      src={banner.src}
+    />
   );
   const avatarImage = (
     <img
@@ -250,7 +247,7 @@ function ProfileDashboard({
     <section className="-mx-4 -my-5 min-h-[calc(100dvh-4.25rem)] overflow-hidden bg-card/82 sm:-mx-6 lg:-mx-8 lg:-my-7 lg:min-h-dvh">
       <ProfileBanner bannerImage={bannerImage} mediaActions={mediaActions} selectedId={banner.id} />
 
-      <div className="px-4 pb-4 sm:px-6 sm:pb-6">
+      <div className="border-t border-border/70 px-4 pb-4 sm:px-6 sm:pb-6">
         <ProfileAvatarRow
           action={action}
           avatarImage={avatarImage}
@@ -315,7 +312,7 @@ function ProfileBannerButton({
       type={type}
     >
       {children}
-      <span className="pointer-events-none absolute right-3 bottom-3 rounded-full border border-border bg-background/78 px-2 py-1 text-xs font-medium text-foreground opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+      <span className="pointer-events-none absolute right-4 bottom-4 rounded-full border border-border/80 bg-background px-2.5 py-1 text-xs font-medium text-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
         Change banner
       </span>
     </button>
@@ -356,8 +353,8 @@ function ProfileAvatar({
 }) {
   if (!mediaActions) {
     return (
-      <div className="relative size-24 shrink-0 overflow-hidden rounded-full border-4 border-card bg-background shadow-(--shadow-soft) sm:size-28">
-        {avatarImage}
+      <div className="relative size-24 shrink-0 rounded-full bg-card p-1 shadow-(--shadow-soft) sm:size-28">
+        <div className="size-full overflow-hidden rounded-full bg-background">{avatarImage}</div>
       </div>
     );
   }
@@ -388,15 +385,17 @@ function ProfileAvatarButton({
       {...props}
       aria-label="Change profile avatar"
       className={cn(
-        "group relative size-24 shrink-0 cursor-pointer overflow-hidden rounded-full border-4 border-card bg-background shadow-(--shadow-soft)",
+        "group relative size-24 shrink-0 cursor-pointer overflow-hidden rounded-full bg-card p-1 shadow-(--shadow-soft)",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card disabled:pointer-events-none disabled:opacity-70 sm:size-28",
         className,
       )}
       ref={ref}
       type={type}
     >
-      {children}
-      <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-background/80 px-2 py-1 text-[0.65rem] font-medium text-foreground opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+      <span className="relative block size-full overflow-hidden rounded-full bg-background">
+        {children}
+      </span>
+      <span className="pointer-events-none absolute inset-0 flex items-end justify-center rounded-full bg-linear-to-t from-card/95 via-background/45 to-transparent px-3 pb-2.5 text-[0.65rem] font-medium text-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
         Change
       </span>
     </button>

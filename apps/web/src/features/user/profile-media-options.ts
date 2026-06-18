@@ -3,6 +3,7 @@ import {
   DEFAULT_PROFILE_BANNER_ID,
   getProfileAvatarAssetPath,
   getProfileBannerAssetPath,
+  getProfileBannerPreviewAssetPath,
   getProfileMediaAnimeGroup,
   isProfileAvatarId,
   isProfileBannerId,
@@ -25,6 +26,7 @@ export type ProfileBannerOption = {
   label: string;
   group?: string;
   src: string;
+  previewSrc?: string;
   alt: string;
 };
 
@@ -58,12 +60,14 @@ export const PROFILE_BANNER_OPTIONS: readonly ProfileBannerOption[] = PROFILE_BA
   (id) => {
     const group = getProfileMediaAnimeGroup(id);
     const label = bannerLabels[id];
+    const previewAssetPath = getProfileBannerPreviewAssetPath(id);
 
     return {
       id,
       label,
       ...(group ? { group: group.label } : {}),
       src: `/profile-media/${getProfileBannerAssetPath(id)}`,
+      ...(previewAssetPath ? { previewSrc: `/profile-media/${previewAssetPath}` } : {}),
       alt: group ? `${label} ${group.label} profile banner` : `${label} profile banner`,
     };
   },
