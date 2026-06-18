@@ -75,6 +75,21 @@ describe("profile dashboard and managed user routing", () => {
     expect(avatarButton).not.toContain("h-1/2");
   });
 
+  it("keeps profile media hover overlays independent of hover media capability", async () => {
+    const source = await Bun.file(userProfileSourcePath).text();
+    const bannerButtonStart = source.indexOf("function ProfileBannerButton");
+    const bannerButtonEnd = source.indexOf("function ProfileAvatarRow", bannerButtonStart);
+    const bannerButton = source.slice(bannerButtonStart, bannerButtonEnd);
+    const avatarButtonStart = source.indexOf("function ProfileAvatarButton");
+    const avatarButtonEnd = source.indexOf("function ProfileDashboardTitle", avatarButtonStart);
+    const avatarButton = source.slice(avatarButtonStart, avatarButtonEnd);
+
+    expect(bannerButton).toContain("group-[:hover]:opacity-100");
+    expect(avatarButton).toContain("group-[:hover]:opacity-100");
+    expect(bannerButton).not.toContain("group-hover:opacity-100");
+    expect(avatarButton).not.toContain("group-hover:opacity-100");
+  });
+
   it("renders the profile banner image with a separator and no persistent fade effects", async () => {
     const source = await Bun.file(userProfileSourcePath).text();
     const dashboardStart = source.indexOf("function ProfileDashboard");

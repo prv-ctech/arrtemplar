@@ -2,7 +2,7 @@
 name: plan
 description: Planning agent that decomposes specs into small, verifiable implementation tasks with acceptance criteria and dependency ordering. Replaces the /plan workflow.
 model: GPT-5.5 (unify-chat-provider)
-tools: ["agent", "read", "search", "edit", "contextstream/*", "deepwiki/*"]
+tools: ["agent", "read", "search", "edit", "vscode/askQuestions", "contextstream/*", "deepwiki/*", "shadcn/*"]
 agents: ["research"]
 ---
 

@@ -8,7 +8,12 @@ export function RootLayout() {
   return (
     <>
       <Outlet />
-      <Toaster position="top-right" richColors theme={selectedTheme.dark ? "dark" : "light"} />
+      <Toaster
+        closeButton
+        position="top-right"
+        richColors
+        theme={selectedTheme.dark ? "dark" : "light"}
+      />
     </>
   );
 }

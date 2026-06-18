@@ -272,7 +272,7 @@
 
     "@logtape/file": ["@logtape/file@2.1.4", "", { "peerDependencies": { "@logtape/logtape": "^2.1.4" } }, "sha512-jC90wtZTShrXYEeT/TdFDsZ4ipQEKPGhSL8rNcHJ/u4j3bWNJ9W/OnMGs94UEdJcSL6q5r01bIAGNmqpoSOQFQ=="],
 
-    "@logtape/logtape": ["@logtape/logtape@2.1.4", "", {}, "sha512-ZQbAeHSxAd/bZKWwAfRIb4phTNuoSiaZoeE5GgfNwKxhik6L1+XZXQr0r8x2Bsm4K98B/d5InORVy0jcmA4kCA=="],
+    "@logtape/logtape": ["@logtape/logtape@2.1.5", "", {}, "sha512-59fyskQ9hR5mYQP9YMznZDtwRS4gIN7VIJkoRe0SLTmU+BQGaSP1s+ve8r+Binj1m6jNpwlF7yu9fz2/asSFLw=="],
 
     "@logtape/redaction": ["@logtape/redaction@2.1.4", "", { "peerDependencies": { "@logtape/logtape": "^2.1.4" } }, "sha512-6Xzt0/P7GPDLgCcm8T3xcBY3L6iNrZI1zDCRNccs8z+7uBNe4nHk1ZulkhEojXGCcz/j+zCl+MIL/jcZZnXFag=="],
 

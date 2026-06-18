@@ -312,7 +312,7 @@ function ProfileBannerButton({
       type={type}
     >
       {children}
-      <span className="pointer-events-none absolute right-4 bottom-4 rounded-full border border-border/80 bg-background px-2.5 py-1 text-xs font-medium text-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+      <span className="pointer-events-none absolute right-4 bottom-4 rounded-full border border-border/80 bg-background px-2.5 py-1 text-xs font-medium text-foreground opacity-0 shadow-sm transition-opacity group-[:hover]:opacity-100 group-focus-visible:opacity-100">
         Change banner
       </span>
     </button>
@@ -395,7 +395,7 @@ function ProfileAvatarButton({
       <span className="relative block size-full overflow-hidden rounded-full bg-background">
         {children}
       </span>
-      <span className="pointer-events-none absolute inset-0 flex items-end justify-center rounded-full bg-linear-to-t from-card/95 via-background/45 to-transparent px-3 pb-2.5 text-[0.65rem] font-medium text-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+      <span className="pointer-events-none absolute inset-0 flex items-end justify-center rounded-full bg-linear-to-t from-card/95 via-background/45 to-transparent px-3 pb-2.5 text-[0.65rem] font-medium text-foreground opacity-0 transition-opacity group-[:hover]:opacity-100 group-focus-visible:opacity-100">
         Change
       </span>
     </button>
