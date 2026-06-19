@@ -9,7 +9,6 @@ import {
 import { useMutation } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import type { ComponentProps, ReactNode } from "react";
-import { toast } from "sonner";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,6 +17,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { authQueryKey, canAccessSettings } from "@/features/auth/auth-state";
+import { notify } from "@/features/notifications/notification-gateway";
 import { logout } from "@/lib/api";
 import { queryClient } from "@/lib/query-client";
 import { cn } from "@/lib/utils";
@@ -161,10 +161,25 @@ export function AppShell({ children, user }: { children: ReactNode; user: Public
   const navigate = useNavigate();
   const logoutMutation = useMutation({
     mutationFn: logout,
-    onSettled: () => {
+    onSuccess: () => {
       queryClient.setQueryData(authQueryKey, null);
-      toast.success("Signed out.");
+      notify(
+        {
+          id: "auth.signed_out",
+          title: "Signed out.",
+        },
+        user.notificationPreferences,
+      );
       navigate({ to: "/login" });
+    },
+    onError: (error) => {
+      notify(
+        {
+          id: "auth.sign_out.failed",
+          title: error instanceof Error ? error.message : "Sign out failed.",
+        },
+        user.notificationPreferences,
+      );
     },
   });
 

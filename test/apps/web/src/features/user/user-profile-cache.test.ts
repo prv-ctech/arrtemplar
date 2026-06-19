@@ -6,6 +6,7 @@ import {
   userProfileQueryKey,
 } from "../../../../../../apps/web/src/features/user/user-profile-cache";
 import {
+  DEFAULT_NOTIFICATION_PREFERENCES,
   DEFAULT_PROFILE_AVATAR_ID,
   DEFAULT_PROFILE_BANNER_ID,
   type PublicUser,
@@ -17,6 +18,7 @@ const oldUser: PublicUser = {
   email: "old@example.local",
   avatarId: DEFAULT_PROFILE_AVATAR_ID,
   bannerId: DEFAULT_PROFILE_BANNER_ID,
+  notificationPreferences: DEFAULT_NOTIFICATION_PREFERENCES,
   permissions: ["settings:view"],
   createdAt: "2026-05-22T00:00:00.000Z",
   lastLoginAt: null,

@@ -15,15 +15,18 @@ import type {
   LoginResponse,
   LogoutResponse,
   ManagedUserProfile,
+  NotificationPreferences,
   PermissionCatalogEntry,
   PublicUser,
   UpdateManagedUserProfileRequest,
+  UpdateNotificationPreferencesRequest,
   UpdateUserProfileRequest,
   UserPermission,
 } from "@arrtemplar/shared";
 import {
   CSRF_HEADER_NAME,
   CSRF_HEADER_VALUE,
+  DEFAULT_NOTIFICATION_PREFERENCES,
   DEFAULT_PROFILE_AVATAR_ID,
   DEFAULT_PROFILE_BANNER_ID,
   isProfileAvatarId,
@@ -95,6 +98,26 @@ export async function updateUserProfile(input: UpdateUserProfileRequest): Promis
   const response = unwrapData(await api.api.profile.put(input), "Profile update failed.");
 
   return normalizePublicUser(response.user);
+}
+
+export async function getNotificationPreferences(): Promise<NotificationPreferences> {
+  const response = unwrapData(
+    await api.api.profile.notifications.get(),
+    "Notification preferences request failed.",
+  );
+
+  return normalizeNotificationPreferences(response.notificationPreferences);
+}
+
+export async function updateNotificationPreferences(
+  input: UpdateNotificationPreferencesRequest,
+): Promise<NotificationPreferences> {
+  const response = unwrapData(
+    await api.api.profile.notifications.put(input),
+    "Notification preferences update failed.",
+  );
+
+  return normalizeNotificationPreferences(response.notificationPreferences);
 }
 
 export async function changePassword(
@@ -226,6 +249,7 @@ function normalizePublicUser(user: {
   email: string;
   avatarId: unknown;
   bannerId: unknown;
+  notificationPreferences?: unknown;
   createdAt: string;
   lastLoginAt: string | null;
   permissions: unknown;
@@ -234,8 +258,32 @@ function normalizePublicUser(user: {
     ...user,
     avatarId: isProfileAvatarId(user.avatarId) ? user.avatarId : DEFAULT_PROFILE_AVATAR_ID,
     bannerId: isProfileBannerId(user.bannerId) ? user.bannerId : DEFAULT_PROFILE_BANNER_ID,
+    notificationPreferences: normalizeNotificationPreferences(user.notificationPreferences),
     permissions: normalizePermissions(user.permissions),
   };
+}
+
+function normalizeNotificationPreferences(value: unknown): NotificationPreferences {
+  if (!isRecord(value)) {
+    return DEFAULT_NOTIFICATION_PREFERENCES;
+  }
+
+  const preferences = value;
+
+  return {
+    toastsEnabled:
+      typeof preferences.toastsEnabled === "boolean"
+        ? preferences.toastsEnabled
+        : DEFAULT_NOTIFICATION_PREFERENCES.toastsEnabled,
+    frequency:
+      preferences.frequency === "minimal" || preferences.frequency === "all"
+        ? preferences.frequency
+        : DEFAULT_NOTIFICATION_PREFERENCES.frequency,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object";
 }
 
 function normalizeManagedUserSummary(user: {

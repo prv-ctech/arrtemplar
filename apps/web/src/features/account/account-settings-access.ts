@@ -1,15 +1,12 @@
-import type { PublicUser } from "@arrtemplar/shared";
+import { hasPermissionGrant, type PublicUser, type UserPermission } from "@arrtemplar/shared";
 import type { AccountSettingsPage } from "./account-settings-types";
 
-const allowedAccountSettingsPages = new Set<AccountSettingsPage>([
-  "main",
-  "password",
-  "notifications",
-]);
+const accountSettingsPagePermissions = {
+  main: "profile:update",
+  password: "profile:password",
+  notifications: "profile:notifications",
+} satisfies Record<AccountSettingsPage, UserPermission>;
 
-export function canAccessAccountSettingsPage(
-  _user: PublicUser,
-  page: AccountSettingsPage,
-): boolean {
-  return allowedAccountSettingsPages.has(page);
+export function canAccessAccountSettingsPage(user: PublicUser, page: AccountSettingsPage): boolean {
+  return hasPermissionGrant(user.permissions, accountSettingsPagePermissions[page]);
 }

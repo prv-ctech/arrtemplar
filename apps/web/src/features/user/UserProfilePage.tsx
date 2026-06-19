@@ -8,10 +8,10 @@ import { GearSixIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Navigate, useParams } from "@tanstack/react-router";
 import type { ComponentProps, ReactNode } from "react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { authQueryKey, canManageUsers, hasRequiredPermission } from "@/features/auth/auth-state";
+import { notify } from "@/features/notifications/notification-gateway";
 import {
   getProfileAvatarOption,
   getProfileBannerOption,
@@ -462,10 +462,22 @@ export function PersonalProfileRoute() {
     onSuccess: async (updatedProfile) => {
       syncUpdatedUserProfileCaches(queryClient, updatedProfile);
       await queryClient.invalidateQueries({ queryKey: authQueryKey });
-      toast.success("Profile media updated.");
+      notify(
+        {
+          id: "profile.media.updated",
+          title: "Profile media updated.",
+        },
+        updatedProfile.notificationPreferences,
+      );
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Profile media update failed.");
+      notify(
+        {
+          id: "profile.media.failed",
+          title: error instanceof Error ? error.message : "Profile media update failed.",
+        },
+        user.notificationPreferences,
+      );
     },
   });
 
@@ -542,10 +554,22 @@ function ManagedUserProfileDashboard({
     }) => updateManagedUserProfile(publicUserId, createProfileMediaUpdate(avatarId, bannerId)),
     onSuccess: (updatedUser) => {
       queryClient.setQueryData(managedUserProfileQueryKey(publicUserId), updatedUser);
-      toast.success("Profile media updated.");
+      notify(
+        {
+          id: "managed_user.media.updated",
+          title: "Profile media updated.",
+        },
+        actor.notificationPreferences,
+      );
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Profile media update failed.");
+      notify(
+        {
+          id: "managed_user.media.failed",
+          title: error instanceof Error ? error.message : "Profile media update failed.",
+        },
+        actor.notificationPreferences,
+      );
     },
   });
 

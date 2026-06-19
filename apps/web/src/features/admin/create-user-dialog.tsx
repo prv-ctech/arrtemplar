@@ -1,5 +1,5 @@
+import type { NotificationPreferences } from "@arrtemplar/shared";
 import type { FormEvent } from "react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,14 +10,20 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { notify } from "@/features/notifications/notification-gateway";
 import { useCreateUserMutation } from "./admin-users";
 
 type CreateUserDialogProps = {
+  notificationPreferences: NotificationPreferences;
   onOpenChange: (open: boolean) => void;
   open: boolean;
 };
 
-export function CreateUserDialog({ onOpenChange, open }: CreateUserDialogProps) {
+export function CreateUserDialog({
+  notificationPreferences,
+  onOpenChange,
+  open,
+}: CreateUserDialogProps) {
   const createUserMutation = useCreateUserMutation();
 
   function handleCreateUser(event: FormEvent<HTMLFormElement>) {
@@ -33,10 +39,22 @@ export function CreateUserDialog({ onOpenChange, open }: CreateUserDialogProps) 
       {
         onSuccess: () => {
           onOpenChange(false);
-          toast.success("User created.");
+          notify(
+            {
+              id: "users.created",
+              title: "User created.",
+            },
+            notificationPreferences,
+          );
         },
         onError: (error) => {
-          toast.error(error instanceof Error ? error.message : "User creation failed.");
+          notify(
+            {
+              id: "users.create.failed",
+              title: error instanceof Error ? error.message : "User creation failed.",
+            },
+            notificationPreferences,
+          );
         },
       },
     );

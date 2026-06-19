@@ -11,6 +11,7 @@ import { sessions, userPermissionGrants, users } from "../../../../../apps/serve
 import {
   CSRF_HEADER_NAME,
   CSRF_HEADER_VALUE,
+  DEFAULT_NOTIFICATION_PREFERENCES,
   DEFAULT_PROFILE_AVATAR_ID,
   DEFAULT_PROFILE_BANNER_ID,
   DEFAULT_SIGNED_IN_USER_PERMISSIONS,
@@ -69,6 +70,7 @@ describe("auth routes", () => {
         email: "owner@example.local",
         avatarId: DEFAULT_PROFILE_AVATAR_ID,
         bannerId: DEFAULT_PROFILE_BANNER_ID,
+        notificationPreferences: DEFAULT_NOTIFICATION_PREFERENCES,
         permissions: [...USER_PERMISSION_VALUES],
         createdAt: expect.any(String),
         lastLoginAt: null,
@@ -138,6 +140,7 @@ describe("auth routes", () => {
         email: "viewer@example.local",
         avatarId: DEFAULT_PROFILE_AVATAR_ID,
         bannerId: DEFAULT_PROFILE_BANNER_ID,
+        notificationPreferences: DEFAULT_NOTIFICATION_PREFERENCES,
         permissions: [...DEFAULT_SIGNED_IN_USER_PERMISSIONS],
         createdAt: expect.any(String),
         lastLoginAt: expect.any(String),
@@ -178,6 +181,7 @@ describe("auth routes", () => {
     for (const listedUser of managerBody.users) {
       expect("email" in listedUser).toBe(false);
       expect("lastLoginAt" in listedUser).toBe(false);
+      expect("notificationPreferences" in listedUser).toBe(false);
       expect("role" in listedUser).toBe(false);
       expect("passwordHash" in listedUser).toBe(false);
     }
@@ -278,6 +282,7 @@ describe("auth routes", () => {
       email: "viewer@example.local",
       permissions: [...DEFAULT_SIGNED_IN_USER_PERMISSIONS],
     });
+    expect("notificationPreferences" in profileBody.user).toBe(false);
 
     const updateResponse = await app.handle(
       csrfJsonPutRequest(
@@ -599,6 +604,64 @@ describe("auth routes", () => {
     await expectPasswordReplaced(app, "reader@example.local", "new-secure-password");
   });
 
+  it("returns and updates the signed-in user's notification preferences", async () => {
+    const { app, database } = await createAuthTestApp();
+    const viewerCookie = await loginAndReadCookie(app, "viewer@example.local");
+
+    const defaultResponse = await app.handle(
+      new Request("http://localhost/api/profile/notifications", {
+        headers: { cookie: viewerCookie },
+      }),
+    );
+    const defaultBody = await defaultResponse.json();
+
+    expect(defaultResponse.status).toBe(200);
+    expect(defaultBody).toEqual({ notificationPreferences: DEFAULT_NOTIFICATION_PREFERENCES });
+
+    const updateResponse = await app.handle(
+      csrfJsonPutRequest(
+        "/api/profile/notifications",
+        { toastsEnabled: false, frequency: "minimal" },
+        { cookie: viewerCookie },
+      ),
+    );
+    const updateBody = await updateResponse.json();
+
+    expect(updateResponse.status).toBe(200);
+    expect(updateBody).toEqual({
+      notificationPreferences: { toastsEnabled: false, frequency: "minimal" },
+    });
+    expect(requireStoredUserByEmail(database, "viewer@example.local")).toMatchObject({
+      toastNotificationsEnabled: false,
+      toastNotificationFrequency: "minimal",
+    });
+
+    const meResponse = await app.handle(
+      new Request("http://localhost/api/auth/me", { headers: { cookie: viewerCookie } }),
+    );
+    const meBody = await meResponse.json();
+
+    expect(meResponse.status).toBe(200);
+    expect(meBody.user.notificationPreferences).toEqual({
+      toastsEnabled: false,
+      frequency: "minimal",
+    });
+
+    const invalidResponse = await app.handle(
+      csrfJsonPutRequest(
+        "/api/profile/notifications",
+        { toastsEnabled: true, frequency: "loud" },
+        { cookie: viewerCookie },
+      ),
+    );
+    const anonymousResponse = await app.handle(
+      new Request("http://localhost/api/profile/notifications"),
+    );
+
+    expect(invalidResponse.status).toBe(422);
+    expect(anonymousResponse.status).toBe(401);
+  });
+
   it("stores only predetermined profile avatar and banner selections", async () => {
     const { app, database } = await createAuthTestApp();
     const viewerCookie = await loginAndReadCookie(app, "viewer@example.local");
@@ -710,6 +773,8 @@ async function insertTestUser(
       username: input.username,
       email: input.email,
       passwordHash: await hashPassword(input.password),
+      toastNotificationsEnabled: DEFAULT_NOTIFICATION_PREFERENCES.toastsEnabled,
+      toastNotificationFrequency: DEFAULT_NOTIFICATION_PREFERENCES.frequency,
       disabledAt: null,
       createdAt: now,
       updatedAt: now,

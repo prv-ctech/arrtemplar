@@ -8,6 +8,7 @@ import {
   type ChangePasswordResponse,
   type CreateAdminRequest,
   type CreateLocalUserRequest,
+  DEFAULT_NOTIFICATION_PREFERENCES,
   DEFAULT_PROFILE_AVATAR_ID,
   DEFAULT_PROFILE_BANNER_ID,
   DEFAULT_SIGNED_IN_USER_PERMISSIONS,
@@ -18,9 +19,13 @@ import {
   type LoginRequest,
   type ManagedUserProfile,
   type ManagedUserSummary,
+  NOTIFICATION_FREQUENCY_VALUES,
+  type NotificationFrequency,
+  type NotificationPreferences,
   type PublicUser,
   SYSTEM_ADMIN_PERMISSION,
   type UpdateManagedUserProfileRequest,
+  type UpdateNotificationPreferencesRequest,
   type UpdateUserProfileRequest,
   USER_PERMISSION_VALUES,
   type UserPermission,
@@ -106,6 +111,21 @@ type UserProfileFailure = {
 };
 
 type UserProfileResult = UserProfileSuccess | UserProfileFailure;
+
+type NotificationPreferencesSuccess = {
+  ok: true;
+  notificationPreferences: NotificationPreferences;
+};
+
+type NotificationPreferencesFailure = {
+  ok: false;
+  status: 401;
+  body: ApiErrorResponse;
+};
+
+type NotificationPreferencesResult =
+  | NotificationPreferencesSuccess
+  | NotificationPreferencesFailure;
 
 type UpdateUserProfileFailure = {
   ok: false;
@@ -629,6 +649,66 @@ export class AuthService {
     return { ok: true, user };
   }
 
+  getNotificationPreferences(sessionToken: string | null): NotificationPreferencesResult {
+    const currentSession = this.findSession(sessionToken);
+
+    if (!currentSession) {
+      return { ok: false, status: 401, body: unauthenticatedError };
+    }
+
+    return {
+      ok: true,
+      notificationPreferences: toNotificationPreferences(currentSession.user),
+    };
+  }
+
+  updateNotificationPreferences(
+    sessionToken: string | null,
+    input: UpdateNotificationPreferencesRequest,
+    context: AuthRequestContext,
+  ): NotificationPreferencesResult {
+    const currentSession = this.findSession(sessionToken);
+
+    if (!currentSession) {
+      return { ok: false, status: 401, body: unauthenticatedError };
+    }
+
+    const now = new Date().toISOString();
+
+    this.database.db
+      .update(users)
+      .set({
+        toastNotificationsEnabled: input.toastsEnabled,
+        toastNotificationFrequency: input.frequency,
+        updatedAt: now,
+      })
+      .where(eq(users.id, currentSession.user.id))
+      .run();
+
+    const updatedUser = this.database.db
+      .select()
+      .from(users)
+      .where(eq(users.id, currentSession.user.id))
+      .get();
+
+    if (!updatedUser) {
+      return { ok: false, status: 401, body: unauthenticatedError };
+    }
+
+    const notificationPreferences = toNotificationPreferences(updatedUser);
+
+    this.writeAuditLog({
+      action: "profile.notifications.updated",
+      actorUserId: currentSession.user.id,
+      targetType: "user",
+      targetId: currentSession.user.id,
+      metadata: notificationPreferences,
+      ipAddress: context.ipAddress,
+    });
+
+    return { ok: true, notificationPreferences };
+  }
+
   updateUserProfile(
     sessionToken: string | null,
     input: UpdateUserProfileRequest,
@@ -1015,6 +1095,7 @@ function toPublicUser(user: User, permissions: UserPermission[]): PublicUser {
     email: user.email,
     avatarId: isProfileAvatarId(user.avatarId) ? user.avatarId : DEFAULT_PROFILE_AVATAR_ID,
     bannerId: isProfileBannerId(user.bannerId) ? user.bannerId : DEFAULT_PROFILE_BANNER_ID,
+    notificationPreferences: toNotificationPreferences(user),
     permissions,
     createdAt: user.createdAt,
     lastLoginAt: user.lastLoginAt,
@@ -1040,6 +1121,19 @@ function toManagedUserProfile(user: User, permissions: UserPermission[]): Manage
     bannerId: isProfileBannerId(user.bannerId) ? user.bannerId : DEFAULT_PROFILE_BANNER_ID,
     lastLoginAt: user.lastLoginAt,
   };
+}
+
+function toNotificationPreferences(user: User): NotificationPreferences {
+  return {
+    toastsEnabled: user.toastNotificationsEnabled,
+    frequency: isNotificationFrequency(user.toastNotificationFrequency)
+      ? user.toastNotificationFrequency
+      : DEFAULT_NOTIFICATION_PREFERENCES.frequency,
+  };
+}
+
+function isNotificationFrequency(value: string): value is NotificationFrequency {
+  return NOTIFICATION_FREQUENCY_VALUES.some((frequency) => frequency === value);
 }
 
 function readManagedTargetUser(tx: DatabaseTransaction, targetUserId: string): User | null {
@@ -1232,6 +1326,8 @@ async function createUserRecord(
     email: normalizeEmail(input.email),
     avatarId: DEFAULT_PROFILE_AVATAR_ID,
     bannerId: DEFAULT_PROFILE_BANNER_ID,
+    toastNotificationsEnabled: DEFAULT_NOTIFICATION_PREFERENCES.toastsEnabled,
+    toastNotificationFrequency: DEFAULT_NOTIFICATION_PREFERENCES.frequency,
     passwordHash: await hashPassword(input.password),
     disabledAt: null,
     createdAt: now.toISOString(),

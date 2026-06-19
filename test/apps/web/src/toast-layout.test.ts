@@ -13,6 +13,7 @@ describe("toast layout", () => {
     expect(source).toContain("<Toaster");
     expect(source).toContain("closeButton");
     expect(source).toContain("richColors");
+    expect(source.match(/<Toaster/g)).toHaveLength(1);
   });
 
   it("maps Sonner rich colors to app pastel status tokens", async () => {

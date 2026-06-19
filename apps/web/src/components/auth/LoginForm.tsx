@@ -3,13 +3,13 @@ import { CaretRightIcon } from "@phosphor-icons/react";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { type ComponentProps, type FormEvent, useId, useState } from "react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { type AuthMode, resolveAuthMode } from "@/features/auth/auth-mode";
 import { getLandingPathForUser } from "@/features/auth/auth-navigation";
 import { authQueryKey, authSetupQueryKey, useAuthSetupQuery } from "@/features/auth/auth-state";
+import { notify } from "@/features/notifications/notification-gateway";
 import { createInitialAdmin, login } from "@/lib/api";
 import { ApiClientError } from "@/lib/api-error";
 import { queryClient } from "@/lib/query-client";
@@ -73,7 +73,13 @@ function useAuthFormController() {
     mutationFn: login,
     onSuccess: ({ user }) => {
       queryClient.setQueryData(authQueryKey, user);
-      toast.success(`Signed in as ${user.username}.`);
+      notify(
+        {
+          id: "auth.signed_in",
+          title: `Signed in as ${user.username}.`,
+        },
+        user.notificationPreferences,
+      );
       navigate({ to: getLandingPathForUser(user) });
     },
   });
@@ -82,7 +88,13 @@ function useAuthFormController() {
     onSuccess: ({ user }) => {
       queryClient.setQueryData(authQueryKey, user);
       queryClient.setQueryData(authSetupQueryKey, { required: false });
-      toast.success(`Admin account created for ${user.username}.`);
+      notify(
+        {
+          id: "auth.admin.created",
+          title: `Admin account created for ${user.username}.`,
+        },
+        user.notificationPreferences,
+      );
       navigate({ to: getLandingPathForUser(user) });
     },
   });

@@ -33,6 +33,17 @@ describe("user profile api client", () => {
     expect(source).toContain("export async function changePassword");
     expect(source).toContain("api.api.profile.password.put(input)");
   });
+
+  it("normalizes notification preferences on public user payloads", async () => {
+    const source = await Bun.file(apiSourcePath).text();
+
+    expect(source).toContain("NotificationPreferences");
+    expect(source).toContain("DEFAULT_NOTIFICATION_PREFERENCES");
+    expect(source).toContain("normalizeNotificationPreferences");
+    expect(source).toContain(
+      "notificationPreferences: normalizeNotificationPreferences(user.notificationPreferences)",
+    );
+  });
 });
 
 describe("permission api client", () => {

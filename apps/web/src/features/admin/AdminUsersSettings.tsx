@@ -1,7 +1,7 @@
 import type { AdminUserSummary } from "@arrtemplar/shared";
 import { useState } from "react";
-import { toast } from "sonner";
 import { canManageUsers, hasRequiredPermission } from "@/features/auth/auth-state";
+import { notify } from "@/features/notifications/notification-gateway";
 import { useAuthenticatedRouteUser } from "@/routes/authenticated-route-user";
 import {
   useDisableManagedUserMutation,
@@ -34,10 +34,22 @@ export function AdminUsersSettings() {
   function toggleUserStatus(user: AdminUserSummary) {
     const callbacks = {
       onSuccess: () => {
-        toast.success(user.disabledAt ? "User restored." : "User disabled.");
+        notify(
+          {
+            id: user.disabledAt ? "users.status.restored" : "users.status.disabled",
+            title: user.disabledAt ? "User restored." : "User disabled.",
+          },
+          actor.notificationPreferences,
+        );
       },
       onError: (error: unknown) => {
-        toast.error(error instanceof Error ? error.message : "Status update failed.");
+        notify(
+          {
+            id: "users.status.failed",
+            title: error instanceof Error ? error.message : "Status update failed.",
+          },
+          actor.notificationPreferences,
+        );
       },
     };
 
@@ -65,12 +77,18 @@ export function AdminUsersSettings() {
         rows={rows}
       />
 
-      <CreateUserDialog onOpenChange={setIsCreateOpen} open={isCreateOpen} />
+      <CreateUserDialog
+        notificationPreferences={actor.notificationPreferences}
+        onOpenChange={setIsCreateOpen}
+        open={isCreateOpen}
+      />
       <ChangeUserPasswordDialog
+        notificationPreferences={actor.notificationPreferences}
         onClose={() => setPasswordDialogUser(null)}
         user={passwordDialogUser}
       />
       <EditUserPermissionsDialog
+        notificationPreferences={actor.notificationPreferences}
         onClose={() => setPermissionsDialogUser(null)}
         user={permissionsDialogUser}
       />

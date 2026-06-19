@@ -1,4 +1,8 @@
-import type { PublicUser } from "@arrtemplar/shared";
+import type {
+  NotificationFrequency,
+  NotificationPreferences,
+  PublicUser,
+} from "@arrtemplar/shared";
 import {
   BellIcon,
   CaretDownIcon,
@@ -8,19 +12,24 @@ import {
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { type FormEvent, useId, useRef, useState } from "react";
-import { toast } from "sonner";
+import { type ChangeEvent, type FormEvent, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { authQueryKey } from "@/features/auth/auth-state";
+import { notify } from "@/features/notifications/notification-gateway";
+import {
+  useNotificationPreferencesQuery,
+  useUpdateNotificationPreferencesMutation,
+} from "@/features/notifications/notification-preferences";
 import { changePassword, getUserProfile, updateUserProfile } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useAuthenticatedRouteUser } from "@/routes/authenticated-route-user";
 import { type SettingsEntry, SettingsNav } from "../settings/SettingsNav";
 import { SettingsPanel, SettingsRow, SettingsSection } from "../settings/SettingsPrimitives";
 import { ThemePreviewStrip } from "../theme/ThemePreviewStrip";
-import type { AppTheme, ThemePack } from "../theme/theme-options";
+import { type AppTheme, getThemeOption, type ThemePack } from "../theme/theme-options";
 import { useTheme } from "../theme/theme-state";
 import { syncUpdatedUserProfileCaches, userProfileQueryKey } from "../user/user-profile-cache";
 import { canAccessAccountSettingsPage } from "./account-settings-access";
@@ -79,10 +88,22 @@ function MainSettings({ user }: { user: PublicUser }) {
         queryClient.invalidateQueries({ queryKey: userProfileQueryKey }),
         queryClient.invalidateQueries({ queryKey: authQueryKey }),
       ]);
-      toast.success("Profile updated.");
+      notify(
+        {
+          id: "profile.identity.updated",
+          title: "Profile updated.",
+        },
+        updatedProfile.notificationPreferences,
+      );
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Profile update failed.");
+      notify(
+        {
+          id: "profile.identity.update.failed",
+          title: error instanceof Error ? error.message : "Profile update failed.",
+        },
+        profile.notificationPreferences,
+      );
     },
   });
 
@@ -94,7 +115,13 @@ function MainSettings({ user }: { user: PublicUser }) {
     const email = String(formData.get("email") ?? "").trim();
 
     if (username === profile.username && email === profile.email) {
-      toast.message("Profile is already up to date.");
+      notify(
+        {
+          id: "profile.noop",
+          title: "Profile is already up to date.",
+        },
+        profile.notificationPreferences,
+      );
       return;
     }
 
@@ -154,18 +181,44 @@ function MainSettings({ user }: { user: PublicUser }) {
   );
 }
 
-function PasswordSettings() {
+function PasswordSettings({ user }: { user: PublicUser }) {
+  const controls = usePasswordSettingsControls(user);
+
+  return (
+    <form className="space-y-5" onSubmit={controls.handleSubmit} ref={controls.formRef}>
+      <PasswordFieldSection />
+      <PasswordMismatchAlert message={controls.passwordMismatchError} />
+      <PasswordSubmitButton isPending={controls.isPending} />
+    </form>
+  );
+}
+
+function usePasswordSettingsControls(user: PublicUser) {
   const queryClient = useQueryClient();
-  const passwordFormRef = useRef<HTMLFormElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const [passwordMismatchError, setPasswordMismatchError] = useState<string | null>(null);
   const passwordMutation = useMutation({
     mutationFn: changePassword,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: authQueryKey });
-      passwordFormRef.current?.reset();
-      toast.success("Password updated.");
+      formRef.current?.reset();
+      setPasswordMismatchError(null);
+      notify(
+        {
+          id: "profile.password.changed",
+          title: "Password updated.",
+        },
+        user.notificationPreferences,
+      );
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Password update failed.");
+      notify(
+        {
+          id: "profile.password.update.failed",
+          title: error instanceof Error ? error.message : "Password update failed.",
+        },
+        user.notificationPreferences,
+      );
     },
   });
 
@@ -178,77 +231,363 @@ function PasswordSettings() {
     const confirmPassword = String(formData.get("confirmPassword") ?? "");
 
     if (newPassword !== confirmPassword) {
-      toast.error("New password and confirmation do not match.");
+      const message = "New password and confirmation do not match.";
+
+      setPasswordMismatchError(message);
+      notify(
+        {
+          id: "profile.password.mismatch",
+          title: message,
+        },
+        user.notificationPreferences,
+      );
       return;
     }
 
+    setPasswordMismatchError(null);
     passwordMutation.mutate({ currentPassword, newPassword });
   }
 
-  return (
-    <form className="space-y-5" onSubmit={handlePasswordSubmit} ref={passwordFormRef}>
-      <SettingsSection
-        description="Use your current password to authorize password changes."
-        title="Password"
-      >
-        <SettingsRow controlId="profile-current-password" label="Current password">
-          <Input
-            autoComplete="current-password"
-            className="sm:max-w-72"
-            id="profile-current-password"
-            name="currentPassword"
-            required
-            type="password"
-          />
-        </SettingsRow>
-        <SettingsRow controlId="profile-new-password" label="New password">
-          <Input
-            autoComplete="new-password"
-            className="sm:max-w-72"
-            id="profile-new-password"
-            name="newPassword"
-            required
-            type="password"
-          />
-        </SettingsRow>
-        <SettingsRow controlId="profile-confirm-password" label="Confirm new password">
-          <Input
-            autoComplete="new-password"
-            className="sm:max-w-72"
-            id="profile-confirm-password"
-            name="confirmPassword"
-            required
-            type="password"
-          />
-        </SettingsRow>
-      </SettingsSection>
+  return {
+    formRef,
+    handleSubmit: handlePasswordSubmit,
+    isPending: passwordMutation.isPending,
+    passwordMismatchError,
+  };
+}
 
-      <div className="flex justify-end">
-        <Button disabled={passwordMutation.isPending} type="submit">
-          {passwordMutation.isPending ? "Updating password" : "Update password"}
-        </Button>
-      </div>
-    </form>
+function PasswordFieldSection() {
+  return (
+    <SettingsSection
+      description="Use your current password to authorize password changes."
+      title="Password"
+    >
+      <SettingsRow controlId="profile-current-password" label="Current password">
+        <Input
+          autoComplete="current-password"
+          className="sm:max-w-72"
+          id="profile-current-password"
+          name="currentPassword"
+          required
+          type="password"
+        />
+      </SettingsRow>
+      <SettingsRow controlId="profile-new-password" label="New password">
+        <Input
+          autoComplete="new-password"
+          className="sm:max-w-72"
+          id="profile-new-password"
+          name="newPassword"
+          required
+          type="password"
+        />
+      </SettingsRow>
+      <SettingsRow controlId="profile-confirm-password" label="Confirm new password">
+        <Input
+          autoComplete="new-password"
+          className="sm:max-w-72"
+          id="profile-confirm-password"
+          name="confirmPassword"
+          required
+          type="password"
+        />
+      </SettingsRow>
+    </SettingsSection>
   );
 }
 
-function NotificationSettings() {
+function PasswordMismatchAlert({ message }: { message: string | null }) {
+  return message ? (
+    <p className="text-sm text-destructive" role="alert">
+      {message}
+    </p>
+  ) : null;
+}
+
+function PasswordSubmitButton({ isPending }: { isPending: boolean }) {
   return (
-    <Card className="border-dashed bg-card/54 shadow-(--shadow-soft)">
-      <CardHeader>
-        <CardTitle>Personal notifications</CardTitle>
-        <CardDescription>
-          Notification delivery preferences for the signed-in user will live here.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm leading-6 text-muted-foreground">
-          App-wide notification channels belong under top-level settings. This page is reserved for
-          self-service notification preferences.
-        </p>
-      </CardContent>
-    </Card>
+    <div className="flex justify-end">
+      <Button disabled={isPending} type="submit">
+        {isPending ? "Updating password" : "Update password"}
+      </Button>
+    </div>
   );
+}
+
+const notificationFrequencyOptions = [
+  {
+    value: "all",
+    label: "All notifications",
+    description: "Show standard confirmations plus warnings and errors.",
+  },
+  {
+    value: "minimal",
+    label: "Minimal — important only",
+    description: "Show only important, warning, and error toasts.",
+  },
+] satisfies Array<{
+  value: NotificationFrequency;
+  label: string;
+  description: string;
+}>;
+
+function NotificationSettings({ user }: { user: PublicUser }) {
+  const controls = useNotificationSettingsControls(user);
+
+  return (
+    <div className="space-y-5">
+      <SettingsSection
+        description="Choose how toast messages appear while you use Arrtemplar."
+        title="Personal notifications"
+      >
+        <NotificationToastToggleRow
+          isSaving={controls.isSaving}
+          onToastsEnabledChange={controls.saveToastsEnabled}
+          preferences={controls.preferences}
+          statusId={controls.statusId}
+        />
+
+        <NotificationFrequencyRow
+          isDisabled={controls.isFrequencyDisabled}
+          onFrequencyChange={controls.saveFrequency}
+          preferences={controls.preferences}
+        />
+      </SettingsSection>
+
+      <NotificationSettingsStatus
+        errorMessage={controls.errorMessage}
+        isRefreshing={controls.isRefreshing}
+        isSaving={controls.isSaving}
+        saveMessage={controls.saveMessage}
+        statusId={controls.statusId}
+      />
+    </div>
+  );
+}
+
+function useNotificationSettingsControls(user: PublicUser) {
+  const statusId = useId();
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const preferencesQuery = useNotificationPreferencesQuery(user.notificationPreferences);
+  const preferencesMutation = useUpdateNotificationPreferencesMutation();
+  const preferences =
+    preferencesMutation.variables ?? preferencesQuery.data ?? user.notificationPreferences;
+  const error = preferencesMutation.error ?? preferencesQuery.error;
+  const isSaving = preferencesMutation.isPending;
+  const isRefreshing = preferencesQuery.isFetching && !isSaving;
+  const isFrequencyDisabled = isSaving || !preferences.toastsEnabled;
+  const errorMessage = error ? getNotificationSettingsErrorMessage(error) : null;
+
+  function savePreferences(nextPreferences: NotificationPreferences) {
+    setSaveMessage(null);
+    preferencesMutation.mutate(nextPreferences, {
+      onSuccess: () => setSaveMessage("Notification preferences saved."),
+    });
+  }
+
+  function saveToastsEnabled(toastsEnabled: boolean) {
+    savePreferences({ ...preferences, toastsEnabled });
+  }
+
+  function saveFrequency(frequency: NotificationFrequency) {
+    savePreferences({ ...preferences, frequency });
+  }
+
+  return {
+    errorMessage,
+    isFrequencyDisabled,
+    isRefreshing,
+    isSaving,
+    preferences,
+    saveFrequency,
+    saveMessage,
+    saveToastsEnabled,
+    statusId,
+  };
+}
+
+function NotificationToastToggleRow({
+  isSaving,
+  onToastsEnabledChange,
+  preferences,
+  statusId,
+}: {
+  isSaving: boolean;
+  onToastsEnabledChange: (toastsEnabled: boolean) => void;
+  preferences: NotificationPreferences;
+  statusId: string;
+}) {
+  return (
+    <SettingsRow
+      controlId="notification-toasts-enabled"
+      description="Turn this off to suppress toast notifications. Inline errors still appear."
+      label="Toast notifications"
+    >
+      <label
+        className={cn(
+          "inline-flex min-w-32 cursor-pointer items-center justify-end gap-3 text-sm font-medium",
+          isSaving && "cursor-not-allowed opacity-60",
+        )}
+      >
+        <input
+          aria-describedby={statusId}
+          checked={preferences.toastsEnabled}
+          className="peer sr-only"
+          disabled={isSaving}
+          id="notification-toasts-enabled"
+          onChange={(event) => onToastsEnabledChange(event.currentTarget.checked)}
+          type="checkbox"
+        />
+        <span
+          aria-hidden="true"
+          className="relative h-6 w-10 rounded-full border border-border bg-muted transition-colors after:absolute after:top-0.5 after:left-0.5 after:size-5 after:rounded-full after:bg-background after:shadow-sm after:transition-transform peer-checked:border-primary/60 peer-checked:bg-primary peer-checked:after:translate-x-4"
+        />
+        <span className="text-foreground">{preferences.toastsEnabled ? "On" : "Off"}</span>
+      </label>
+    </SettingsRow>
+  );
+}
+
+function NotificationFrequencyRow({
+  isDisabled,
+  onFrequencyChange,
+  preferences,
+}: {
+  isDisabled: boolean;
+  onFrequencyChange: (frequency: NotificationFrequency) => void;
+  preferences: NotificationPreferences;
+}) {
+  return (
+    <SettingsRow
+      controlId="notification-frequency-all"
+      description="Minimal keeps account-security, warning, and error notifications only."
+      label="Toast frequency"
+    >
+      <fieldset className="grid w-full min-w-0 gap-2 sm:min-w-80" disabled={isDisabled}>
+        <legend className="sr-only">Toast frequency</legend>
+        {notificationFrequencyOptions.map((option) => (
+          <NotificationFrequencyOption
+            checked={preferences.frequency === option.value}
+            description={option.description}
+            disabled={isDisabled}
+            id={`notification-frequency-${option.value}`}
+            key={option.value}
+            label={option.label}
+            onChange={onFrequencyChange}
+            value={option.value}
+          />
+        ))}
+      </fieldset>
+    </SettingsRow>
+  );
+}
+
+function NotificationSettingsStatus({
+  errorMessage,
+  isRefreshing,
+  isSaving,
+  saveMessage,
+  statusId,
+}: {
+  errorMessage: string | null;
+  isRefreshing: boolean;
+  isSaving: boolean;
+  saveMessage: string | null;
+  statusId: string;
+}) {
+  return (
+    <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+      <div aria-live="polite" className="min-h-5 text-muted-foreground" id={statusId}>
+        {getNotificationStatusMessage({ isRefreshing, isSaving, saveMessage })}
+      </div>
+      {errorMessage ? (
+        <p className="text-destructive" role="alert">
+          {errorMessage}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function getNotificationStatusMessage({
+  isRefreshing,
+  isSaving,
+  saveMessage,
+}: {
+  isRefreshing: boolean;
+  isSaving: boolean;
+  saveMessage: string | null;
+}): string | null {
+  if (isSaving) {
+    return "Saving notification settings";
+  }
+
+  if (isRefreshing) {
+    return "Refreshing notification settings";
+  }
+
+  return saveMessage;
+}
+
+function NotificationFrequencyOption({
+  checked,
+  description,
+  disabled,
+  id,
+  label,
+  onChange,
+  value,
+}: {
+  checked: boolean;
+  description: string;
+  disabled: boolean;
+  id: string;
+  label: string;
+  onChange: (frequency: NotificationFrequency) => void;
+  value: NotificationFrequency;
+}) {
+  function handleChange(event: ChangeEvent<HTMLInputElement>) {
+    const nextFrequency = event.currentTarget.value;
+
+    if (isNotificationFrequency(nextFrequency)) {
+      onChange(nextFrequency);
+    }
+  }
+
+  return (
+    <label
+      className={cn(
+        "flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors",
+        checked
+          ? "border-primary/50 bg-primary/12 text-foreground"
+          : "border-border bg-card/72 text-muted-foreground hover:bg-accent hover:text-foreground",
+        disabled && "cursor-not-allowed opacity-60 hover:bg-card/72 hover:text-muted-foreground",
+      )}
+    >
+      <input
+        checked={checked}
+        className="mt-0.5 size-4 accent-primary"
+        disabled={disabled}
+        id={id}
+        name="notification-frequency"
+        onChange={handleChange}
+        type="radio"
+        value={value}
+      />
+      <span className="min-w-0">
+        <span className="block text-sm font-medium text-foreground">{label}</span>
+        <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">{description}</span>
+      </span>
+    </label>
+  );
+}
+
+function isNotificationFrequency(value: string): value is NotificationFrequency {
+  return value === "all" || value === "minimal";
+}
+
+function getNotificationSettingsErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Notification preferences update failed.";
 }
 
 function ThemePackCard({
@@ -403,12 +742,34 @@ function ThemeOptionButton({
 }
 
 export function ThemeSettings() {
+  const user = useAuthenticatedRouteUser();
   const { setTheme, theme, themePacks } = useTheme();
+
+  function handleThemeChange(nextTheme: AppTheme) {
+    if (nextTheme === theme) {
+      return;
+    }
+
+    setTheme(nextTheme);
+    notify(
+      {
+        id: "theme.changed",
+        title: "Theme changed.",
+        description: getThemeOption(nextTheme).label,
+      },
+      user.notificationPreferences,
+    );
+  }
 
   return (
     <div className="grid items-start gap-4 grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))]">
       {themePacks.map((pack) => (
-        <ThemePackCard key={pack.id} onThemeChange={setTheme} pack={pack} selectedTheme={theme} />
+        <ThemePackCard
+          key={pack.id}
+          onThemeChange={handleThemeChange}
+          pack={pack}
+          selectedTheme={theme}
+        />
       ))}
     </div>
   );
@@ -425,9 +786,9 @@ function ActiveSettingsPage({
     case "main":
       return <MainSettings user={user} />;
     case "password":
-      return <PasswordSettings />;
+      return <PasswordSettings user={user} />;
     case "notifications":
-      return <NotificationSettings />;
+      return <NotificationSettings user={user} />;
   }
 }
 

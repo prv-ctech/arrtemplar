@@ -1,12 +1,27 @@
 import type { PermissionCatalogEntry, UserPermission } from "./permissions";
 import type { ProfileAvatarId, ProfileBannerId } from "./profile-media";
 
+export const NOTIFICATION_FREQUENCY_VALUES = ["all", "minimal"] as const;
+
+export type NotificationFrequency = (typeof NOTIFICATION_FREQUENCY_VALUES)[number];
+
+export type NotificationPreferences = {
+  toastsEnabled: boolean;
+  frequency: NotificationFrequency;
+};
+
+export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
+  toastsEnabled: true,
+  frequency: "all",
+};
+
 export type PublicUser = {
   id: string;
   username: string;
   email: string;
   avatarId: ProfileAvatarId;
   bannerId: ProfileBannerId;
+  notificationPreferences: NotificationPreferences;
   permissions: UserPermission[];
   createdAt: string;
   lastLoginAt: string | null;
@@ -60,6 +75,8 @@ export type ChangePasswordRequest = {
   currentPassword: string;
   newPassword: string;
 };
+
+export type UpdateNotificationPreferencesRequest = NotificationPreferences;
 
 export type AdminChangeUserPasswordRequest = {
   password: string;
@@ -143,6 +160,12 @@ export type ProfileResponse = UserProfileResponse;
 export type UpdateUserProfileResponse = {
   user: PublicUser;
 };
+
+export type NotificationPreferencesResponse = {
+  notificationPreferences: NotificationPreferences;
+};
+
+export type UpdateNotificationPreferencesResponse = NotificationPreferencesResponse;
 
 export type UpdateManagedUserProfileResponse = ManagedUserProfileResponse;
 

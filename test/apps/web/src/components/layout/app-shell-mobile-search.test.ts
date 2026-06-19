@@ -50,4 +50,14 @@ describe("app shell primary navigation", () => {
     expect(source).toContain("pointer-events-none size-full rounded-full object-cover");
     expect(source).not.toContain("getAccountInitial(user.username)");
   });
+
+  it("keeps failed sign-out attempts on the current session", async () => {
+    const source = await Bun.file(appShellSourcePath).text();
+
+    expect(source).toContain("onSuccess: () =>");
+    expect(source).toContain("onError: (error) =>");
+    expect(source).toContain('id: "auth.signed_out"');
+    expect(source).toContain('id: "auth.sign_out.failed"');
+    expect(source).not.toContain("onSettled: () =>");
+  });
 });

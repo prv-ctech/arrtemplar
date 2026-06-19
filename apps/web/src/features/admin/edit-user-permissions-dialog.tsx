@@ -1,7 +1,11 @@
-import type { AdminUserSummary, PermissionCatalogEntry, UserPermission } from "@arrtemplar/shared";
+import type {
+  AdminUserSummary,
+  NotificationPreferences,
+  PermissionCatalogEntry,
+  UserPermission,
+} from "@arrtemplar/shared";
 import { CaretDownIcon } from "@phosphor-icons/react";
 import { useId, useState } from "react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -13,6 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
+import { notify } from "@/features/notifications/notification-gateway";
 import { cn } from "@/lib/utils";
 import { getExplicitPermissionSet, togglePermissionSelection } from "../user/permission-selection";
 import { usePermissionCatalogQuery, useUpdateManagedUserPermissionsMutation } from "./admin-users";
@@ -65,13 +70,18 @@ const presetButtonClassName = [
 ].join(" ");
 
 type EditUserPermissionsDialogProps = {
+  notificationPreferences: NotificationPreferences;
   onClose: () => void;
   user: AdminUserSummary | null;
 };
 
 type PermissionGroups = Map<PermissionCatalogEntry["category"], PermissionCatalogEntry[]>;
 
-export function EditUserPermissionsDialog({ onClose, user }: EditUserPermissionsDialogProps) {
+export function EditUserPermissionsDialog({
+  notificationPreferences,
+  onClose,
+  user,
+}: EditUserPermissionsDialogProps) {
   function handleOpenChange(open: boolean) {
     if (!open) {
       onClose();
@@ -80,15 +90,24 @@ export function EditUserPermissionsDialog({ onClose, user }: EditUserPermissions
 
   return (
     <Dialog onOpenChange={handleOpenChange} open={Boolean(user)}>
-      {user ? <EditUserPermissionsContent key={user.id} onClose={onClose} user={user} /> : null}
+      {user ? (
+        <EditUserPermissionsContent
+          key={user.id}
+          notificationPreferences={notificationPreferences}
+          onClose={onClose}
+          user={user}
+        />
+      ) : null}
     </Dialog>
   );
 }
 
 function EditUserPermissionsContent({
+  notificationPreferences,
   onClose,
   user,
 }: {
+  notificationPreferences: NotificationPreferences;
   onClose: () => void;
   user: AdminUserSummary;
 }) {
@@ -120,10 +139,22 @@ function EditUserPermissionsContent({
       {
         onSuccess: () => {
           onClose();
-          toast.success("Permissions updated.");
+          notify(
+            {
+              id: "users.permissions.updated",
+              title: "Permissions updated.",
+            },
+            notificationPreferences,
+          );
         },
         onError: (error) => {
-          toast.error(error instanceof Error ? error.message : "Permission update failed.");
+          notify(
+            {
+              id: "users.permissions.failed",
+              title: error instanceof Error ? error.message : "Permission update failed.",
+            },
+            notificationPreferences,
+          );
         },
       },
     );

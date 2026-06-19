@@ -1,13 +1,17 @@
-import type { AdminUpdateUserPermissionsRequest, UserPermission } from "@arrtemplar/shared";
+import type {
+  AdminUpdateUserPermissionsRequest,
+  PublicUser,
+  UserPermission,
+} from "@arrtemplar/shared";
 import { LockIcon, ShieldCheckIcon, UserCircleIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navigate, useNavigate, useParams } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useState } from "react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { usePermissionCatalogQuery } from "@/features/admin/admin-users";
 import { canManageUsers, hasRequiredPermission } from "@/features/auth/auth-state";
+import { notify } from "@/features/notifications/notification-gateway";
 import {
   changeManagedUserPassword,
   getManagedUserProfile,
@@ -76,7 +80,7 @@ function getSelfProfileSettingsRedirect(page: UserSettingsPage) {
   }
 }
 
-function UserIdentitySettings() {
+function UserIdentitySettings({ actor }: { actor: PublicUser }) {
   const { publicUserId } = useParams({ from: "/profile/$publicUserId/settings/main" });
   const queryClient = useQueryClient();
   const { data: user } = useQuery({
@@ -93,10 +97,22 @@ function UserIdentitySettings() {
     }) => updateManagedUserProfile(userId, input),
     onSuccess: async (updatedUser) => {
       queryClient.setQueryData(managedUserProfileQueryKey(publicUserId), updatedUser);
-      toast.success("Managed user updated.");
+      notify(
+        {
+          id: "managed_user.identity.updated",
+          title: "Managed user updated.",
+        },
+        actor.notificationPreferences,
+      );
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Managed user update failed.");
+      notify(
+        {
+          id: "managed_user.identity.failed",
+          title: error instanceof Error ? error.message : "Managed user update failed.",
+        },
+        actor.notificationPreferences,
+      );
     },
   });
 
@@ -142,7 +158,7 @@ function UserIdentitySettings() {
   );
 }
 
-function UserPasswordSettings() {
+function UserPasswordSettings({ actor }: { actor: PublicUser }) {
   const { publicUserId } = useParams({ from: "/profile/$publicUserId/settings/password" });
   const queryClient = useQueryClient();
   const mutation = useMutation({
@@ -150,10 +166,22 @@ function UserPasswordSettings() {
       changeManagedUserPassword(userId, input),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: managedUserProfileQueryKey(publicUserId) });
-      toast.success("Managed user password updated.");
+      notify(
+        {
+          id: "managed_user.password.changed",
+          title: "Managed user password updated.",
+        },
+        actor.notificationPreferences,
+      );
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Managed user password update failed.");
+      notify(
+        {
+          id: "managed_user.password.failed",
+          title: error instanceof Error ? error.message : "Managed user password update failed.",
+        },
+        actor.notificationPreferences,
+      );
     },
   });
 
@@ -186,7 +214,7 @@ function UserPasswordSettings() {
   );
 }
 
-function UserPermissionsSettings() {
+function UserPermissionsSettings({ actor }: { actor: PublicUser }) {
   const { publicUserId } = useParams({ from: "/profile/$publicUserId/settings/permissions" });
   const queryClient = useQueryClient();
   const { data: user } = useQuery({
@@ -206,11 +234,21 @@ function UserPermissionsSettings() {
           updatedAt: updatedUser.updatedAt,
         });
       }
-      toast.success("Managed user permissions updated.");
+      notify(
+        {
+          id: "managed_user.permissions.updated",
+          title: "Managed user permissions updated.",
+        },
+        actor.notificationPreferences,
+      );
     },
     onError: (error) => {
-      toast.error(
-        error instanceof Error ? error.message : "Managed user permission update failed.",
+      notify(
+        {
+          id: "managed_user.permissions.failed",
+          title: error instanceof Error ? error.message : "Managed user permission update failed.",
+        },
+        actor.notificationPreferences,
       );
     },
   });
@@ -301,7 +339,7 @@ export function UserSettings({ activePage }: { activePage: UserSettingsPage }) {
         onSelect={handlePageChange}
       />
       <SettingsPanel activeId={activePage}>
-        <ActiveUserSettingsPage activePage={activePage} />
+        <ActiveUserSettingsPage activePage={activePage} actor={actor} />
       </SettingsPanel>
     </div>
   );
@@ -326,13 +364,19 @@ function UnavailableUserSettingsPage() {
   );
 }
 
-function ActiveUserSettingsPage({ activePage }: { activePage: UserSettingsPage }) {
+function ActiveUserSettingsPage({
+  activePage,
+  actor,
+}: {
+  activePage: UserSettingsPage;
+  actor: PublicUser;
+}) {
   switch (activePage) {
     case "main":
-      return <UserIdentitySettings />;
+      return <UserIdentitySettings actor={actor} />;
     case "password":
-      return <UserPasswordSettings />;
+      return <UserPasswordSettings actor={actor} />;
     case "permissions":
-      return <UserPermissionsSettings />;
+      return <UserPermissionsSettings actor={actor} />;
   }
 }

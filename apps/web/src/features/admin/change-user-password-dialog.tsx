@@ -1,6 +1,5 @@
-import type { AdminUserSummary } from "@arrtemplar/shared";
+import type { AdminUserSummary, NotificationPreferences } from "@arrtemplar/shared";
 import type { FormEvent } from "react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,14 +10,20 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { notify } from "@/features/notifications/notification-gateway";
 import { useChangeManagedUserPasswordMutation } from "./admin-users";
 
 type ChangeUserPasswordDialogProps = {
+  notificationPreferences: NotificationPreferences;
   onClose: () => void;
   user: AdminUserSummary | null;
 };
 
-export function ChangeUserPasswordDialog({ onClose, user }: ChangeUserPasswordDialogProps) {
+export function ChangeUserPasswordDialog({
+  notificationPreferences,
+  onClose,
+  user,
+}: ChangeUserPasswordDialogProps) {
   const changePasswordMutation = useChangeManagedUserPasswordMutation();
 
   function handleOpenChange(open: boolean) {
@@ -42,10 +47,22 @@ export function ChangeUserPasswordDialog({ onClose, user }: ChangeUserPasswordDi
       {
         onSuccess: () => {
           onClose();
-          toast.success("Password updated.");
+          notify(
+            {
+              id: "users.password.changed",
+              title: "Password updated.",
+            },
+            notificationPreferences,
+          );
         },
         onError: (error) => {
-          toast.error(error instanceof Error ? error.message : "Password update failed.");
+          notify(
+            {
+              id: "users.password.failed",
+              title: error instanceof Error ? error.message : "Password update failed.",
+            },
+            notificationPreferences,
+          );
         },
       },
     );

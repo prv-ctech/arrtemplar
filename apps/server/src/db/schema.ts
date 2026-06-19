@@ -1,10 +1,11 @@
 import {
   DEFAULT_PROFILE_AVATAR_ID,
   DEFAULT_PROFILE_BANNER_ID,
+  NOTIFICATION_FREQUENCY_VALUES,
   USER_PERMISSION_VALUES,
 } from "@arrtemplar/shared";
 import { type InferInsertModel, type InferSelectModel, sql } from "drizzle-orm";
-import { index, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 const timestampNow = sql<string>`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`;
 
@@ -12,6 +13,10 @@ export const userPermissions = USER_PERMISSION_VALUES;
 const userPermissionEnum = [...userPermissions] as [
   (typeof userPermissions)[number],
   ...(typeof userPermissions)[number][],
+];
+const notificationFrequencyEnum = [...NOTIFICATION_FREQUENCY_VALUES] as [
+  (typeof NOTIFICATION_FREQUENCY_VALUES)[number],
+  ...(typeof NOTIFICATION_FREQUENCY_VALUES)[number][],
 ];
 
 export const users = sqliteTable(
@@ -23,6 +28,14 @@ export const users = sqliteTable(
     email: text("email").notNull(),
     avatarId: text("avatar_id").notNull().default(DEFAULT_PROFILE_AVATAR_ID),
     bannerId: text("banner_id").notNull().default(DEFAULT_PROFILE_BANNER_ID),
+    toastNotificationsEnabled: integer("toast_notifications_enabled", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    toastNotificationFrequency: text("toast_notification_frequency", {
+      enum: notificationFrequencyEnum,
+    })
+      .notNull()
+      .default("all"),
     passwordHash: text("password_hash").notNull(),
     disabledAt: text("disabled_at"),
     createdAt: text("created_at").notNull().default(timestampNow),

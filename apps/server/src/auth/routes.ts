@@ -8,8 +8,10 @@ import type {
   LogoutResponse,
   ManagedUserProfileResponse,
   ManagedUsersListResponse,
+  NotificationPreferencesResponse,
   PermissionCatalogResponse,
   PublicUser,
+  UpdateNotificationPreferencesResponse,
   UpdateUserProfileRequest,
   UpdateUserProfileResponse,
   UserProfileResponse,
@@ -18,6 +20,7 @@ import {
   isProfileAvatarId,
   isProfileBannerId,
   isUserPermission,
+  NOTIFICATION_FREQUENCY_VALUES,
   PERMISSION_CATALOG,
   PERMISSION_CATEGORIES,
   PERMISSION_DEFAULT_GRANTS,
@@ -77,6 +80,15 @@ const profileBannerIdSchema = t.Union(
     ...ReturnType<typeof t.Literal>[],
   ],
 );
+const notificationFrequencySchema = t.Union([
+  t.Literal(NOTIFICATION_FREQUENCY_VALUES[0]),
+  t.Literal(NOTIFICATION_FREQUENCY_VALUES[1]),
+]);
+
+const notificationPreferencesSchema = t.Object({
+  toastsEnabled: t.Boolean(),
+  frequency: notificationFrequencySchema,
+});
 
 const permissionRouteSchema = t.Object({
   surface: permissionRouteSurfaceSchema,
@@ -89,6 +101,7 @@ const publicUserSchema = t.Object({
   email: t.String({ format: "email" }),
   avatarId: profileAvatarIdSchema,
   bannerId: profileBannerIdSchema,
+  notificationPreferences: notificationPreferencesSchema,
   permissions: t.Array(userPermissionSchema),
   createdAt: t.String({ format: "date-time" }),
   lastLoginAt: t.Union([t.String({ format: "date-time" }), t.Null()]),
@@ -150,6 +163,8 @@ const changePasswordRequestSchema = t.Object({
   newPassword: t.String({ minLength: MIN_PASSWORD_LENGTH, maxLength: 1024 }),
 });
 
+const updateNotificationPreferencesRequestSchema = notificationPreferencesSchema;
+
 const managedUserParamsSchema = t.Object({
   publicUserId: publicUserIdSchema,
 });
@@ -179,6 +194,9 @@ const authSetupStatusResponseSchema = t.Object({ required: t.Boolean() });
 const authUserResponseSchema = t.Object({ user: t.Union([publicUserSchema, t.Null()]) });
 const userProfileResponseSchema = t.Object({ user: publicUserSchema });
 const updateUserProfileResponseSchema = t.Object({ user: publicUserSchema });
+const notificationPreferencesResponseSchema = t.Object({
+  notificationPreferences: notificationPreferencesSchema,
+});
 const logoutResponseSchema = t.Object({ status: t.Literal("ok") });
 const changePasswordResponseSchema = t.Object({ status: t.Literal("ok") });
 const sessionCookieSchema = t.Cookie({
@@ -342,6 +360,65 @@ function createProfileRoutes(authService: AuthService) {
         detail: {
           summary: "Get profile",
           description: "Returns the authenticated user's own profile.",
+          tags: ["Auth"],
+        },
+      },
+    )
+    .get(
+      "/profile/notifications",
+      ({ cookie, status }) => {
+        const result = authService.getNotificationPreferences(
+          readSessionToken(cookie[SESSION_COOKIE_NAME].value),
+        );
+
+        if (!result.ok) {
+          return status(result.status, result.body);
+        }
+
+        return {
+          notificationPreferences: result.notificationPreferences,
+        } satisfies NotificationPreferencesResponse;
+      },
+      {
+        cookie: sessionCookieSchema,
+        response: {
+          200: notificationPreferencesResponseSchema,
+          401: apiErrorResponseSchema,
+        },
+        detail: {
+          summary: "Get notification preferences",
+          description: "Returns the authenticated user's own toast notification preferences.",
+          tags: ["Auth"],
+        },
+      },
+    )
+    .put(
+      "/profile/notifications",
+      ({ body, cookie, request, status }) => {
+        const result = authService.updateNotificationPreferences(
+          readSessionToken(cookie[SESSION_COOKIE_NAME].value),
+          body,
+          createRequestContext(request),
+        );
+
+        if (!result.ok) {
+          return status(result.status, result.body);
+        }
+
+        return {
+          notificationPreferences: result.notificationPreferences,
+        } satisfies UpdateNotificationPreferencesResponse;
+      },
+      {
+        body: updateNotificationPreferencesRequestSchema,
+        cookie: sessionCookieSchema,
+        response: {
+          200: notificationPreferencesResponseSchema,
+          401: apiErrorResponseSchema,
+        },
+        detail: {
+          summary: "Update notification preferences",
+          description: "Replaces the authenticated user's own toast notification preferences.",
           tags: ["Auth"],
         },
       },
