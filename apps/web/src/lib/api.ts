@@ -7,14 +7,21 @@ import type {
   AuthSetupStatusResponse,
   ChangePasswordRequest,
   ChangePasswordResponse,
+  ClearNotificationHistoryResponse,
   CreateAdminRequest,
   CreateAdminResponse,
   CreateLocalUserRequest,
+  CreateNotificationHistoryRequest,
+  CreateNotificationHistoryResponse,
   HealthResponse,
   LoginRequest,
   LoginResponse,
   LogoutResponse,
   ManagedUserProfile,
+  MarkNotificationReadRequest,
+  MarkNotificationReadResponse,
+  NotificationHistoryItem,
+  NotificationHistoryListResponse,
   NotificationPreferences,
   PermissionCatalogEntry,
   PublicUser,
@@ -31,6 +38,9 @@ import {
   DEFAULT_PROFILE_BANNER_ID,
   isProfileAvatarId,
   isProfileBannerId,
+  isToastNotificationId,
+  isToastNotificationImportance,
+  isToastNotificationSeverity,
   isUserPermission,
   PERMISSION_CATALOG_BY_PERMISSION,
 } from "@arrtemplar/shared";
@@ -56,6 +66,11 @@ type EdenResult<T> = {
   data: T | null;
   error: unknown;
   status: number;
+};
+
+export type NotificationHistoryListParams = {
+  page?: number;
+  pageSize?: number;
 };
 
 export async function getHealth(): Promise<HealthResponse> {
@@ -118,6 +133,49 @@ export async function updateNotificationPreferences(
   );
 
   return normalizeNotificationPreferences(response.notificationPreferences);
+}
+
+export async function listNotificationHistory(
+  input: NotificationHistoryListParams = {},
+): Promise<NotificationHistoryListResponse> {
+  const response = unwrapData(
+    await api.api.profile.notifications.history.get({
+      query: normalizeNotificationHistoryQuery(input),
+    }),
+    "Notification history request failed.",
+  );
+
+  return normalizeNotificationHistoryListResponse(response);
+}
+
+export async function createNotificationHistory(
+  input: CreateNotificationHistoryRequest,
+): Promise<CreateNotificationHistoryResponse> {
+  const response = unwrapData(
+    await api.api.profile.notifications.history.post(input),
+    "Notification history creation failed.",
+  );
+
+  return { notification: normalizeNotificationHistoryItem(response.notification) };
+}
+
+export async function markNotificationRead(
+  notificationId: string,
+): Promise<MarkNotificationReadResponse> {
+  const request: MarkNotificationReadRequest = { read: true };
+  const response = unwrapData(
+    await api.api.profile.notifications.history({ notificationId }).patch(request),
+    "Notification history read update failed.",
+  );
+
+  return { notification: normalizeNotificationHistoryItem(response.notification) };
+}
+
+export async function clearNotificationHistory(): Promise<ClearNotificationHistoryResponse> {
+  return unwrapData(
+    await api.api.profile.notifications.history.delete(),
+    "Notification history clear failed.",
+  );
 }
 
 export async function changePassword(
@@ -282,8 +340,127 @@ function normalizeNotificationPreferences(value: unknown): NotificationPreferenc
   };
 }
 
+function normalizeNotificationHistoryQuery(
+  input: NotificationHistoryListParams,
+): NotificationHistoryListParams {
+  return {
+    ...(isPositiveInteger(input.page) ? { page: input.page } : {}),
+    ...(isPositiveInteger(input.pageSize) ? { pageSize: input.pageSize } : {}),
+  };
+}
+
+export function normalizeNotificationHistoryListResponse(
+  value: unknown,
+): NotificationHistoryListResponse {
+  if (!isRecord(value) || !Array.isArray(value.notifications) || !isRecord(value.pagination)) {
+    throwInvalidNotificationHistoryResponse();
+  }
+
+  return {
+    notifications: value.notifications.map(normalizeNotificationHistoryItem),
+    unreadCount: readNonNegativeNumber(value.unreadCount),
+    pagination: {
+      page: readPositiveNumber(value.pagination.page),
+      pageSize: readPositiveNumber(value.pagination.pageSize),
+      totalItems: readNonNegativeNumber(value.pagination.totalItems),
+      totalPages: readNonNegativeNumber(value.pagination.totalPages),
+    },
+  };
+}
+
+function normalizeNotificationHistoryItem(value: unknown): NotificationHistoryItem {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== "string" ||
+    !isToastNotificationId(value.eventId) ||
+    typeof value.title !== "string" ||
+    !isNullableString(value.description) ||
+    !isToastNotificationSeverity(value.severity) ||
+    !isToastNotificationImportance(value.importance) ||
+    !isNullableDateTime(value.readAt) ||
+    !isDateTime(value.createdAt)
+  ) {
+    throwInvalidNotificationHistoryResponse();
+  }
+
+  return {
+    id: value.id,
+    eventId: value.eventId,
+    title: value.title,
+    description: value.description,
+    severity: value.severity,
+    importance: value.importance,
+    readAt: normalizeNullableDateTime(value.readAt),
+    createdAt: normalizeDateTime(value.createdAt),
+  };
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0;
+}
+
+function readPositiveNumber(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 1) {
+    throwInvalidNotificationHistoryResponse();
+  }
+
+  return value;
+}
+
+function readNonNegativeNumber(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    throwInvalidNotificationHistoryResponse();
+  }
+
+  return value;
+}
+
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
+}
+
+const isoDateTimePattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
+
+function isDateTime(value: unknown): value is string | Date {
+  return (
+    (typeof value === "string" && isIsoDateTimeString(value)) ||
+    (value instanceof Date && !Number.isNaN(value.getTime()))
+  );
+}
+
+function isIsoDateTimeString(value: string): boolean {
+  if (!isoDateTimePattern.test(value)) {
+    return false;
+  }
+
+  const parsedDate = new Date(value);
+  const normalizedValue = value.includes(".") ? value : value.replace("Z", ".000Z");
+
+  return !Number.isNaN(parsedDate.getTime()) && parsedDate.toISOString() === normalizedValue;
+}
+
+function isNullableDateTime(value: unknown): value is string | Date | null {
+  return value === null || isDateTime(value);
+}
+
+function normalizeDateTime(value: string | Date): string {
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+}
+
+function normalizeNullableDateTime(value: string | Date | null): string | null {
+  return value === null ? null : normalizeDateTime(value);
+}
+
+function throwInvalidNotificationHistoryResponse(): never {
+  throw new ApiClientError(
+    "Notification history response was invalid.",
+    0,
+    "INVALID_NOTIFICATION_HISTORY_RESPONSE",
+  );
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object";
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function normalizeManagedUserSummary(user: {

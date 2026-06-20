@@ -2,6 +2,9 @@ import {
   DEFAULT_PROFILE_AVATAR_ID,
   DEFAULT_PROFILE_BANNER_ID,
   NOTIFICATION_FREQUENCY_VALUES,
+  TOAST_NOTIFICATION_EVENT_IDS,
+  TOAST_NOTIFICATION_IMPORTANCE_VALUES,
+  TOAST_NOTIFICATION_SEVERITY_VALUES,
   USER_PERMISSION_VALUES,
 } from "@arrtemplar/shared";
 import { type InferInsertModel, type InferSelectModel, sql } from "drizzle-orm";
@@ -17,6 +20,18 @@ const userPermissionEnum = [...userPermissions] as [
 const notificationFrequencyEnum = [...NOTIFICATION_FREQUENCY_VALUES] as [
   (typeof NOTIFICATION_FREQUENCY_VALUES)[number],
   ...(typeof NOTIFICATION_FREQUENCY_VALUES)[number][],
+];
+const toastNotificationIdEnum = [...TOAST_NOTIFICATION_EVENT_IDS] as [
+  (typeof TOAST_NOTIFICATION_EVENT_IDS)[number],
+  ...(typeof TOAST_NOTIFICATION_EVENT_IDS)[number][],
+];
+const toastNotificationSeverityEnum = [...TOAST_NOTIFICATION_SEVERITY_VALUES] as [
+  (typeof TOAST_NOTIFICATION_SEVERITY_VALUES)[number],
+  ...(typeof TOAST_NOTIFICATION_SEVERITY_VALUES)[number][],
+];
+const toastNotificationImportanceEnum = [...TOAST_NOTIFICATION_IMPORTANCE_VALUES] as [
+  (typeof TOAST_NOTIFICATION_IMPORTANCE_VALUES)[number],
+  ...(typeof TOAST_NOTIFICATION_IMPORTANCE_VALUES)[number][],
 ];
 
 export const users = sqliteTable(
@@ -46,6 +61,27 @@ export const users = sqliteTable(
     uniqueIndex("users_public_id_unique").on(table.publicId),
     uniqueIndex("users_username_unique").on(table.username),
     uniqueIndex("users_email_unique").on(table.email),
+  ],
+);
+
+export const notificationHistory = sqliteTable(
+  "notification_history",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    eventId: text("event_id", { enum: toastNotificationIdEnum }).notNull(),
+    title: text("title").notNull(),
+    description: text("description"),
+    severity: text("severity", { enum: toastNotificationSeverityEnum }).notNull(),
+    importance: text("importance", { enum: toastNotificationImportanceEnum }).notNull(),
+    readAt: text("read_at"),
+    createdAt: text("created_at").notNull().default(timestampNow),
+  },
+  (table) => [
+    index("notification_history_user_created_at_idx").on(table.userId, table.createdAt),
+    index("notification_history_user_unread_idx").on(table.userId, table.readAt),
   ],
 );
 
@@ -112,6 +148,8 @@ export const auditLogs = sqliteTable(
 
 export type User = InferSelectModel<typeof users>;
 export type NewUser = InferInsertModel<typeof users>;
+export type NotificationHistory = InferSelectModel<typeof notificationHistory>;
+export type NewNotificationHistory = InferInsertModel<typeof notificationHistory>;
 export type UserPermissionGrant = InferSelectModel<typeof userPermissionGrants>;
 export type NewUserPermissionGrant = InferInsertModel<typeof userPermissionGrants>;
 export type Session = InferSelectModel<typeof sessions>;

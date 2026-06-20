@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { authQueryKey, canAccessSettings } from "@/features/auth/auth-state";
 import { notify } from "@/features/notifications/notification-gateway";
+import { NotificationInboxPopover } from "@/features/notifications/notification-inbox-popover";
 import { logout } from "@/lib/api";
 import { queryClient } from "@/lib/query-client";
 import { cn } from "@/lib/utils";
@@ -63,6 +64,7 @@ function ShellActions({
 
   return (
     <div className={cn("flex items-center gap-1.5", className)}>
+      <NotificationInboxPopover />
       <DropdownMenu>
         <AccountMenuTrigger avatarSrc={accountAvatar.src} username={user.username} />
         <AccountMenuContent

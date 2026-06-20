@@ -321,7 +321,7 @@ When multiple utilities are needed, organize them logically:
   // Spacing
   'gap-4 p-4',
   // Sizing
-  'w-full min-h-[200px]',
+  'w-full min-h-50',
   // Colors (using design tokens)
   'bg-card text-card-foreground',
   // Borders

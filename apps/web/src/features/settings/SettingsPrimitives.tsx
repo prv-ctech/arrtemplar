@@ -62,7 +62,7 @@ export function SettingsTabsTrigger({
       className={cn(
         "relative inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-md border border-transparent px-2 py-1 text-sm font-medium whitespace-nowrap text-muted-foreground transition-all group-data-[orientation=vertical]/settings-tabs:w-full group-data-[orientation=vertical]/settings-tabs:justify-start hover:text-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 group-data-[variant=default]/settings-tabs-list:data-[state=active]:shadow-sm group-data-[variant=line]/settings-tabs-list:data-[state=active]:shadow-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         "group-data-[variant=line]/settings-tabs-list:bg-transparent group-data-[variant=line]/settings-tabs-list:data-[state=active]:border-transparent group-data-[variant=line]/settings-tabs-list:data-[state=active]:bg-transparent dark:group-data-[variant=line]/settings-tabs-list:data-[state=active]:border-transparent dark:group-data-[variant=line]/settings-tabs-list:data-[state=active]:bg-transparent",
-        "data-[state=active]:border-selected-border data-[state=active]:bg-selected",
+        "data-[state=active]:z-10 data-[state=active]:border-selected-border data-[state=active]:bg-selected",
         "data-[state=active]:text-foreground",
         "after:absolute after:bg-foreground after:opacity-0 after:transition-opacity group-data-[orientation=horizontal]/settings-tabs:after:inset-x-0 group-data-[orientation=horizontal]/settings-tabs:after:-bottom-1.25 group-data-[orientation=horizontal]/settings-tabs:after:h-0.5 group-data-[orientation=vertical]/settings-tabs:after:inset-y-0 group-data-[orientation=vertical]/settings-tabs:after:-right-1 group-data-[orientation=vertical]/settings-tabs:after:w-0.5 group-data-[variant=line]/settings-tabs-list:data-[state=active]:after:opacity-100",
         className,
@@ -75,20 +75,36 @@ export function SettingsTabsTrigger({
 
 export function SettingsSection({
   children,
+  density = "default",
   description,
   title,
 }: {
   children: ReactNode;
   title: string;
   description?: string;
+  density?: "default" | "compact";
 }) {
   return (
     <div>
-      <div className="mb-5">
+      <div className={cn(density === "compact" ? "mb-3" : "mb-5")}>
         <h3 className="text-base font-semibold tracking-tight text-foreground">{title}</h3>
-        {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
+        {description && (
+          <p
+            className={cn(
+              "text-muted-foreground",
+              density === "compact" ? "mt-0.5 text-xs leading-5" : "mt-1 text-sm",
+            )}
+          >
+            {description}
+          </p>
+        )}
       </div>
-      <div className="divide-y divide-border rounded-3xl border border-border bg-card/50">
+      <div
+        className={cn(
+          "divide-y divide-border border border-border bg-card/50",
+          density === "compact" ? "rounded-xl" : "rounded-3xl",
+        )}
+      >
         {children}
       </div>
     </div>
@@ -98,6 +114,7 @@ export function SettingsSection({
 export function SettingsRow({
   children,
   controlId,
+  density = "default",
   description,
   label,
 }: {
@@ -105,10 +122,21 @@ export function SettingsRow({
   label: string;
   description?: string;
   controlId?: string;
+  density?: "default" | "compact";
 }) {
   return (
-    <div className="flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-      <div className="min-w-0 shrink-0 sm:max-w-sm lg:max-w-md">
+    <div
+      className={cn(
+        "flex flex-col sm:flex-row sm:items-center sm:justify-between",
+        density === "compact" ? "gap-2 px-3 py-2.5 sm:px-4" : "gap-4 px-5 py-4 sm:px-6",
+      )}
+    >
+      <div
+        className={cn(
+          "min-w-0 shrink-0",
+          density === "compact" ? "sm:max-w-xs lg:max-w-sm" : "sm:max-w-sm lg:max-w-md",
+        )}
+      >
         {controlId ? (
           <Label className="text-sm font-medium" htmlFor={controlId}>
             {label}
@@ -117,10 +145,24 @@ export function SettingsRow({
           <p className="text-sm font-medium text-foreground">{label}</p>
         )}
         {description && (
-          <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{description}</p>
+          <p
+            className={cn(
+              "mt-0.5 text-xs text-muted-foreground",
+              density === "compact" ? "leading-4" : "leading-5",
+            )}
+          >
+            {description}
+          </p>
         )}
       </div>
-      <div className="flex min-w-0 items-center gap-3 sm:justify-end sm:pl-4">{children}</div>
+      <div
+        className={cn(
+          "flex min-w-0 items-center sm:justify-end",
+          density === "compact" ? "gap-2 sm:pl-3" : "gap-3 sm:pl-4",
+        )}
+      >
+        {children}
+      </div>
     </div>
   );
 }

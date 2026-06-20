@@ -40,4 +40,10 @@ describe("settings navigation", () => {
     expect(source).not.toContain("group-data-[orientation=horizontal]/settings-tabs:h-9");
     expect(source).toContain("TabsPrimitive.Trigger");
   });
+
+  it("keeps the active tab selection above the settings nav surface", async () => {
+    const source = await readWorkspaceSource(settingsPrimitivesSourcePath);
+
+    expect(source).toContain("data-[state=active]:z-10");
+  });
 });

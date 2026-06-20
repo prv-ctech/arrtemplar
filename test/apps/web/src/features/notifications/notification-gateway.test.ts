@@ -1,9 +1,16 @@
 import { describe, expect, it } from "bun:test";
 import {
+  notify,
+  recordNotificationHistory,
   shouldShowNotification,
   TOAST_NOTIFICATION_EVENTS,
+  type ToastNotificationEvent,
+  type ToastNotificationHistoryWriter,
 } from "../../../../../../apps/web/src/features/notifications/notification-gateway";
-import type { NotificationPreferences } from "../../../../../../packages/shared/src";
+import type {
+  CreateNotificationHistoryRequest,
+  NotificationPreferences,
+} from "../../../../../../packages/shared/src";
 
 const workspaceRoot = new URL("../../../../../../", import.meta.url);
 const migratedToastCallsitePaths = [
@@ -129,4 +136,39 @@ describe("notification gateway ownership", () => {
       );
     }
   });
+
+  it("records history for emitted events before visual toast filtering", () => {
+    const records: CreateNotificationHistoryRequest[] = [];
+    const writeHistory: ToastNotificationHistoryWriter = async (input) => {
+      records.push(input);
+    };
+
+    notify(
+      { id: "profile.noop", title: "No profile changes.", description: "Already current." },
+      offPreferences,
+      writeHistory,
+    );
+
+    expect(records).toEqual([
+      {
+        eventId: "profile.noop",
+        title: "No profile changes.",
+        description: "Already current.",
+      },
+    ]);
+  });
+
+  it("skips gateway history writes for sign-out because the server records logout", () => {
+    const records: CreateNotificationHistoryRequest[] = [];
+
+    recordNotificationHistory(createHistoryEvent("auth.signed_out"), async (input) => {
+      records.push(input);
+    });
+
+    expect(records).toEqual([]);
+  });
 });
+
+function createHistoryEvent(id: ToastNotificationEvent["id"]): ToastNotificationEvent {
+  return { id, title: "History event." };
+}

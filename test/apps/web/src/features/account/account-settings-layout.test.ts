@@ -119,13 +119,27 @@ describe("profile self-service settings layout", () => {
 
     expect(source).toContain("useNotificationPreferencesQuery");
     expect(source).toContain("useUpdateNotificationPreferencesMutation");
-    expect(source).toContain("Toast notifications");
+    expect(source).toContain("Notifications");
     expect(source).toContain("All notifications");
     expect(source).toContain("Minimal — important only");
     expect(source).toContain("Refreshing notification settings");
     expect(source).toContain("Saving notification settings");
+    expect(source).not.toContain("Notification preferences saved.");
     expect(source).toContain('role="alert"');
     expect(source).toContain('aria-live="polite"');
+  });
+
+  it("keeps notification frequency compact and conditional on enabled toasts", async () => {
+    const source = await Bun.file(accountSettingsSourcePath).text();
+
+    expect(source).toContain('density="compact"');
+    expect(source).toContain("preferences.toastsEnabled ? (");
+    expect(source).toContain("<select");
+    expect(source).toContain('id="notification-frequency"');
+    expect(source).not.toContain("Control toast alerts.");
+    expect(source).not.toContain("Inline errors still appear.");
+    expect(source).not.toContain("Minimal keeps important toasts only.");
+    expect(source).not.toContain("function NotificationFrequencyOption");
   });
 
   it("routes self-service account toasts through the notification gateway", async () => {

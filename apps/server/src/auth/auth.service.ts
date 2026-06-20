@@ -6,8 +6,11 @@ import {
   type ApiErrorResponse,
   type ChangePasswordRequest,
   type ChangePasswordResponse,
+  type ClearNotificationHistoryResponse,
   type CreateAdminRequest,
   type CreateLocalUserRequest,
+  type CreateNotificationHistoryRequest,
+  type CreateNotificationHistoryResponse,
   DEFAULT_NOTIFICATION_PREFERENCES,
   DEFAULT_PROFILE_AVATAR_ID,
   DEFAULT_PROFILE_BANNER_ID,
@@ -15,24 +18,39 @@ import {
   hasPermissionGrant,
   isProfileAvatarId,
   isProfileBannerId,
+  isToastNotificationId,
   isUserPermission,
   type LoginRequest,
   type ManagedUserProfile,
   type ManagedUserSummary,
+  type MarkNotificationReadResponse,
   NOTIFICATION_FREQUENCY_VALUES,
   type NotificationFrequency,
+  type NotificationHistoryItem,
+  type NotificationHistoryListResponse,
   type NotificationPreferences,
   type PublicUser,
   SYSTEM_ADMIN_PERMISSION,
+  TOAST_NOTIFICATION_EVENTS,
+  type ToastNotificationId,
   type UpdateManagedUserProfileRequest,
   type UpdateNotificationPreferencesRequest,
   type UpdateUserProfileRequest,
   USER_PERMISSION_VALUES,
   type UserPermission,
 } from "@arrtemplar/shared";
-import { and, eq, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 import type { DatabaseClient } from "../db/client";
-import { auditLogs, sessions, type User, userPermissionGrants, users } from "../db/schema";
+import {
+  auditLogs,
+  type NewNotificationHistory,
+  type NotificationHistory,
+  notificationHistory,
+  sessions,
+  type User,
+  userPermissionGrants,
+  users,
+} from "../db/schema";
 import { hashPassword, verifyPassword } from "./password";
 import { generatePublicUserId } from "./public-user-id";
 import { LoginRateLimiter } from "./rate-limit";
@@ -127,6 +145,59 @@ type NotificationPreferencesResult =
   | NotificationPreferencesSuccess
   | NotificationPreferencesFailure;
 
+type NotificationHistoryAuthFailure = {
+  ok: false;
+  status: 401;
+  body: ApiErrorResponse;
+};
+
+type NotificationHistoryCreateFailure =
+  | NotificationHistoryAuthFailure
+  | {
+      ok: false;
+      status: 422;
+      body: ApiErrorResponse;
+    };
+
+type NotificationHistoryReadFailure =
+  | NotificationHistoryAuthFailure
+  | {
+      ok: false;
+      status: 404;
+      body: ApiErrorResponse;
+    };
+
+type NotificationHistoryListSuccess = {
+  ok: true;
+  body: NotificationHistoryListResponse;
+};
+
+type CreateNotificationHistorySuccess = {
+  ok: true;
+  body: CreateNotificationHistoryResponse;
+};
+
+type MarkNotificationReadSuccess = {
+  ok: true;
+  body: MarkNotificationReadResponse;
+};
+
+type ClearNotificationHistorySuccess = {
+  ok: true;
+  body: ClearNotificationHistoryResponse;
+};
+
+type NotificationHistoryListResult =
+  | NotificationHistoryListSuccess
+  | NotificationHistoryAuthFailure;
+type CreateNotificationHistoryResult =
+  | CreateNotificationHistorySuccess
+  | NotificationHistoryCreateFailure;
+type MarkNotificationReadResult = MarkNotificationReadSuccess | NotificationHistoryReadFailure;
+type ClearNotificationHistoryResult =
+  | ClearNotificationHistorySuccess
+  | NotificationHistoryAuthFailure;
+
 type UpdateUserProfileFailure = {
   ok: false;
   status: 401 | 409;
@@ -187,7 +258,20 @@ type ManagedUserMutationResult = ManagedUserMutationSuccess | ManagedUserMutatio
 type ManagedUserPasswordResult = ManagedUserPasswordSuccess | ManagedUserMutationFailure;
 
 type DatabaseTransaction = Parameters<Parameters<DatabaseClient["db"]["transaction"]>[0]>[0];
+type DatabaseReader = DatabaseClient["db"] | DatabaseTransaction;
 type ManagedUserUpdateValues = Partial<Pick<User, "disabledAt" | "passwordHash" | "updatedAt">>;
+type CurrentUserUpdateValues = Partial<
+  Pick<
+    User,
+    | "avatarId"
+    | "bannerId"
+    | "email"
+    | "toastNotificationFrequency"
+    | "toastNotificationsEnabled"
+    | "updatedAt"
+    | "username"
+  >
+>;
 
 const invalidCredentialsError: ApiErrorResponse = {
   error: {
@@ -231,6 +315,20 @@ const invalidCurrentPasswordError: ApiErrorResponse = {
   },
 };
 
+const invalidNotificationHistoryInputError: ApiErrorResponse = {
+  error: {
+    code: "INVALID_NOTIFICATION_HISTORY_INPUT",
+    message: "Notification history input is invalid.",
+  },
+};
+
+const notificationHistoryNotFoundError: ApiErrorResponse = {
+  error: {
+    code: "NOTIFICATION_NOT_FOUND",
+    message: "Notification history item was not found.",
+  },
+};
+
 const targetUserNotFoundError: ApiErrorResponse = {
   error: {
     code: "USER_NOT_FOUND",
@@ -255,6 +353,8 @@ const lastSystemAdminRequiredError: ApiErrorResponse = {
 const permissionOrder = new Map<UserPermission, number>(
   USER_PERMISSION_VALUES.map((permission, index) => [permission, index]),
 );
+const notificationHistoryTitleMaxLength = 160;
+const notificationHistoryDescriptionMaxLength = 500;
 
 export class AuthService {
   constructor(
@@ -615,6 +715,13 @@ export class AuthService {
       return;
     }
 
+    const notificationHistoryRecorded = this.tryInsertNotificationHistoryItem({
+      userId: currentSession.user.id,
+      eventId: "auth.signed_out",
+      title: "Signed out.",
+      description: null,
+    });
+
     this.database.db.delete(sessions).where(eq(sessions.id, currentSession.session.id)).run();
 
     this.writeAuditLog({
@@ -622,6 +729,7 @@ export class AuthService {
       actorUserId: currentSession.user.id,
       targetType: "session",
       targetId: currentSession.session.id,
+      metadata: { notificationHistoryRecorded },
       ipAddress: context.ipAddress,
     });
   }
@@ -675,21 +783,11 @@ export class AuthService {
 
     const now = new Date().toISOString();
 
-    this.database.db
-      .update(users)
-      .set({
-        toastNotificationsEnabled: input.toastsEnabled,
-        toastNotificationFrequency: input.frequency,
-        updatedAt: now,
-      })
-      .where(eq(users.id, currentSession.user.id))
-      .run();
-
-    const updatedUser = this.database.db
-      .select()
-      .from(users)
-      .where(eq(users.id, currentSession.user.id))
-      .get();
+    const updatedUser = this.updateCurrentUser(currentSession.user.id, {
+      toastNotificationsEnabled: input.toastsEnabled,
+      toastNotificationFrequency: input.frequency,
+      updatedAt: now,
+    });
 
     if (!updatedUser) {
       return { ok: false, status: 401, body: unauthenticatedError };
@@ -707,6 +805,148 @@ export class AuthService {
     });
 
     return { ok: true, notificationPreferences };
+  }
+
+  listNotificationHistory(
+    sessionToken: string | null,
+    input: { page?: number; pageSize?: number } = {},
+  ): NotificationHistoryListResult {
+    const currentSession = this.findSession(sessionToken);
+
+    if (!currentSession) {
+      return { ok: false, status: 401, body: unauthenticatedError };
+    }
+
+    const page = normalizeNotificationHistoryPage(input.page);
+    const pageSize = normalizeNotificationHistoryPageSize(input.pageSize);
+    const totalItems = countNotificationHistoryRows(this.database.db, currentSession.user.id);
+    const unreadCount = countNotificationHistoryRows(this.database.db, currentSession.user.id, {
+      unreadOnly: true,
+    });
+    const rows = this.database.db
+      .select()
+      .from(notificationHistory)
+      .where(eq(notificationHistory.userId, currentSession.user.id))
+      .orderBy(desc(notificationHistory.createdAt))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize)
+      .all();
+
+    return {
+      ok: true,
+      body: {
+        notifications: rows.map(toNotificationHistoryItem),
+        unreadCount,
+        pagination: {
+          page,
+          pageSize,
+          totalItems,
+          totalPages: Math.ceil(totalItems / pageSize),
+        },
+      },
+    };
+  }
+
+  createNotificationHistory(
+    sessionToken: string | null,
+    input: CreateNotificationHistoryRequest,
+  ): CreateNotificationHistoryResult {
+    const currentSession = this.findSession(sessionToken);
+
+    if (!currentSession) {
+      return { ok: false, status: 401, body: unauthenticatedError };
+    }
+
+    if (!isToastNotificationId(input.eventId)) {
+      return { ok: false, status: 422, body: invalidNotificationHistoryInputError };
+    }
+
+    const title = normalizeNotificationHistoryText(input.title, notificationHistoryTitleMaxLength);
+
+    if (!title) {
+      return { ok: false, status: 422, body: invalidNotificationHistoryInputError };
+    }
+
+    const description = normalizeOptionalNotificationHistoryText(
+      input.description,
+      notificationHistoryDescriptionMaxLength,
+    );
+
+    return {
+      ok: true,
+      body: {
+        notification: this.insertNotificationHistoryItem({
+          userId: currentSession.user.id,
+          eventId: input.eventId,
+          title,
+          description,
+        }),
+      },
+    };
+  }
+
+  markNotificationHistoryRead(
+    sessionToken: string | null,
+    notificationId: string,
+  ): MarkNotificationReadResult {
+    const currentSession = this.findSession(sessionToken);
+
+    if (!currentSession) {
+      return { ok: false, status: 401, body: unauthenticatedError };
+    }
+
+    const existingNotification = readNotificationHistoryItem(
+      this.database.db,
+      currentSession.user.id,
+      notificationId,
+    );
+
+    if (!existingNotification) {
+      return { ok: false, status: 404, body: notificationHistoryNotFoundError };
+    }
+
+    if (!existingNotification.readAt) {
+      this.database.db
+        .update(notificationHistory)
+        .set({ readAt: new Date().toISOString() })
+        .where(
+          and(
+            eq(notificationHistory.id, notificationId),
+            eq(notificationHistory.userId, currentSession.user.id),
+          ),
+        )
+        .run();
+    }
+
+    const notification = readNotificationHistoryItem(
+      this.database.db,
+      currentSession.user.id,
+      notificationId,
+    );
+
+    if (!notification) {
+      return { ok: false, status: 404, body: notificationHistoryNotFoundError };
+    }
+
+    return { ok: true, body: { notification: toNotificationHistoryItem(notification) } };
+  }
+
+  clearNotificationHistory(sessionToken: string | null): ClearNotificationHistoryResult {
+    const currentSession = this.findSession(sessionToken);
+
+    if (!currentSession) {
+      return { ok: false, status: 401, body: unauthenticatedError };
+    }
+
+    return this.database.db.transaction((tx) => {
+      const deletedCount = countNotificationHistoryRows(tx, currentSession.user.id);
+
+      tx.delete(notificationHistory)
+        .where(eq(notificationHistory.userId, currentSession.user.id))
+        .run();
+
+      return { ok: true, body: { status: "ok", deletedCount } };
+    });
   }
 
   updateUserProfile(
@@ -741,23 +981,13 @@ export class AuthService {
     }
 
     const now = new Date().toISOString();
-    this.database.db
-      .update(users)
-      .set({
-        ...(username ? { username } : {}),
-        ...(email ? { email } : {}),
-        ...(avatarId ? { avatarId } : {}),
-        ...(bannerId ? { bannerId } : {}),
-        updatedAt: now,
-      })
-      .where(eq(users.id, currentSession.user.id))
-      .run();
-
-    const updatedUser = this.database.db
-      .select()
-      .from(users)
-      .where(eq(users.id, currentSession.user.id))
-      .get();
+    const updatedUser = this.updateCurrentUser(currentSession.user.id, {
+      ...(username ? { username } : {}),
+      ...(email ? { email } : {}),
+      ...(avatarId ? { avatarId } : {}),
+      ...(bannerId ? { bannerId } : {}),
+      updatedAt: now,
+    });
 
     if (!updatedUser) {
       return { ok: false, status: 401, body: unauthenticatedError };
@@ -965,6 +1195,52 @@ export class AuthService {
     return this.database.db.select().from(users).where(eq(users.publicId, publicUserId)).get();
   }
 
+  private findUserById(userId: string): User | undefined {
+    return this.database.db.select().from(users).where(eq(users.id, userId)).get();
+  }
+
+  private updateCurrentUser(userId: string, values: CurrentUserUpdateValues): User | undefined {
+    this.database.db.update(users).set(values).where(eq(users.id, userId)).run();
+    return this.findUserById(userId);
+  }
+
+  private insertNotificationHistoryItem(input: {
+    description: string | null;
+    eventId: ToastNotificationId;
+    title: string;
+    userId: string;
+  }): NotificationHistoryItem {
+    const classification = TOAST_NOTIFICATION_EVENTS[input.eventId];
+    const now = new Date().toISOString();
+    const notificationId = Bun.randomUUIDv7();
+    const notification = {
+      id: notificationId,
+      userId: input.userId,
+      eventId: input.eventId,
+      title: input.title,
+      description: input.description,
+      severity: classification.severity,
+      importance: classification.importance,
+      readAt: null,
+      createdAt: now,
+    } satisfies NewNotificationHistory;
+
+    this.database.db.insert(notificationHistory).values(notification).run();
+
+    return toNotificationHistoryItem(notification);
+  }
+
+  private tryInsertNotificationHistoryItem(
+    input: Parameters<AuthService["insertNotificationHistoryItem"]>[0],
+  ): boolean {
+    try {
+      this.insertNotificationHistoryItem(input);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private insertInitialAdmin(user: User, context: AuthRequestContext, now: Date): boolean {
     return this.database.db.transaction((tx) => {
       const { count } = tx
@@ -1130,6 +1406,82 @@ function toNotificationPreferences(user: User): NotificationPreferences {
       ? user.toastNotificationFrequency
       : DEFAULT_NOTIFICATION_PREFERENCES.frequency,
   };
+}
+
+function toNotificationHistoryItem(row: NotificationHistory): NotificationHistoryItem {
+  return {
+    id: row.id,
+    eventId: row.eventId,
+    title: row.title,
+    description: row.description,
+    severity: row.severity,
+    importance: row.importance,
+    readAt: row.readAt,
+    createdAt: row.createdAt,
+  };
+}
+
+function readNotificationHistoryItem(
+  tx: DatabaseReader,
+  userId: string,
+  notificationId: string,
+): NotificationHistory | undefined {
+  return tx
+    .select()
+    .from(notificationHistory)
+    .where(and(eq(notificationHistory.id, notificationId), eq(notificationHistory.userId, userId)))
+    .get();
+}
+
+function countNotificationHistoryRows(
+  tx: DatabaseReader,
+  userId: string,
+  options: { unreadOnly?: boolean } = {},
+): number {
+  const result = tx
+    .select({ count: sql<number>`count(*)`.mapWith(Number) })
+    .from(notificationHistory)
+    .where(
+      options.unreadOnly
+        ? and(eq(notificationHistory.userId, userId), isNull(notificationHistory.readAt))
+        : eq(notificationHistory.userId, userId),
+    )
+    .get();
+
+  return result?.count ?? 0;
+}
+
+function normalizeNotificationHistoryPage(page: number | undefined): number {
+  if (!page || !Number.isInteger(page) || page < 1) {
+    return 1;
+  }
+
+  return page;
+}
+
+function normalizeNotificationHistoryPageSize(pageSize: number | undefined): number {
+  if (!pageSize || !Number.isInteger(pageSize) || pageSize < 1) {
+    return 25;
+  }
+
+  return Math.min(pageSize, 50);
+}
+
+function normalizeNotificationHistoryText(value: string, maxLength: number): string {
+  return value.trim().slice(0, maxLength);
+}
+
+function normalizeOptionalNotificationHistoryText(
+  value: string | undefined,
+  maxLength: number,
+): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = normalizeNotificationHistoryText(value, maxLength);
+
+  return normalized || null;
 }
 
 function isNotificationFrequency(value: string): value is NotificationFrequency {

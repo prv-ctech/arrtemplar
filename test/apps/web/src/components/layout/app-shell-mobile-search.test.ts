@@ -51,6 +51,17 @@ describe("app shell primary navigation", () => {
     expect(source).not.toContain("getAccountInitial(user.username)");
   });
 
+  it("places the notification inbox bell next to the account avatar", async () => {
+    const source = await Bun.file(appShellSourcePath).text();
+    const bellIndex = source.indexOf("<NotificationInboxPopover");
+    const accountMenuIndex = source.indexOf("<DropdownMenu>");
+
+    expect(source).toContain("NotificationInboxPopover");
+    expect(bellIndex).toBeGreaterThan(-1);
+    expect(accountMenuIndex).toBeGreaterThan(-1);
+    expect(bellIndex).toBeLessThan(accountMenuIndex);
+  });
+
   it("keeps failed sign-out attempts on the current session", async () => {
     const source = await Bun.file(appShellSourcePath).text();
 

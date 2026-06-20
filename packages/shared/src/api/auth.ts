@@ -10,6 +10,124 @@ export type NotificationPreferences = {
   frequency: NotificationFrequency;
 };
 
+export type ToastNotificationSeverity = "success" | "info" | "warning" | "error";
+export type ToastNotificationImportance = "standard" | "important";
+
+export const TOAST_NOTIFICATION_SEVERITY_VALUES = [
+  "success",
+  "info",
+  "warning",
+  "error",
+] as const satisfies readonly ToastNotificationSeverity[];
+
+export const TOAST_NOTIFICATION_IMPORTANCE_VALUES = [
+  "standard",
+  "important",
+] as const satisfies readonly ToastNotificationImportance[];
+
+export type ToastNotificationClassification = {
+  severity: ToastNotificationSeverity;
+  importance: ToastNotificationImportance;
+};
+
+export const TOAST_NOTIFICATION_EVENTS = {
+  "auth.admin.created": { severity: "success", importance: "important" },
+  "auth.sign_out.failed": { severity: "error", importance: "important" },
+  "auth.signed_in": { severity: "success", importance: "important" },
+  "auth.signed_out": { severity: "success", importance: "standard" },
+  "managed_user.identity.failed": { severity: "error", importance: "important" },
+  "managed_user.identity.updated": { severity: "success", importance: "standard" },
+  "managed_user.media.failed": { severity: "error", importance: "important" },
+  "managed_user.media.updated": { severity: "success", importance: "standard" },
+  "managed_user.password.changed": { severity: "success", importance: "important" },
+  "managed_user.password.failed": { severity: "error", importance: "important" },
+  "managed_user.permissions.failed": { severity: "error", importance: "important" },
+  "managed_user.permissions.updated": { severity: "success", importance: "important" },
+  "profile.identity.update.failed": { severity: "error", importance: "important" },
+  "profile.identity.updated": { severity: "success", importance: "standard" },
+  "profile.media.failed": { severity: "error", importance: "important" },
+  "profile.media.updated": { severity: "success", importance: "standard" },
+  "profile.noop": { severity: "info", importance: "standard" },
+  "profile.password.changed": { severity: "success", importance: "important" },
+  "profile.password.mismatch": { severity: "error", importance: "important" },
+  "profile.password.update.failed": { severity: "error", importance: "important" },
+  "theme.changed": { severity: "success", importance: "standard" },
+  "users.create.failed": { severity: "error", importance: "important" },
+  "users.created": { severity: "success", importance: "standard" },
+  "users.password.changed": { severity: "success", importance: "important" },
+  "users.password.failed": { severity: "error", importance: "important" },
+  "users.permissions.failed": { severity: "error", importance: "important" },
+  "users.permissions.updated": { severity: "success", importance: "important" },
+  "users.status.disabled": { severity: "success", importance: "important" },
+  "users.status.failed": { severity: "error", importance: "important" },
+  "users.status.restored": { severity: "success", importance: "important" },
+} as const satisfies Record<string, ToastNotificationClassification>;
+
+export type ToastNotificationId = keyof typeof TOAST_NOTIFICATION_EVENTS;
+
+export const TOAST_NOTIFICATION_EVENT_IDS = Object.keys(
+  TOAST_NOTIFICATION_EVENTS,
+) as ToastNotificationId[];
+
+export function isToastNotificationId(value: unknown): value is ToastNotificationId {
+  return typeof value === "string" && value in TOAST_NOTIFICATION_EVENTS;
+}
+
+export function isToastNotificationSeverity(value: unknown): value is ToastNotificationSeverity {
+  return (
+    typeof value === "string" &&
+    TOAST_NOTIFICATION_SEVERITY_VALUES.some((severity) => severity === value)
+  );
+}
+
+export function isToastNotificationImportance(
+  value: unknown,
+): value is ToastNotificationImportance {
+  return (
+    typeof value === "string" &&
+    TOAST_NOTIFICATION_IMPORTANCE_VALUES.some((importance) => importance === value)
+  );
+}
+
+export type NotificationHistoryItem = {
+  id: string;
+  eventId: ToastNotificationId;
+  title: string;
+  description: string | null;
+  severity: ToastNotificationSeverity;
+  importance: ToastNotificationImportance;
+  readAt: string | null;
+  createdAt: string;
+};
+
+export type NotificationHistoryPagination = {
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+};
+
+export type NotificationHistoryListResponse = {
+  notifications: NotificationHistoryItem[];
+  unreadCount: number;
+  pagination: NotificationHistoryPagination;
+};
+
+export type CreateNotificationHistoryRequest = {
+  eventId: ToastNotificationId;
+  title: string;
+  description?: string;
+};
+
+export type MarkNotificationReadRequest = {
+  read: true;
+};
+
+export type ClearNotificationHistoryResponse = {
+  status: "ok";
+  deletedCount: number;
+};
+
 export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   toastsEnabled: true,
   frequency: "all",
@@ -163,6 +281,14 @@ export type UpdateUserProfileResponse = {
 
 export type NotificationPreferencesResponse = {
   notificationPreferences: NotificationPreferences;
+};
+
+export type CreateNotificationHistoryResponse = {
+  notification: NotificationHistoryItem;
+};
+
+export type MarkNotificationReadResponse = {
+  notification: NotificationHistoryItem;
 };
 
 export type UpdateNotificationPreferencesResponse = NotificationPreferencesResponse;

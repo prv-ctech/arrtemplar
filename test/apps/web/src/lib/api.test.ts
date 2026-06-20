@@ -1,7 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createApiRequestHeaders } from "../../../../../apps/web/src/lib/api";
+import {
+  createApiRequestHeaders,
+  normalizeNotificationHistoryListResponse,
+} from "../../../../../apps/web/src/lib/api";
 import { CSRF_HEADER_NAME, CSRF_HEADER_VALUE } from "../../../../../packages/shared/src";
 
 const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../../");
@@ -44,7 +47,77 @@ describe("user profile api client", () => {
       "notificationPreferences: normalizeNotificationPreferences(user.notificationPreferences)",
     );
   });
+
+  it("exposes typed notification history helpers and validates response taxonomy", async () => {
+    const source = await Bun.file(apiSourcePath).text();
+
+    expect(source).toContain("NotificationHistoryListResponse");
+    expect(source).toContain("CreateNotificationHistoryRequest");
+    expect(source).toContain("MarkNotificationReadRequest");
+    expect(source).toContain("export async function listNotificationHistory");
+    expect(source).toContain("api.api.profile.notifications.history.get");
+    expect(source).toContain("export async function createNotificationHistory");
+    expect(source).toContain("api.api.profile.notifications.history.post(input)");
+    expect(source).toContain("export async function markNotificationRead");
+    expect(source).toContain("api.api.profile.notifications.history({ notificationId }).patch");
+    expect(source).toContain("export async function clearNotificationHistory");
+    expect(source).toContain("api.api.profile.notifications.history.delete");
+    expect(source).toContain("normalizeNotificationHistoryListResponse");
+    expect(source).toContain("isToastNotificationId");
+    expect(source).toContain("isToastNotificationSeverity");
+    expect(source).toContain("isToastNotificationImportance");
+    expect(source).toContain("value instanceof Date");
+    expect(source).toContain("isoDateTimePattern");
+    expect(source).toContain("toISOString()");
+  });
+
+  it("rejects malformed notification history timestamps", () => {
+    expect(() =>
+      normalizeNotificationHistoryListResponse(
+        createNotificationHistoryResponse({ createdAt: "2026-06-19", readAt: null }),
+      ),
+    ).toThrow("Notification history response was invalid.");
+  });
+
+  it("accepts valid notification history Date payloads", () => {
+    const createdAt = "2026-06-19T12:00:00.000Z";
+    const readAt = "2026-06-19T12:01:00.000Z";
+    const response = normalizeNotificationHistoryListResponse(
+      createNotificationHistoryResponse({
+        createdAt: new Date(createdAt),
+        readAt: new Date(readAt),
+      }),
+    );
+
+    expect(response.notifications[0]?.createdAt).toBe(createdAt);
+    expect(response.notifications[0]?.readAt).toBe(readAt);
+  });
 });
+
+function createNotificationHistoryResponse({
+  createdAt,
+  readAt,
+}: {
+  createdAt: unknown;
+  readAt: unknown;
+}) {
+  return {
+    notifications: [
+      {
+        id: "notification-history-date-test",
+        eventId: "profile.identity.updated",
+        title: "Profile updated.",
+        description: null,
+        severity: "success",
+        importance: "standard",
+        readAt,
+        createdAt,
+      },
+    ],
+    unreadCount: readAt ? 0 : 1,
+    pagination: { page: 1, pageSize: 25, totalItems: 1, totalPages: 1 },
+  };
+}
 
 describe("permission api client", () => {
   it("exposes typed client functions for permission catalog and managed-user grant updates", async () => {

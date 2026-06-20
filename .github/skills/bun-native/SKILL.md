@@ -115,7 +115,7 @@ metadata:
 | File | Purpose |
 |------|---------|
 | **[io-file-ops.md](references/io-file-ops.md)** | `Bun.file()`, `Bun.write()`, `FileSink` — prefer over `node:fs`. |
-| **[rt-image.md](references/rt-image.md)** | `Bun.Image` — built-in image processing pipeline (JPEG, PNG, WebP, GIF, BMP, HEIC, AVIF, TIFF). |
+| **[rt-image.md](references/rt-image.md)** | `Bun.Image` — chainable decode/transform/encode pipeline (JPEG, PNG, WebP, GIF, BMP, HEIC, AVIF, TIFF). Covers constructor options (`maxPixels`, `autoOrient`), path-input security, buffer ownership, resize filters, indexed/progressive output, ThumbHash placeholders, `.write()` to `Bun.s3()`, clipboard APIs, the platform-backend matrix, `ERR_IMAGE_FORMAT_UNSUPPORTED` fallback, and `Bun.Image.backend`. |
 | **[rt-archive.md](references/rt-archive.md)** | Tar/tar.gz archive creation and extraction. |
 | **[rt-streams.md](references/rt-streams.md)** | `ReadableStream`, direct streams, `ArrayBufferSink`. |
 | **[rt-binary-data.md](references/rt-binary-data.md)** | `ArrayBuffer`, `TypedArray`, `Buffer`, `Blob`, `BunFile`. |

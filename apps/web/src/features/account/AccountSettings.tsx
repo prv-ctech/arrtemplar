@@ -134,15 +134,8 @@ function MainSettings({ user }: { user: PublicUser }) {
       key={`${profile.id}:${profile.username}:${profile.email}`}
       onSubmit={handleProfileSubmit}
     >
-      <SettingsSection
-        description="Update the identity shown across the app."
-        title="Profile Settings"
-      >
-        <SettingsRow
-          controlId="profile-settings-username"
-          description="Visible in profile headers and activity history."
-          label="Username"
-        >
+      <SettingsSection title="Profile Settings">
+        <SettingsRow controlId="profile-settings-username" label="Username">
           <Input
             autoComplete="username"
             className="sm:max-w-72"
@@ -152,11 +145,7 @@ function MainSettings({ user }: { user: PublicUser }) {
             required
           />
         </SettingsRow>
-        <SettingsRow
-          controlId="profile-settings-email"
-          description="Used for sign-in and account recovery."
-          label="Email"
-        >
+        <SettingsRow controlId="profile-settings-email" label="Email">
           <Input
             autoComplete="email"
             className="sm:max-w-72"
@@ -185,7 +174,7 @@ function PasswordSettings({ user }: { user: PublicUser }) {
   const controls = usePasswordSettingsControls(user);
 
   return (
-    <form className="space-y-5" onSubmit={controls.handleSubmit} ref={controls.formRef}>
+    <form className="space-y-3" onSubmit={controls.handleSubmit} ref={controls.formRef}>
       <PasswordFieldSection />
       <PasswordMismatchAlert message={controls.passwordMismatchError} />
       <PasswordSubmitButton isPending={controls.isPending} />
@@ -256,36 +245,43 @@ function usePasswordSettingsControls(user: PublicUser) {
   };
 }
 
+const compactPasswordInputClassName = "h-10 rounded-xl px-3 sm:h-9 sm:max-w-64";
+
 function PasswordFieldSection() {
   return (
     <SettingsSection
+      density="compact"
       description="Use your current password to authorize password changes."
       title="Password"
     >
-      <SettingsRow controlId="profile-current-password" label="Current password">
+      <SettingsRow controlId="profile-current-password" density="compact" label="Current password">
         <Input
           autoComplete="current-password"
-          className="sm:max-w-72"
+          className={compactPasswordInputClassName}
           id="profile-current-password"
           name="currentPassword"
           required
           type="password"
         />
       </SettingsRow>
-      <SettingsRow controlId="profile-new-password" label="New password">
+      <SettingsRow controlId="profile-new-password" density="compact" label="New password">
         <Input
           autoComplete="new-password"
-          className="sm:max-w-72"
+          className={compactPasswordInputClassName}
           id="profile-new-password"
           name="newPassword"
           required
           type="password"
         />
       </SettingsRow>
-      <SettingsRow controlId="profile-confirm-password" label="Confirm new password">
+      <SettingsRow
+        controlId="profile-confirm-password"
+        density="compact"
+        label="Confirm new password"
+      >
         <Input
           autoComplete="new-password"
-          className="sm:max-w-72"
+          className={compactPasswordInputClassName}
           id="profile-confirm-password"
           name="confirmPassword"
           required
@@ -307,7 +303,7 @@ function PasswordMismatchAlert({ message }: { message: string | null }) {
 function PasswordSubmitButton({ isPending }: { isPending: boolean }) {
   return (
     <div className="flex justify-end">
-      <Button disabled={isPending} type="submit">
+      <Button className="rounded-xl" disabled={isPending} size="sm" type="submit">
         {isPending ? "Updating password" : "Update password"}
       </Button>
     </div>
@@ -318,47 +314,41 @@ const notificationFrequencyOptions = [
   {
     value: "all",
     label: "All notifications",
-    description: "Show standard confirmations plus warnings and errors.",
   },
   {
     value: "minimal",
     label: "Minimal — important only",
-    description: "Show only important, warning, and error toasts.",
   },
 ] satisfies Array<{
   value: NotificationFrequency;
   label: string;
-  description: string;
 }>;
 
 function NotificationSettings({ user }: { user: PublicUser }) {
   const controls = useNotificationSettingsControls(user);
 
   return (
-    <div className="space-y-5">
-      <SettingsSection
-        description="Choose how toast messages appear while you use Arrtemplar."
-        title="Personal notifications"
-      >
+    <div className="space-y-2.5">
+      <SettingsSection density="compact" title="Personal Notifications">
         <NotificationToastToggleRow
           isSaving={controls.isSaving}
           onToastsEnabledChange={controls.saveToastsEnabled}
           preferences={controls.preferences}
-          statusId={controls.statusId}
+          {...(controls.statusMessage ? { statusId: controls.statusId } : {})}
         />
 
-        <NotificationFrequencyRow
-          isDisabled={controls.isFrequencyDisabled}
-          onFrequencyChange={controls.saveFrequency}
-          preferences={controls.preferences}
-        />
+        {controls.preferences.toastsEnabled ? (
+          <NotificationFrequencyRow
+            isDisabled={controls.isSaving}
+            onFrequencyChange={controls.saveFrequency}
+            preferences={controls.preferences}
+          />
+        ) : null}
       </SettingsSection>
 
       <NotificationSettingsStatus
         errorMessage={controls.errorMessage}
-        isRefreshing={controls.isRefreshing}
-        isSaving={controls.isSaving}
-        saveMessage={controls.saveMessage}
+        statusMessage={controls.statusMessage}
         statusId={controls.statusId}
       />
     </div>
@@ -367,7 +357,6 @@ function NotificationSettings({ user }: { user: PublicUser }) {
 
 function useNotificationSettingsControls(user: PublicUser) {
   const statusId = useId();
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const preferencesQuery = useNotificationPreferencesQuery(user.notificationPreferences);
   const preferencesMutation = useUpdateNotificationPreferencesMutation();
   const preferences =
@@ -375,14 +364,10 @@ function useNotificationSettingsControls(user: PublicUser) {
   const error = preferencesMutation.error ?? preferencesQuery.error;
   const isSaving = preferencesMutation.isPending;
   const isRefreshing = preferencesQuery.isFetching && !isSaving;
-  const isFrequencyDisabled = isSaving || !preferences.toastsEnabled;
   const errorMessage = error ? getNotificationSettingsErrorMessage(error) : null;
 
   function savePreferences(nextPreferences: NotificationPreferences) {
-    setSaveMessage(null);
-    preferencesMutation.mutate(nextPreferences, {
-      onSuccess: () => setSaveMessage("Notification preferences saved."),
-    });
+    preferencesMutation.mutate(nextPreferences);
   }
 
   function saveToastsEnabled(toastsEnabled: boolean) {
@@ -395,13 +380,12 @@ function useNotificationSettingsControls(user: PublicUser) {
 
   return {
     errorMessage,
-    isFrequencyDisabled,
     isRefreshing,
     isSaving,
     preferences,
     saveFrequency,
-    saveMessage,
     saveToastsEnabled,
+    statusMessage: getNotificationStatusMessage({ isRefreshing, isSaving }),
     statusId,
   };
 }
@@ -415,17 +399,13 @@ function NotificationToastToggleRow({
   isSaving: boolean;
   onToastsEnabledChange: (toastsEnabled: boolean) => void;
   preferences: NotificationPreferences;
-  statusId: string;
+  statusId?: string;
 }) {
   return (
-    <SettingsRow
-      controlId="notification-toasts-enabled"
-      description="Turn this off to suppress toast notifications. Inline errors still appear."
-      label="Toast notifications"
-    >
+    <SettingsRow controlId="notification-toasts-enabled" density="compact" label="Notifications">
       <label
         className={cn(
-          "inline-flex min-w-32 cursor-pointer items-center justify-end gap-3 text-sm font-medium",
+          "inline-flex min-w-24 cursor-pointer items-center justify-end gap-2 text-sm font-medium",
           isSaving && "cursor-not-allowed opacity-60",
         )}
       >
@@ -440,7 +420,7 @@ function NotificationToastToggleRow({
         />
         <span
           aria-hidden="true"
-          className="relative h-6 w-10 rounded-full border border-border bg-muted transition-colors after:absolute after:top-0.5 after:left-0.5 after:size-5 after:rounded-full after:bg-background after:shadow-sm after:transition-transform peer-checked:border-primary/60 peer-checked:bg-primary peer-checked:after:translate-x-4"
+          className="relative h-5 w-9 rounded-full border border-border bg-muted transition-colors after:absolute after:top-0.5 after:left-0.5 after:size-4 after:rounded-full after:bg-background after:shadow-sm after:transition-transform peer-checked:border-primary/60 peer-checked:bg-primary peer-checked:after:translate-x-4"
         />
         <span className="text-foreground">{preferences.toastsEnabled ? "On" : "Off"}</span>
       </label>
@@ -458,47 +438,59 @@ function NotificationFrequencyRow({
   preferences: NotificationPreferences;
 }) {
   return (
-    <SettingsRow
-      controlId="notification-frequency-all"
-      description="Minimal keeps account-security, warning, and error notifications only."
-      label="Toast frequency"
-    >
-      <fieldset className="grid w-full min-w-0 gap-2 sm:min-w-80" disabled={isDisabled}>
-        <legend className="sr-only">Toast frequency</legend>
-        {notificationFrequencyOptions.map((option) => (
-          <NotificationFrequencyOption
-            checked={preferences.frequency === option.value}
-            description={option.description}
-            disabled={isDisabled}
-            id={`notification-frequency-${option.value}`}
-            key={option.value}
-            label={option.label}
-            onChange={onFrequencyChange}
-            value={option.value}
-          />
-        ))}
-      </fieldset>
+    <SettingsRow controlId="notification-frequency" density="compact" label="Frequency">
+      <div className="relative w-full min-w-0 sm:w-64">
+        <select
+          className="h-9 w-full appearance-none rounded-lg border border-border bg-card/72 px-3 pr-8 text-sm text-foreground outline-none transition-colors hover:bg-accent focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={isDisabled}
+          id="notification-frequency"
+          onChange={handleNotificationFrequencyChange(onFrequencyChange)}
+          value={preferences.frequency}
+        >
+          {notificationFrequencyOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <CaretDownIcon
+          aria-hidden="true"
+          className="pointer-events-none absolute top-1/2 right-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+        />
+      </div>
     </SettingsRow>
   );
 }
 
+function handleNotificationFrequencyChange(
+  onFrequencyChange: (frequency: NotificationFrequency) => void,
+) {
+  return (event: ChangeEvent<HTMLSelectElement>) => {
+    const nextFrequency = event.currentTarget.value;
+
+    if (isNotificationFrequency(nextFrequency)) {
+      onFrequencyChange(nextFrequency);
+    }
+  };
+}
+
 function NotificationSettingsStatus({
   errorMessage,
-  isRefreshing,
-  isSaving,
-  saveMessage,
+  statusMessage,
   statusId,
 }: {
   errorMessage: string | null;
-  isRefreshing: boolean;
-  isSaving: boolean;
-  saveMessage: string | null;
+  statusMessage: string | null;
   statusId: string;
 }) {
+  if (!statusMessage && !errorMessage) {
+    return null;
+  }
+
   return (
     <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
       <div aria-live="polite" className="min-h-5 text-muted-foreground" id={statusId}>
-        {getNotificationStatusMessage({ isRefreshing, isSaving, saveMessage })}
+        {statusMessage}
       </div>
       {errorMessage ? (
         <p className="text-destructive" role="alert">
@@ -512,11 +504,9 @@ function NotificationSettingsStatus({
 function getNotificationStatusMessage({
   isRefreshing,
   isSaving,
-  saveMessage,
 }: {
   isRefreshing: boolean;
   isSaving: boolean;
-  saveMessage: string | null;
 }): string | null {
   if (isSaving) {
     return "Saving notification settings";
@@ -526,60 +516,7 @@ function getNotificationStatusMessage({
     return "Refreshing notification settings";
   }
 
-  return saveMessage;
-}
-
-function NotificationFrequencyOption({
-  checked,
-  description,
-  disabled,
-  id,
-  label,
-  onChange,
-  value,
-}: {
-  checked: boolean;
-  description: string;
-  disabled: boolean;
-  id: string;
-  label: string;
-  onChange: (frequency: NotificationFrequency) => void;
-  value: NotificationFrequency;
-}) {
-  function handleChange(event: ChangeEvent<HTMLInputElement>) {
-    const nextFrequency = event.currentTarget.value;
-
-    if (isNotificationFrequency(nextFrequency)) {
-      onChange(nextFrequency);
-    }
-  }
-
-  return (
-    <label
-      className={cn(
-        "flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors",
-        checked
-          ? "border-primary/50 bg-primary/12 text-foreground"
-          : "border-border bg-card/72 text-muted-foreground hover:bg-accent hover:text-foreground",
-        disabled && "cursor-not-allowed opacity-60 hover:bg-card/72 hover:text-muted-foreground",
-      )}
-    >
-      <input
-        checked={checked}
-        className="mt-0.5 size-4 accent-primary"
-        disabled={disabled}
-        id={id}
-        name="notification-frequency"
-        onChange={handleChange}
-        type="radio"
-        value={value}
-      />
-      <span className="min-w-0">
-        <span className="block text-sm font-medium text-foreground">{label}</span>
-        <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">{description}</span>
-      </span>
-    </label>
-  );
+  return null;
 }
 
 function isNotificationFrequency(value: string): value is NotificationFrequency {

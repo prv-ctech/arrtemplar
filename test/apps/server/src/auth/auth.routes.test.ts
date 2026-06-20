@@ -7,7 +7,13 @@ import {
   SESSION_COOKIE_NAME,
 } from "../../../../../apps/server/src/auth/session-token";
 import type { DatabaseClient } from "../../../../../apps/server/src/db/client";
-import { sessions, userPermissionGrants, users } from "../../../../../apps/server/src/db/schema";
+import {
+  auditLogs,
+  notificationHistory,
+  sessions,
+  userPermissionGrants,
+  users,
+} from "../../../../../apps/server/src/db/schema";
 import {
   CSRF_HEADER_NAME,
   CSRF_HEADER_VALUE,
@@ -18,6 +24,7 @@ import {
   PROFILE_AVATAR_IDS,
   PROFILE_BANNER_IDS,
   SYSTEM_ADMIN_PERMISSION,
+  TOAST_NOTIFICATION_EVENTS,
   USER_PERMISSION_VALUES,
   type UserPermission,
 } from "../../../../../packages/shared/src";
@@ -662,6 +669,245 @@ describe("auth routes", () => {
     expect(anonymousResponse.status).toBe(401);
   });
 
+  it("lists, creates, marks read, and clears the signed-in user's notification history", async () => {
+    const { app, database } = await createAuthTestApp();
+    const viewerCookie = await loginAndReadCookie(app, "viewer@example.local");
+
+    const emptyResponse = await app.handle(
+      new Request("http://localhost/api/profile/notifications/history", {
+        headers: { cookie: viewerCookie },
+      }),
+    );
+    const emptyBody = await emptyResponse.json();
+
+    expect(emptyResponse.status).toBe(200);
+    expect(emptyBody).toEqual({
+      notifications: [],
+      unreadCount: 0,
+      pagination: { page: 1, pageSize: 25, totalItems: 0, totalPages: 0 },
+    });
+
+    const createResponse = await app.handle(
+      csrfJsonRequest(
+        "/api/profile/notifications/history",
+        {
+          eventId: "profile.noop",
+          title: "  Nothing changed.  ",
+          description: "Already current.",
+        },
+        { cookie: viewerCookie },
+      ),
+    );
+    const createBody = await createResponse.json();
+
+    expect(createResponse.status).toBe(200);
+    expect(createBody.notification).toMatchObject({
+      eventId: "profile.noop",
+      title: "Nothing changed.",
+      description: "Already current.",
+      severity: TOAST_NOTIFICATION_EVENTS["profile.noop"].severity,
+      importance: TOAST_NOTIFICATION_EVENTS["profile.noop"].importance,
+      readAt: null,
+      createdAt: expect.any(String),
+    });
+
+    const [storedNotification] = database.db.select().from(notificationHistory).all();
+
+    expect(storedNotification).toMatchObject({
+      id: createBody.notification.id,
+      eventId: "profile.noop",
+      title: "Nothing changed.",
+      readAt: null,
+    });
+
+    const listResponse = await app.handle(
+      new Request("http://localhost/api/profile/notifications/history?page=1&pageSize=1", {
+        headers: { cookie: viewerCookie },
+      }),
+    );
+    const listBody = await listResponse.json();
+
+    expect(listResponse.status).toBe(200);
+    expect(listBody).toEqual({
+      notifications: [createBody.notification],
+      unreadCount: 1,
+      pagination: { page: 1, pageSize: 1, totalItems: 1, totalPages: 1 },
+    });
+
+    const markReadResponse = await app.handle(
+      csrfJsonPatchRequest(
+        `/api/profile/notifications/history/${createBody.notification.id}`,
+        { read: true },
+        { cookie: viewerCookie },
+      ),
+    );
+    const markReadBody = await markReadResponse.json();
+    const firstReadAt = markReadBody.notification.readAt;
+
+    expect(markReadResponse.status).toBe(200);
+    expect(typeof firstReadAt).toBe("string");
+    expect(markReadBody.notification).toMatchObject({
+      id: createBody.notification.id,
+      readAt: firstReadAt,
+    });
+
+    const secondMarkReadResponse = await app.handle(
+      csrfJsonPatchRequest(
+        `/api/profile/notifications/history/${createBody.notification.id}`,
+        { read: true },
+        { cookie: viewerCookie },
+      ),
+    );
+    const secondMarkReadBody = await secondMarkReadResponse.json();
+
+    expect(secondMarkReadResponse.status).toBe(200);
+    expect(secondMarkReadBody.notification.readAt).toBe(firstReadAt);
+
+    const clearResponse = await app.handle(
+      csrfJsonDeleteRequest("/api/profile/notifications/history", { cookie: viewerCookie }),
+    );
+    const clearBody = await clearResponse.json();
+
+    expect(clearResponse.status).toBe(200);
+    expect(clearBody).toEqual({ status: "ok", deletedCount: 1 });
+    expect(database.db.select().from(notificationHistory).all()).toHaveLength(0);
+  });
+
+  it("records sign-out notification history before deleting the session", async () => {
+    const { app, database, viewer } = await createAuthTestApp();
+    const viewerCookie = await loginAndReadCookie(app, "viewer@example.local");
+
+    const logoutResponse = await app.handle(
+      csrfJsonRequest("/api/auth/logout", {}, { cookie: viewerCookie }),
+    );
+    const meResponse = await app.handle(
+      new Request("http://localhost/api/auth/me", { headers: { cookie: viewerCookie } }),
+    );
+    const meBody = await meResponse.json();
+    const viewerNotifications = database.db
+      .select()
+      .from(notificationHistory)
+      .all()
+      .filter((notification) => notification.userId === viewer.id);
+
+    expect(logoutResponse.status).toBe(200);
+    expect(meBody).toEqual({ user: null });
+    expect(viewerNotifications).toHaveLength(1);
+    expect(viewerNotifications[0]).toMatchObject({
+      eventId: "auth.signed_out",
+      title: "Signed out.",
+      severity: TOAST_NOTIFICATION_EVENTS["auth.signed_out"].severity,
+      importance: TOAST_NOTIFICATION_EVENTS["auth.signed_out"].importance,
+      readAt: null,
+    });
+  });
+
+  it("still signs out when sign-out notification history cannot be recorded", async () => {
+    const { app, database } = await createAuthTestApp();
+    const viewerCookie = await loginAndReadCookie(app, "viewer@example.local");
+    const viewerSessionTokenHash = hashSessionToken(readCookieValue(viewerCookie));
+
+    database.sqlite.run(`
+      CREATE TRIGGER fail_logout_notification_history
+      BEFORE INSERT ON notification_history
+      WHEN NEW.event_id = 'auth.signed_out'
+      BEGIN
+        SELECT RAISE(ABORT, 'forced logout history failure');
+      END;
+    `);
+
+    const logoutResponse = await app.handle(
+      csrfJsonRequest("/api/auth/logout", {}, { cookie: viewerCookie }),
+    );
+    const meResponse = await app.handle(
+      new Request("http://localhost/api/auth/me", { headers: { cookie: viewerCookie } }),
+    );
+    const auditLog = database.db
+      .select()
+      .from(auditLogs)
+      .all()
+      .find((log) => log.action === "auth.logout");
+
+    expect(logoutResponse.status).toBe(200);
+    expect((await meResponse.json()).user).toBeNull();
+    expect(database.db.select().from(notificationHistory).all()).toHaveLength(0);
+    expect(
+      database.db
+        .select()
+        .from(sessions)
+        .all()
+        .some((session) => session.tokenHash === viewerSessionTokenHash),
+    ).toBe(false);
+    expect(auditLog?.metadataJson).toBe(JSON.stringify({ notificationHistoryRecorded: false }));
+  });
+
+  it("keeps notification history self-only and validates history inputs", async () => {
+    const { app, database, viewer } = await createAuthTestApp();
+    const adminCookie = await loginAndReadCookie(app, "admin@example.local");
+    const viewerCookie = await loginAndReadCookie(app, "viewer@example.local");
+
+    const anonymousResponse = await app.handle(
+      new Request("http://localhost/api/profile/notifications/history"),
+    );
+    const invalidEventResponse = await app.handle(
+      csrfJsonRequest(
+        "/api/profile/notifications/history",
+        { eventId: "profile.unknown", title: "Invalid" },
+        { cookie: viewerCookie },
+      ),
+    );
+    const adminCreateResponse = await app.handle(
+      csrfJsonRequest(
+        "/api/profile/notifications/history",
+        { eventId: "auth.signed_in", title: "Signed in." },
+        { cookie: adminCookie },
+      ),
+    );
+    const adminCreateBody = await adminCreateResponse.json();
+    const viewerCreateResponse = await app.handle(
+      csrfJsonRequest(
+        "/api/profile/notifications/history",
+        { eventId: "theme.changed", title: "Theme changed." },
+        { cookie: viewerCookie },
+      ),
+    );
+    const viewerCreateBody = await viewerCreateResponse.json();
+
+    const foreignMarkResponse = await app.handle(
+      csrfJsonPatchRequest(
+        `/api/profile/notifications/history/${adminCreateBody.notification.id}`,
+        { read: true },
+        { cookie: viewerCookie },
+      ),
+    );
+    const viewerClearResponse = await app.handle(
+      csrfJsonDeleteRequest("/api/profile/notifications/history", { cookie: viewerCookie }),
+    );
+    const adminListResponse = await app.handle(
+      new Request("http://localhost/api/profile/notifications/history", {
+        headers: { cookie: adminCookie },
+      }),
+    );
+    const adminListBody = await adminListResponse.json();
+
+    expect(anonymousResponse.status).toBe(401);
+    expect(invalidEventResponse.status).toBe(422);
+    expect(adminCreateResponse.status).toBe(200);
+    expect(viewerCreateResponse.status).toBe(200);
+    expect(foreignMarkResponse.status).toBe(404);
+    expect(viewerClearResponse.status).toBe(200);
+    expect(adminListBody.notifications).toEqual([adminCreateBody.notification]);
+    expect(adminListBody.unreadCount).toBe(1);
+    expect(
+      database.db
+        .select()
+        .from(notificationHistory)
+        .all()
+        .filter((notification) => notification.userId === viewer.id),
+    ).toHaveLength(0);
+    expect(viewerCreateBody.notification.id).not.toBe(adminCreateBody.notification.id);
+  });
+
   it("stores only predetermined profile avatar and banner selections", async () => {
     const { app, database } = await createAuthTestApp();
     const viewerCookie = await loginAndReadCookie(app, "viewer@example.local");
@@ -922,5 +1168,17 @@ function csrfJsonPatchRequest(
       ...headers,
     },
     body: JSON.stringify(body),
+  });
+}
+
+function csrfJsonDeleteRequest(path: string, headers: Record<string, string> = {}): Request {
+  return new Request(`http://localhost${path}`, {
+    method: "DELETE",
+    headers: {
+      "x-forwarded-for": "127.0.0.1",
+      origin: TEST_WEB_ORIGIN,
+      [CSRF_HEADER_NAME]: CSRF_HEADER_VALUE,
+      ...headers,
+    },
   });
 }

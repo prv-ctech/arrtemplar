@@ -2,7 +2,7 @@
 name: research
 description: Pure research subagent for gathering factual context from ContextStream, codebase search, web search, official docs, DeepWiki repo docs, wikis, infrastructure docs, and repository sources before planning or implementation. Use when a user idea, feature, integration, library, API, or architecture question needs evidence and clarity. Produces `docs/research/YYYY-MM-DD-(slug)-research.md` and never implements code.
 tools: [read, search, web, edit, todo, contextstream/*, deepwiki/*, shadcn/*]
-model: GPT-5.4 (unify-chat-provider)
+model: GLM-5.2 (unify-chat-provider)
 user-invocable: true
 ---
 

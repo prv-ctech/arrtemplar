@@ -1,49 +1,21 @@
-import type { NotificationPreferences } from "@arrtemplar/shared";
-import { DEFAULT_NOTIFICATION_PREFERENCES } from "@arrtemplar/shared";
+import type {
+  CreateNotificationHistoryRequest,
+  NotificationPreferences,
+  ToastNotificationClassification,
+  ToastNotificationId,
+} from "@arrtemplar/shared";
+import { DEFAULT_NOTIFICATION_PREFERENCES, TOAST_NOTIFICATION_EVENTS } from "@arrtemplar/shared";
 import { type ExternalToast, toast } from "sonner";
+import { notificationHistoryKeys } from "@/features/notifications/notification-history";
+import { createNotificationHistory } from "@/lib/api";
+import { queryClient } from "@/lib/query-client";
 
-export type ToastNotificationSeverity = "success" | "info" | "warning" | "error";
-export type ToastNotificationImportance = "standard" | "important";
+export type { ToastNotificationClassification, ToastNotificationId };
+export { TOAST_NOTIFICATION_EVENTS };
 
-export type ToastNotificationClassification = {
-  severity: ToastNotificationSeverity;
-  importance: ToastNotificationImportance;
-};
-
-export const TOAST_NOTIFICATION_EVENTS = {
-  "auth.admin.created": { severity: "success", importance: "important" },
-  "auth.sign_out.failed": { severity: "error", importance: "important" },
-  "auth.signed_in": { severity: "success", importance: "important" },
-  "auth.signed_out": { severity: "success", importance: "standard" },
-  "managed_user.identity.failed": { severity: "error", importance: "important" },
-  "managed_user.identity.updated": { severity: "success", importance: "standard" },
-  "managed_user.media.failed": { severity: "error", importance: "important" },
-  "managed_user.media.updated": { severity: "success", importance: "standard" },
-  "managed_user.password.changed": { severity: "success", importance: "important" },
-  "managed_user.password.failed": { severity: "error", importance: "important" },
-  "managed_user.permissions.failed": { severity: "error", importance: "important" },
-  "managed_user.permissions.updated": { severity: "success", importance: "important" },
-  "profile.identity.update.failed": { severity: "error", importance: "important" },
-  "profile.identity.updated": { severity: "success", importance: "standard" },
-  "profile.media.failed": { severity: "error", importance: "important" },
-  "profile.media.updated": { severity: "success", importance: "standard" },
-  "profile.noop": { severity: "info", importance: "standard" },
-  "profile.password.changed": { severity: "success", importance: "important" },
-  "profile.password.mismatch": { severity: "error", importance: "important" },
-  "profile.password.update.failed": { severity: "error", importance: "important" },
-  "theme.changed": { severity: "success", importance: "standard" },
-  "users.create.failed": { severity: "error", importance: "important" },
-  "users.created": { severity: "success", importance: "standard" },
-  "users.password.changed": { severity: "success", importance: "important" },
-  "users.password.failed": { severity: "error", importance: "important" },
-  "users.permissions.failed": { severity: "error", importance: "important" },
-  "users.permissions.updated": { severity: "success", importance: "important" },
-  "users.status.disabled": { severity: "success", importance: "important" },
-  "users.status.failed": { severity: "error", importance: "important" },
-  "users.status.restored": { severity: "success", importance: "important" },
-} as const satisfies Record<string, ToastNotificationClassification>;
-
-export type ToastNotificationId = keyof typeof TOAST_NOTIFICATION_EVENTS;
+export type ToastNotificationHistoryWriter = (
+  input: CreateNotificationHistoryRequest,
+) => Promise<unknown>;
 
 export type ToastNotificationEvent = {
   id: ToastNotificationId;
@@ -72,8 +44,11 @@ export function shouldShowNotification(
 export function notify(
   event: ToastNotificationEvent,
   preferences: NotificationPreferences = DEFAULT_NOTIFICATION_PREFERENCES,
+  writeHistory: ToastNotificationHistoryWriter = createNotificationHistory,
 ): void {
   const classification: ToastNotificationClassification = TOAST_NOTIFICATION_EVENTS[event.id];
+
+  recordNotificationHistory(event, writeHistory);
 
   if (!shouldShowNotification(preferences, classification)) {
     return;
@@ -95,6 +70,25 @@ export function notify(
       toast.info(event.title, options);
       return;
   }
+}
+
+export function recordNotificationHistory(
+  event: ToastNotificationEvent,
+  writeHistory: ToastNotificationHistoryWriter = createNotificationHistory,
+): void {
+  if (event.id === "auth.signed_out") {
+    return;
+  }
+
+  const input: CreateNotificationHistoryRequest = {
+    eventId: event.id,
+    title: event.title,
+    ...(event.description ? { description: event.description } : {}),
+  };
+
+  void writeHistory(input)
+    .then(() => queryClient.invalidateQueries({ queryKey: notificationHistoryKeys.lists() }))
+    .catch(() => undefined);
 }
 
 function createToastOptions(event: ToastNotificationEvent): ExternalToast | undefined {

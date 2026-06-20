@@ -2,12 +2,17 @@ import type {
   AuthSetupStatusResponse,
   AuthUserResponse,
   ChangePasswordResponse,
+  ClearNotificationHistoryResponse,
   CreateAdminResponse,
   CreateLocalUserResponse,
+  CreateNotificationHistoryRequest,
+  CreateNotificationHistoryResponse,
   LoginResponse,
   LogoutResponse,
   ManagedUserProfileResponse,
   ManagedUsersListResponse,
+  MarkNotificationReadResponse,
+  NotificationHistoryListResponse,
   NotificationPreferencesResponse,
   PermissionCatalogResponse,
   PublicUser,
@@ -19,6 +24,7 @@ import type {
 import {
   isProfileAvatarId,
   isProfileBannerId,
+  isToastNotificationId,
   isUserPermission,
   NOTIFICATION_FREQUENCY_VALUES,
   PERMISSION_CATALOG,
@@ -28,6 +34,9 @@ import {
   PERMISSION_ROUTE_SURFACES,
   PROFILE_AVATAR_IDS,
   PROFILE_BANNER_IDS,
+  TOAST_NOTIFICATION_EVENT_IDS,
+  TOAST_NOTIFICATION_IMPORTANCE_VALUES,
+  TOAST_NOTIFICATION_SEVERITY_VALUES,
   USER_PERMISSION_VALUES,
 } from "@arrtemplar/shared";
 import { Elysia, t } from "elysia";
@@ -84,10 +93,46 @@ const notificationFrequencySchema = t.Union([
   t.Literal(NOTIFICATION_FREQUENCY_VALUES[0]),
   t.Literal(NOTIFICATION_FREQUENCY_VALUES[1]),
 ]);
+const toastNotificationEventIdSchema = t.Union(
+  TOAST_NOTIFICATION_EVENT_IDS.map((eventId) => t.Literal(eventId)) as [
+    ReturnType<typeof t.Literal>,
+    ...ReturnType<typeof t.Literal>[],
+  ],
+);
+const toastNotificationSeveritySchema = t.Union(
+  TOAST_NOTIFICATION_SEVERITY_VALUES.map((severity) => t.Literal(severity)) as [
+    ReturnType<typeof t.Literal>,
+    ...ReturnType<typeof t.Literal>[],
+  ],
+);
+const toastNotificationImportanceSchema = t.Union(
+  TOAST_NOTIFICATION_IMPORTANCE_VALUES.map((importance) => t.Literal(importance)) as [
+    ReturnType<typeof t.Literal>,
+    ...ReturnType<typeof t.Literal>[],
+  ],
+);
 
 const notificationPreferencesSchema = t.Object({
   toastsEnabled: t.Boolean(),
   frequency: notificationFrequencySchema,
+});
+
+const notificationHistoryItemSchema = t.Object({
+  id: t.String({ minLength: 1, maxLength: 80 }),
+  eventId: toastNotificationEventIdSchema,
+  title: t.String({ minLength: 1, maxLength: 160 }),
+  description: t.Union([t.String({ maxLength: 500 }), t.Null()]),
+  severity: toastNotificationSeveritySchema,
+  importance: toastNotificationImportanceSchema,
+  readAt: t.Union([t.String(), t.Null()]),
+  createdAt: t.String(),
+});
+
+const notificationHistoryPaginationSchema = t.Object({
+  page: t.Number({ minimum: 1 }),
+  pageSize: t.Number({ minimum: 1, maximum: 50 }),
+  totalItems: t.Number({ minimum: 0 }),
+  totalPages: t.Number({ minimum: 0 }),
 });
 
 const permissionRouteSchema = t.Object({
@@ -164,6 +209,21 @@ const changePasswordRequestSchema = t.Object({
 });
 
 const updateNotificationPreferencesRequestSchema = notificationPreferencesSchema;
+const createNotificationHistoryRequestSchema = t.Object({
+  eventId: toastNotificationEventIdSchema,
+  title: t.String({ minLength: 1, maxLength: 160, pattern: ".*\\S.*" }),
+  description: t.Optional(t.String({ maxLength: 500 })),
+});
+const markNotificationReadRequestSchema = t.Object({
+  read: t.Literal(true),
+});
+const notificationHistoryQuerySchema = t.Object({
+  page: t.Optional(t.Numeric({ minimum: 1 })),
+  pageSize: t.Optional(t.Numeric({ minimum: 1, maximum: 50 })),
+});
+const notificationHistoryParamsSchema = t.Object({
+  notificationId: t.String({ minLength: 1, maxLength: 80 }),
+});
 
 const managedUserParamsSchema = t.Object({
   publicUserId: publicUserIdSchema,
@@ -196,6 +256,21 @@ const userProfileResponseSchema = t.Object({ user: publicUserSchema });
 const updateUserProfileResponseSchema = t.Object({ user: publicUserSchema });
 const notificationPreferencesResponseSchema = t.Object({
   notificationPreferences: notificationPreferencesSchema,
+});
+const notificationHistoryListResponseSchema = t.Object({
+  notifications: t.Array(notificationHistoryItemSchema),
+  unreadCount: t.Number({ minimum: 0 }),
+  pagination: notificationHistoryPaginationSchema,
+});
+const createNotificationHistoryResponseSchema = t.Object({
+  notification: notificationHistoryItemSchema,
+});
+const markNotificationReadResponseSchema = t.Object({
+  notification: notificationHistoryItemSchema,
+});
+const clearNotificationHistoryResponseSchema = t.Object({
+  status: t.Literal("ok"),
+  deletedCount: t.Number({ minimum: 0 }),
 });
 const logoutResponseSchema = t.Object({ status: t.Literal("ok") });
 const changePasswordResponseSchema = t.Object({ status: t.Literal("ok") });
@@ -419,6 +494,131 @@ function createProfileRoutes(authService: AuthService) {
         detail: {
           summary: "Update notification preferences",
           description: "Replaces the authenticated user's own toast notification preferences.",
+          tags: ["Auth"],
+        },
+      },
+    )
+    .get(
+      "/profile/notifications/history",
+      ({ cookie, query, status }) => {
+        const result = authService.listNotificationHistory(
+          readSessionToken(cookie[SESSION_COOKIE_NAME].value),
+          query,
+        );
+
+        if (!result.ok) {
+          return status(result.status, result.body);
+        }
+
+        return result.body satisfies NotificationHistoryListResponse;
+      },
+      {
+        cookie: sessionCookieSchema,
+        query: notificationHistoryQuerySchema,
+        response: {
+          200: notificationHistoryListResponseSchema,
+          401: apiErrorResponseSchema,
+        },
+        detail: {
+          summary: "List notification history",
+          description: "Returns paginated notification history for the authenticated user only.",
+          tags: ["Auth"],
+        },
+      },
+    )
+    .post(
+      "/profile/notifications/history",
+      ({ body, cookie, status }) => {
+        const input = normalizeCreateNotificationHistoryRequest(body);
+
+        if (!input) {
+          return status(422, {
+            error: {
+              code: "INVALID_NOTIFICATION_HISTORY_INPUT",
+              message: "Notification history input is invalid.",
+            },
+          });
+        }
+
+        const result = authService.createNotificationHistory(
+          readSessionToken(cookie[SESSION_COOKIE_NAME].value),
+          input,
+        );
+
+        if (!result.ok) {
+          return status(result.status, result.body);
+        }
+
+        return result.body satisfies CreateNotificationHistoryResponse;
+      },
+      {
+        body: createNotificationHistoryRequestSchema,
+        cookie: sessionCookieSchema,
+        response: {
+          200: createNotificationHistoryResponseSchema,
+          401: apiErrorResponseSchema,
+          422: apiErrorResponseSchema,
+        },
+        detail: {
+          summary: "Create notification history item",
+          description:
+            "Creates a notification history item for the authenticated user and derives classification server-side.",
+          tags: ["Auth"],
+        },
+      },
+    )
+    .patch(
+      "/profile/notifications/history/:notificationId",
+      ({ cookie, params, status }) => {
+        const result = authService.markNotificationHistoryRead(
+          readSessionToken(cookie[SESSION_COOKIE_NAME].value),
+          params.notificationId,
+        );
+
+        if (!result.ok) {
+          return status(result.status, result.body);
+        }
+
+        return result.body satisfies MarkNotificationReadResponse;
+      },
+      {
+        body: markNotificationReadRequestSchema,
+        cookie: sessionCookieSchema,
+        params: notificationHistoryParamsSchema,
+        response: {
+          200: markNotificationReadResponseSchema,
+          401: apiErrorResponseSchema,
+          404: apiErrorResponseSchema,
+        },
+        detail: {
+          summary: "Mark notification read",
+          description: "Marks one authenticated-user notification history item read.",
+          tags: ["Auth"],
+        },
+      },
+    )
+    .delete(
+      "/profile/notifications/history",
+      ({ cookie, status }) => {
+        const result = authService.clearNotificationHistory(
+          readSessionToken(cookie[SESSION_COOKIE_NAME].value),
+        );
+
+        if (!result.ok) {
+          return status(result.status, result.body);
+        }
+
+        return result.body satisfies ClearNotificationHistoryResponse;
+      },
+      {
+        cookie: sessionCookieSchema,
+        response: {
+          200: clearNotificationHistoryResponseSchema,
+          401: apiErrorResponseSchema,
+        },
+        detail: {
+          summary: "Clear notification history",
+          description: "Deletes notification history for the authenticated user only.",
           tags: ["Auth"],
         },
       },
@@ -875,6 +1075,22 @@ function normalizeUpdateUserProfileRequest(input: {
     ...(isProfileBannerId(input.bannerId) ? { bannerId: input.bannerId } : {}),
     ...(input.email ? { email: input.email } : {}),
     ...(input.username ? { username: input.username } : {}),
+  };
+}
+
+function normalizeCreateNotificationHistoryRequest(input: {
+  description?: string;
+  eventId: unknown;
+  title: string;
+}): CreateNotificationHistoryRequest | null {
+  if (!isToastNotificationId(input.eventId)) {
+    return null;
+  }
+
+  return {
+    eventId: input.eventId,
+    title: input.title,
+    ...(typeof input.description === "string" ? { description: input.description } : {}),
   };
 }
 
