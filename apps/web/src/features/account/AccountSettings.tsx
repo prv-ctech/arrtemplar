@@ -27,7 +27,12 @@ import { changePassword, getUserProfile, updateUserProfile } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useAuthenticatedRouteUser } from "@/routes/authenticated-route-user";
 import { type SettingsEntry, SettingsNav } from "../settings/SettingsNav";
-import { SettingsPanel, SettingsRow, SettingsSection } from "../settings/SettingsPrimitives";
+import {
+  SettingsPanel,
+  SettingsRow,
+  SettingsSection,
+  SettingsStatus,
+} from "../settings/SettingsPrimitives";
 import { ThemePreviewStrip } from "../theme/ThemePreviewStrip";
 import { type AppTheme, getThemeOption, type ThemePack } from "../theme/theme-options";
 import { useTheme } from "../theme/theme-state";
@@ -346,7 +351,7 @@ function NotificationSettings({ user }: { user: PublicUser }) {
         ) : null}
       </SettingsSection>
 
-      <NotificationSettingsStatus
+      <SettingsStatus
         errorMessage={controls.errorMessage}
         statusMessage={controls.statusMessage}
         statusId={controls.statusId}
@@ -472,33 +477,6 @@ function handleNotificationFrequencyChange(
       onFrequencyChange(nextFrequency);
     }
   };
-}
-
-function NotificationSettingsStatus({
-  errorMessage,
-  statusMessage,
-  statusId,
-}: {
-  errorMessage: string | null;
-  statusMessage: string | null;
-  statusId: string;
-}) {
-  if (!statusMessage && !errorMessage) {
-    return null;
-  }
-
-  return (
-    <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
-      <div aria-live="polite" className="min-h-5 text-muted-foreground" id={statusId}>
-        {statusMessage}
-      </div>
-      {errorMessage ? (
-        <p className="text-destructive" role="alert">
-          {errorMessage}
-        </p>
-      ) : null}
-    </div>
-  );
 }
 
 function getNotificationStatusMessage({

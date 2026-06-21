@@ -6,6 +6,7 @@ import {
   TEST_DATABASE_URL,
   TEST_SERVER_PORT,
 } from "../../../../../apps/server/src/config/env";
+import { APP_IDENTIFIER } from "../../../../../packages/shared/src";
 
 describe("server environment database paths", () => {
   it("uses the canonical development database and server port by default", () => {
@@ -14,11 +15,11 @@ describe("server environment database paths", () => {
     expect(env.databaseUrl).toBe(DEV_DATABASE_URL);
     expect(env.serverPort).toBe(DEV_SERVER_PORT);
     expect(env.logLevel).toBe("debug");
-    expect(env.logFilePath).toBe("data/logs/arrtemplar.jsonl");
+    expect(env.logFilePath).toBe(`data/logs/${APP_IDENTIFIER}.jsonl`);
     expect(env.logFileMaxSizeBytes).toBe(10 * 1024 * 1024);
     expect(env.logFileMaxFiles).toBe(5);
     expect(env.logConsoleEnabled).toBe(true);
-    expect(DEV_DATABASE_URL).toBe("data/db/arrtemplar-dev.sqlite");
+    expect(DEV_DATABASE_URL).toBe(`data/db/${APP_IDENTIFIER}-dev.sqlite`);
   });
 
   it("uses the canonical test database and isolated server port in test mode", () => {
@@ -34,7 +35,7 @@ describe("server environment database paths", () => {
       logLevel: "fatal",
       logConsoleEnabled: false,
     });
-    expect(TEST_DATABASE_URL).toBe("data/db/arrtemplar-test.sqlite");
+    expect(TEST_DATABASE_URL).toBe(`data/db/${APP_IDENTIFIER}-test.sqlite`);
     expect(TEST_SERVER_PORT).not.toBe(DEV_SERVER_PORT);
   });
 
@@ -43,7 +44,7 @@ describe("server environment database paths", () => {
       databaseUrl: DEV_DATABASE_URL,
       serverPort: DEV_SERVER_PORT,
       logLevel: "info",
-      logFilePath: "data/logs/arrtemplar.jsonl",
+      logFilePath: `data/logs/${APP_IDENTIFIER}.jsonl`,
       logFileMaxSizeBytes: 10 * 1024 * 1024,
       logFileMaxFiles: 5,
       logConsoleEnabled: false,
@@ -54,14 +55,14 @@ describe("server environment database paths", () => {
     expect(
       readRuntimeEnv({
         LOG_LEVEL: "trace",
-        LOG_FILE_PATH: "tmp/custom-arrtemplar.jsonl",
+        LOG_FILE_PATH: "tmp/custom-app.jsonl",
         LOG_FILE_MAX_SIZE_BYTES: "1024",
         LOG_FILE_MAX_FILES: "2",
         LOG_CONSOLE: "false",
       }),
     ).toMatchObject({
       logLevel: "trace",
-      logFilePath: "tmp/custom-arrtemplar.jsonl",
+      logFilePath: "tmp/custom-app.jsonl",
       logFileMaxSizeBytes: 1024,
       logFileMaxFiles: 2,
       logConsoleEnabled: false,

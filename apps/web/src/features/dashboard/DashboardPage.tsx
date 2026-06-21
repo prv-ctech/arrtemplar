@@ -51,10 +51,10 @@ const demandBars = [
 ] as const;
 
 const mediaCards = [
-  ["Kitsune Relay", "Dual-audio match", "arrtemplar-kitsune-relay", "1080p"],
-  ["Harbor of Glass", "Artwork pending", "arrtemplar-harbor-glass", "OVA"],
-  ["Moonlit Saffron", "Alias confidence 84.6%", "arrtemplar-moonlit-saffron", "S02"],
-  ["Aster Train", "Watchlist request", "arrtemplar-aster-train", "TV"],
+  ["Kitsune Relay", "Dual-audio match", "media-kitsune-relay", "1080p"],
+  ["Harbor of Glass", "Artwork pending", "media-harbor-glass", "OVA"],
+  ["Moonlit Saffron", "Alias confidence 84.6%", "media-moonlit-saffron", "S02"],
+  ["Aster Train", "Watchlist request", "media-aster-train", "TV"],
 ] as const;
 
 const operations = [

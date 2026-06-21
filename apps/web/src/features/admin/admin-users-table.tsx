@@ -1,5 +1,6 @@
 import type { AdminUserSummary, PublicUser } from "@arrtemplar/shared";
 import { UserCircleIcon, UserCirclePlusIcon } from "@phosphor-icons/react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -24,6 +25,7 @@ const userActionCellClassName = `${userActionColumnBaseClassName} z-20`;
 type AdminUsersTableCapabilities = {
   canChangePasswords: boolean;
   canCreateUsers: boolean;
+  canDeleteUsers: boolean;
   canEditPermissions: boolean;
   canToggleStatus: boolean;
 };
@@ -32,6 +34,7 @@ type AdminUsersTableProps = {
   capabilities: AdminUsersTableCapabilities;
   onChangePassword: (user: AdminUserSummary) => void;
   onCreateUser: () => void;
+  onDeleteUser: (user: AdminUserSummary) => void;
   onEditPermissions: (user: AdminUserSummary) => void;
   onToggleStatus: (user: AdminUserSummary) => void;
   rows: readonly AdminUserSummary[];
@@ -42,6 +45,7 @@ export function AdminUsersTable({
   capabilities,
   onChangePassword,
   onCreateUser,
+  onDeleteUser,
   onEditPermissions,
   onToggleStatus,
   rows,
@@ -56,6 +60,7 @@ export function AdminUsersTable({
         actor={actor}
         capabilities={capabilities}
         onChangePassword={onChangePassword}
+        onDeleteUser={onDeleteUser}
         onEditPermissions={onEditPermissions}
         onToggleStatus={onToggleStatus}
         rows={rows}
@@ -76,6 +81,7 @@ function AdminUsersTableHeader({
       <TableRow>
         <TableHead>User</TableHead>
         <TableHead>Public ID</TableHead>
+        <TableHead>Auth</TableHead>
         <TableHead>Permissions</TableHead>
         <TableHead>Status</TableHead>
         <TableHead>Created</TableHead>
@@ -90,6 +96,7 @@ function AdminUsersTableBody({
   actor,
   capabilities,
   onChangePassword,
+  onDeleteUser,
   onEditPermissions,
   onToggleStatus,
   rows,
@@ -103,6 +110,7 @@ function AdminUsersTableBody({
             capabilities={capabilities}
             key={user.id}
             onChangePassword={onChangePassword}
+            onDeleteUser={onDeleteUser}
             onEditPermissions={onEditPermissions}
             onToggleStatus={onToggleStatus}
             user={user}
@@ -146,6 +154,7 @@ function AdminUserTableRow({
   actor,
   capabilities,
   onChangePassword,
+  onDeleteUser,
   onEditPermissions,
   onToggleStatus,
   user,
@@ -156,6 +165,9 @@ function AdminUserTableRow({
         <UserIdentityCell username={user.username} />
       </TableCell>
       <TableCell className="font-mono text-xs text-muted-foreground">{user.id}</TableCell>
+      <TableCell>
+        <AuthMethodBadge method={user.authMethod ?? "local"} />
+      </TableCell>
       <TableCell className="min-w-44 max-w-72 text-sm text-muted-foreground">
         <UserPermissionSummary permissions={user.permissions} />
       </TableCell>
@@ -166,9 +178,11 @@ function AdminUserTableRow({
         <UserRowActions
           actor={actor}
           canChangePasswords={capabilities.canChangePasswords}
+          canDeleteUsers={capabilities.canDeleteUsers}
           canEditPermissions={capabilities.canEditPermissions}
           canToggleStatus={capabilities.canToggleStatus}
           onChangePassword={onChangePassword}
+          onDeleteUser={onDeleteUser}
           onEditPermissions={onEditPermissions}
           onToggleStatus={onToggleStatus}
           user={user}
@@ -192,9 +206,17 @@ function UserIdentityCell({ username }: { username: string }) {
 function EmptyUsersRow() {
   return (
     <TableRow>
-      <TableCell className="text-center text-muted-foreground" colSpan={7}>
+      <TableCell className="text-center text-muted-foreground" colSpan={8}>
         No managed local accounts yet.
       </TableCell>
     </TableRow>
+  );
+}
+
+function AuthMethodBadge({ method }: { method: "local" | "oauth" }) {
+  return (
+    <Badge variant={method === "oauth" ? "default" : "secondary"}>
+      {method === "oauth" ? "OAuth" : "Local"}
+    </Badge>
   );
 }

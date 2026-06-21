@@ -3,6 +3,7 @@ import { configure } from "@logtape/logtape";
 import { createSessionExpiresAt } from "../../../../../apps/server/src/auth/session-token";
 import type { DatabaseClient } from "../../../../../apps/server/src/db/client";
 import { sessions, users } from "../../../../../apps/server/src/db/schema";
+import { APP_LOG_CATEGORY } from "../../../../../packages/shared/src";
 import { resetAndOpenTestDatabase } from "../../../../helpers/database";
 import {
   configureRedactedLogCapture,
@@ -24,7 +25,7 @@ describe("createDatabase", () => {
 
     await configure({
       sinks: { buffer: sink },
-      loggers: [{ category: ["arrtemplar", "database", "query"], sinks: ["buffer"] }],
+      loggers: [{ category: [APP_LOG_CATEGORY, "database", "query"], sinks: ["buffer"] }],
     });
 
     database = await resetAndOpenTestDatabase();
@@ -33,7 +34,7 @@ describe("createDatabase", () => {
     database.db.select().from(users).all();
 
     expect(records).toHaveLength(1);
-    expect(records[0]?.category).toEqual(["arrtemplar", "database", "query"]);
+    expect(records[0]?.category).toEqual([APP_LOG_CATEGORY, "database", "query"]);
     expect(records[0]?.level).toBe("debug");
     expect(records[0]?.properties).toMatchObject({
       query: expect.stringContaining("select"),

@@ -13,6 +13,7 @@ import {
 const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../../../");
 const accountSettingsSourcePath = `${workspaceRoot}/apps/web/src/features/account/AccountSettings.tsx`;
 const notificationPreferencesSourcePath = `${workspaceRoot}/apps/web/src/features/notifications/notification-preferences.ts`;
+const settingsPrimitivesSourcePath = `${workspaceRoot}/apps/web/src/features/settings/SettingsPrimitives.tsx`;
 
 const baseUser: PublicUser = {
   id: "abcABC123",
@@ -116,6 +117,7 @@ describe("profile self-service settings layout", () => {
 
   it("renders real self-service notification controls with visible states", async () => {
     const source = await Bun.file(accountSettingsSourcePath).text();
+    const settingsPrimitivesSource = await Bun.file(settingsPrimitivesSourcePath).text();
 
     expect(source).toContain("useNotificationPreferencesQuery");
     expect(source).toContain("useUpdateNotificationPreferencesMutation");
@@ -125,8 +127,8 @@ describe("profile self-service settings layout", () => {
     expect(source).toContain("Refreshing notification settings");
     expect(source).toContain("Saving notification settings");
     expect(source).not.toContain("Notification preferences saved.");
-    expect(source).toContain('role="alert"');
-    expect(source).toContain('aria-live="polite"');
+    expect(settingsPrimitivesSource).toContain('role="alert"');
+    expect(settingsPrimitivesSource).toContain('aria-live="polite"');
   });
 
   it("keeps notification frequency compact and conditional on enabled toasts", async () => {

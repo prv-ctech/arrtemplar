@@ -98,6 +98,15 @@ export const PERMISSION_CATALOG = [
     route: { surface: "users", path: "/profile/:publicUserId" },
   },
   {
+    permission: "users:delete",
+    category: "users",
+    label: "Delete users",
+    description: "Permanently delete managed users while preserving audit history.",
+    risk: "critical",
+    defaultGrant: "explicit",
+    route: { surface: "users", path: "/settings/users" },
+  },
+  {
     permission: "profile:update",
     category: "profile",
     label: "Update profile",
@@ -177,6 +186,15 @@ export const PERMISSION_CATALOG = [
     risk: "medium",
     defaultGrant: "explicit",
     route: { surface: "settings", path: "/settings/notifications" },
+  },
+  {
+    permission: "settings:auth",
+    category: "settings",
+    label: "Auth settings",
+    description: "Manage native OAuth login provider configuration and admin account linking.",
+    risk: "critical",
+    defaultGrant: "explicit",
+    route: { surface: "settings", path: "/settings/auth" },
   },
   {
     permission: "settings:logs",

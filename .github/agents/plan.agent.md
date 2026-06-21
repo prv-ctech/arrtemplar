@@ -23,6 +23,10 @@ Use Caveman in `ultra` mode for AI-agent-facing output, summaries, and handoffs.
 - `.github/skills/spec-driven-development/SKILL.md`
 - `.github/skills/planning-and-task-breakdown/SKILL.md`
 - `.github/skills/interview-me/SKILL.md`
+- `.github/skills/code-simplification/SKILL.md`
+- `.github/skills/no-workarounds/SKILL.md`
+- `.github/skills/no-workarounds/references/philosophical-foundations.md`
+- `.github/skills/no-workarounds/references/workaround-catalog.md`
 
 
 ### Completion Gate

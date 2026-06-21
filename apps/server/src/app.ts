@@ -1,4 +1,4 @@
-import { APP_NAME, APP_VERSION, type HealthResponse } from "@arrtemplar/shared";
+import { APP_LOG_CATEGORY, APP_NAME, APP_VERSION, type HealthResponse } from "@arrtemplar/shared";
 import { cors } from "@elysia/cors";
 import { openapi } from "@elysia/openapi";
 import { elysiaLogger } from "@logtape/elysia";
@@ -65,7 +65,7 @@ export function createApp(options: CreateAppOptions = {}) {
   return new Elysia()
     .use(
       elysiaLogger({
-        category: ["arrtemplar", "http"],
+        category: [APP_LOG_CATEGORY, "http"],
         level: "info",
         logRequest: false,
         scope: "global",
@@ -99,7 +99,7 @@ export function createApp(options: CreateAppOptions = {}) {
           info: {
             title: `${APP_NAME} API`,
             version: APP_VERSION,
-            description: "Arrtemplar template API — extend for your domain.",
+            description: `${APP_NAME} API — extend for your domain.`,
           },
           tags: [
             { name: "System", description: "Application status and diagnostics" },

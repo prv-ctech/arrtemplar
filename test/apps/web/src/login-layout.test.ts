@@ -21,4 +21,27 @@ describe("login route layout", () => {
     expect(authPanelClass).toContain("overflow-y-auto");
     expect(authPanelClass).not.toContain("overflow-hidden");
   });
+
+  it("uses Authentik as primary login when the provider is enabled", async () => {
+    const loginRouteSource = await Bun.file(loginRouteSourcePath).text();
+    const loginFormSource = await Bun.file(loginFormSourcePath).text();
+
+    expect(loginRouteSource).toContain(
+      'const authentikStartPath = "/api/auth/oauth/authentik/start"',
+    );
+    expect(loginRouteSource).toContain("useAuthProvidersQuery");
+    expect(loginRouteSource).toContain("isAuthentikEnabled(providersQuery.data)");
+    expect(loginRouteSource).toContain("window.location.assign(getAuthentikStartPath(forceLogin))");
+    expect(loginRouteSource).toContain("Redirecting to Authentik");
+    expect(loginFormSource).not.toContain("Continue with Authentik");
+    expect(loginFormSource).not.toContain("AuthentikSignInButton");
+  });
+
+  it("forces Authentik to show its login prompt after app sign-out", async () => {
+    const loginRouteSource = await Bun.file(loginRouteSourcePath).text();
+
+    expect(loginRouteSource).toContain('useSearch({ from: "/login" })');
+    expect(loginRouteSource).toContain("forceLogin={signedOut === true}");
+    expect(loginRouteSource).toContain("?prompt=login");
+  });
 });

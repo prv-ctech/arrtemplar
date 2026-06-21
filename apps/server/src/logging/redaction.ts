@@ -81,7 +81,7 @@ function redactUrlField(value: unknown): unknown {
 
 function redactParsedUrl(value: string): string {
   const isAbsolute = /^[a-z][a-z\d+.-]*:/i.test(value);
-  const url = new URL(value, "http://arrtemplar.local");
+  const url = new URL(value, "http://app.local");
 
   for (const key of url.searchParams.keys()) {
     url.searchParams.set(key, "[REDACTED]");

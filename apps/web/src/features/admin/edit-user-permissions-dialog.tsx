@@ -45,6 +45,7 @@ const userManagerPermissions: readonly UserPermission[] = [
   "users:password",
   "users:permissions",
   "users:disable",
+  "users:delete",
 ];
 
 const permissionsDialogContentClassName = [

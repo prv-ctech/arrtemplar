@@ -71,4 +71,11 @@ describe("app shell primary navigation", () => {
     expect(source).toContain('id: "auth.sign_out.failed"');
     expect(source).not.toContain("onSettled: () =>");
   });
+
+  it("marks successful sign-out navigation so Authentik shows a fresh login prompt", async () => {
+    const source = await Bun.file(appShellSourcePath).text();
+
+    expect(source).toContain('to: "/login"');
+    expect(source).toContain("search: { signedOut: true }");
+  });
 });

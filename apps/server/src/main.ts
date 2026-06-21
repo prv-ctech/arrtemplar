@@ -1,11 +1,11 @@
-import { APP_NAME } from "@arrtemplar/shared";
+import { APP_LOG_CATEGORY, APP_NAME } from "@arrtemplar/shared";
 import { getLogger } from "@logtape/logtape";
 import { createApp } from "./app";
 import { env } from "./config/env";
 import { migrateDatabase as runDatabaseMigrations } from "./db/migrate";
 import { configureServerLogging } from "./logging/config";
 
-const serverLogger = getLogger(["arrtemplar", "server"]);
+const serverLogger = getLogger([APP_LOG_CATEGORY, "server"]);
 
 type RuntimeApp = {
   listen: (port: number) => unknown;

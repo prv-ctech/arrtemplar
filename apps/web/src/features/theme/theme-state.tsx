@@ -1,3 +1,4 @@
+import { APP_STORAGE_PREFIX } from "@arrtemplar/shared";
 import { createContext, type ReactNode, use, useEffect, useMemo, useState } from "react";
 import {
   APP_THEMES,
@@ -8,8 +9,7 @@ import {
   THEME_PACKS,
 } from "./theme-options";
 
-const THEME_STORAGE_KEY = "arrtemplar.theme";
-const LEGACY_CATPPUCCIN_THEME_STORAGE_KEY = "arrtemplar.catppuccin-theme";
+const THEME_STORAGE_KEY = `${APP_STORAGE_PREFIX}.theme`;
 
 type ThemeContextValue = {
   theme: AppTheme;
@@ -27,10 +27,7 @@ function readStoredTheme(): AppTheme {
   }
 
   try {
-    return resolveAppTheme(
-      window.localStorage.getItem(THEME_STORAGE_KEY) ??
-        window.localStorage.getItem(LEGACY_CATPPUCCIN_THEME_STORAGE_KEY),
-    );
+    return resolveAppTheme(window.localStorage.getItem(THEME_STORAGE_KEY));
   } catch {
     return DEFAULT_THEME;
   }
@@ -49,7 +46,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
     try {
       window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-      window.localStorage.removeItem(LEGACY_CATPPUCCIN_THEME_STORAGE_KEY);
     } catch {
       // Persisting the theme is progressive enhancement; the active theme is already applied.
     }

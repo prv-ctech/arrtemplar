@@ -1,6 +1,67 @@
 import type { PermissionCatalogEntry, UserPermission } from "./permissions";
 import type { ProfileAvatarId, ProfileBannerId } from "./profile-media";
 
+export const AUTH_PROVIDER_SLUGS = ["authentik"] as const;
+
+export type AuthProviderSlug = (typeof AUTH_PROVIDER_SLUGS)[number];
+
+export const AUTH_METHOD_VALUES = ["local", "oauth"] as const;
+
+export type AuthMethod = (typeof AUTH_METHOD_VALUES)[number];
+
+export const AUTH_API_ROUTES = {
+  oauthStart: "/api/auth/oauth/:provider/start",
+  oauthCallback: "/api/auth/callback/:provider",
+  providers: "/api/auth/providers",
+  provider: "/api/auth/providers/:slug",
+  identitiesMe: "/api/auth/identities/me",
+} as const;
+
+export type AuthProviderSummary = {
+  slug: AuthProviderSlug;
+  label: string;
+  issuer: string;
+  clientId: string;
+  scopes: string;
+  redirectUris: string[];
+  enabled: boolean;
+  hasClientSecret: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AuthProvidersListResponse = {
+  providers: AuthProviderSummary[];
+};
+
+export type AuthProviderResponse = {
+  provider: AuthProviderSummary;
+};
+
+export type AuthUpsertProviderRequest = {
+  label: string;
+  issuer: string;
+  clientId: string;
+  clientSecret?: string;
+  scopes: string;
+  redirectUris: string[];
+  enabled: boolean;
+};
+
+export type AuthPatchProviderRequest = Partial<AuthUpsertProviderRequest>;
+
+export type AuthIdentity = {
+  id: string;
+  provider: AuthProviderSlug;
+  issuer: string;
+  subject: string;
+  createdAt: string;
+};
+
+export type AuthIdentitiesResponse = {
+  identities: AuthIdentity[];
+};
+
 export const NOTIFICATION_FREQUENCY_VALUES = ["all", "minimal"] as const;
 
 export type NotificationFrequency = (typeof NOTIFICATION_FREQUENCY_VALUES)[number];
@@ -61,6 +122,8 @@ export const TOAST_NOTIFICATION_EVENTS = {
   "users.status.disabled": { severity: "success", importance: "important" },
   "users.status.failed": { severity: "error", importance: "important" },
   "users.status.restored": { severity: "success", importance: "important" },
+  "users.deleted": { severity: "success", importance: "important" },
+  "users.delete.failed": { severity: "error", importance: "important" },
 } as const satisfies Record<string, ToastNotificationClassification>;
 
 export type ToastNotificationId = keyof typeof TOAST_NOTIFICATION_EVENTS;
@@ -148,6 +211,7 @@ export type PublicUser = {
 export type ManagedUserSummary = {
   id: string;
   username: string;
+  authMethod?: AuthMethod;
   disabledAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -260,6 +324,13 @@ export type AdminPermissionCatalogResponse = PermissionCatalogResponse;
 export type AdminChangeUserPasswordResponse = {
   status: "ok";
 };
+
+export type AdminDeleteUserResponse = {
+  status: "ok";
+  deletedUserId: string;
+};
+
+export type DeleteManagedUserResponse = AdminDeleteUserResponse;
 
 export type AuthSetupStatusResponse = {
   required: boolean;

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { configure } from "@logtape/logtape";
 import type { DatabaseClient } from "../../../../../apps/server/src/db/client";
+import { APP_LOG_CATEGORY } from "../../../../../packages/shared/src";
 import { createLogBuffer, resetLogTape } from "../../../../helpers/logging";
 import {
   closeServerTestDatabases,
@@ -49,7 +50,7 @@ describe("safe API error handling", () => {
 
     await configure({
       sinks: { buffer: sink },
-      loggers: [{ category: ["arrtemplar", "security"], sinks: ["buffer"] }],
+      loggers: [{ category: [APP_LOG_CATEGORY, "security"], sinks: ["buffer"] }],
     });
 
     app.get("/api/force-error", () => {
@@ -73,7 +74,7 @@ describe("safe API error handling", () => {
     const serializedLogs = JSON.stringify(records);
 
     expect(records).toHaveLength(1);
-    expect(records[0]?.category).toEqual(["arrtemplar", "security"]);
+    expect(records[0]?.category).toEqual([APP_LOG_CATEGORY, "security"]);
     expect(records[0]?.level).toBe("error");
     expect(records[0]?.properties).toMatchObject({ code: "UNKNOWN", errorType: "Error" });
     expect(serializedLogs).not.toContain("database exploded");

@@ -36,6 +36,8 @@ describe("router route taxonomy", () => {
     expect(source).toContain('path: "theme"');
     expect(source).toContain('path: "about"');
     expect(source).toContain('path: "services"');
+    expect(source).toContain('path: "auth"');
+    expect(source).toContain("AdminAuthRoute");
     expect(source).not.toContain('path: "Users"');
   });
 

@@ -179,3 +179,30 @@ export function SettingsPanel({ activeId, children }: { activeId: string; childr
     </div>
   );
 }
+
+export function SettingsStatus({
+  errorMessage,
+  statusId,
+  statusMessage,
+}: {
+  errorMessage: string | null;
+  statusId: string;
+  statusMessage: string | null;
+}) {
+  if (!statusMessage && !errorMessage) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+      <div aria-live="polite" className="min-h-5 text-muted-foreground" id={statusId}>
+        {statusMessage}
+      </div>
+      {errorMessage ? (
+        <p className="text-destructive" role="alert">
+          {errorMessage}
+        </p>
+      ) : null}
+    </div>
+  );
+}

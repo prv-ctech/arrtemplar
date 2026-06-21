@@ -9,6 +9,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   changeManagedUserPassword,
   createUser,
+  deleteManagedUser,
   getPermissionCatalog,
   listUsers,
   updateManagedUserPermissions,
@@ -87,6 +88,17 @@ export function useUpdateManagedUserStatusMutation() {
   return useMutation({
     mutationFn: ({ userId, input }: { userId: string; input: AdminUpdateUserStatusRequest }) =>
       updateManagedUserStatus(userId, input),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: usersQueryKey });
+    },
+  });
+}
+
+export function useDeleteManagedUserMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (userId: string) => deleteManagedUser(userId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: usersQueryKey });
     },

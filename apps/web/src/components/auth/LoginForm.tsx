@@ -1,5 +1,4 @@
-import type { CreateAdminRequest } from "@arrtemplar/shared";
-import { CaretRightIcon } from "@phosphor-icons/react";
+import { APP_NAME, type CreateAdminRequest } from "@arrtemplar/shared";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { type ComponentProps, type FormEvent, useId, useState } from "react";
@@ -53,7 +52,6 @@ export function LoginForm() {
         <AuthFields form={form} />
         <AuthErrorMessage message={form.errorMessage} />
         <AuthSubmitButton form={form} />
-        {form.mode === "login" ? <PlexSignInPlaceholder /> : null}
       </form>
     </div>
   );
@@ -289,27 +287,6 @@ function AuthSubmitButton({ form }: { form: AuthFormController }) {
   );
 }
 
-function PlexSignInPlaceholder() {
-  return (
-    <>
-      <div className="flex items-center gap-3 py-1 text-xs text-muted-foreground">
-        <div className="h-px flex-1 bg-border" aria-hidden="true" />
-        <span>or continue with</span>
-        <div className="h-px flex-1 bg-border" aria-hidden="true" />
-      </div>
-      <button
-        className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-2xl border border-border bg-secondary/70 px-3 text-sm font-semibold text-secondary-foreground shadow-[inset_0_1px_0_hsl(0_0%_100%/0.04)] transition-[background-color,border-color,box-shadow,transform] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 hover:border-primary/40 hover:bg-secondary active:translate-y-0 active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-70 [@media(max-height:640px)]:h-9"
-        disabled
-        title="Plex sign-in is not configured for this local build."
-        type="button"
-      >
-        <CaretRightIcon aria-hidden="true" className="size-4 text-primary" weight="bold" />
-        <span>Plex</span>
-      </button>
-    </>
-  );
-}
-
 function getAuthFormCopy(mode: AuthMode): { title: string; description: string | null } {
   return mode === "setup"
     ? {
@@ -317,7 +294,7 @@ function getAuthFormCopy(mode: AuthMode): { title: string; description: string |
         description: null,
       }
     : {
-        title: "Arrtemplar",
+        title: APP_NAME,
         description: null,
       };
 }

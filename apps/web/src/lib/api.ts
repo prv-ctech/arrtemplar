@@ -1,10 +1,16 @@
 import type { App } from "@arrtemplar/server";
 import type {
   AdminChangeUserPasswordRequest,
+  AdminDeleteUserResponse,
   AdminUpdateUserPermissionsRequest,
   AdminUpdateUserStatusRequest,
   AdminUserSummary,
+  AuthIdentity,
+  AuthMethod,
+  AuthProviderSlug,
+  AuthProviderSummary,
   AuthSetupStatusResponse,
+  AuthUpsertProviderRequest,
   ChangePasswordRequest,
   ChangePasswordResponse,
   ClearNotificationHistoryResponse,
@@ -101,6 +107,33 @@ export async function getCurrentUser(): Promise<PublicUser | null> {
   const response = unwrapData(await api.api.auth.me.get(), "Auth check failed.");
 
   return response.user ? normalizePublicUser(response.user) : null;
+}
+
+export async function listAuthProviders(): Promise<AuthProviderSummary[]> {
+  const response = unwrapData(await api.api.auth.providers.get(), "Auth providers request failed.");
+
+  return response.providers.map(normalizeAuthProviderSummary);
+}
+
+export async function upsertAuthProvider(
+  slug: AuthProviderSlug,
+  input: AuthUpsertProviderRequest,
+): Promise<AuthProviderSummary> {
+  const response = unwrapData(
+    await api.api.auth.providers({ slug }).put(input),
+    "Auth provider save failed.",
+  );
+
+  return normalizeAuthProviderSummary(response.provider);
+}
+
+export async function listAuthIdentities(): Promise<AuthIdentity[]> {
+  const response = unwrapData(
+    await api.api.auth.identities.me.get(),
+    "Linked auth identities request failed.",
+  );
+
+  return response.identities.map(normalizeAuthIdentity);
 }
 
 export async function getUserProfile(): Promise<PublicUser> {
@@ -268,6 +301,13 @@ export async function updateManagedUserStatus(
   return normalizeManagedUserSummary(response.user);
 }
 
+export async function deleteManagedUser(userId: string): Promise<AdminDeleteUserResponse> {
+  return unwrapData(
+    await api.api.users({ publicUserId: userId }).delete(),
+    "Managed user delete failed.",
+  );
+}
+
 export function createApiRequestHeaders(
   method: string | undefined,
 ): Record<string, string> | undefined {
@@ -299,6 +339,56 @@ function normalizePermissions(permissions: unknown): UserPermission[] {
     (permission): permission is UserPermission =>
       typeof permission === "string" && isUserPermission(permission),
   );
+}
+
+function normalizeAuthProviderSummary(provider: {
+  clientId: string;
+  createdAt: string;
+  enabled: boolean;
+  hasClientSecret: boolean;
+  issuer: string;
+  label: string;
+  redirectUris: string[];
+  scopes: string;
+  slug: unknown;
+  updatedAt: string;
+}): AuthProviderSummary {
+  return {
+    slug: isAuthProviderSlug(provider.slug) ? provider.slug : "authentik",
+    label: provider.label,
+    issuer: provider.issuer,
+    clientId: provider.clientId,
+    scopes: provider.scopes,
+    redirectUris: Array.isArray(provider.redirectUris) ? provider.redirectUris : [],
+    enabled: Boolean(provider.enabled),
+    hasClientSecret: Boolean(provider.hasClientSecret),
+    createdAt: provider.createdAt,
+    updatedAt: provider.updatedAt,
+  };
+}
+
+function normalizeAuthIdentity(identity: {
+  createdAt: string;
+  id: string;
+  issuer: string;
+  provider: unknown;
+  subject: string;
+}): AuthIdentity {
+  return {
+    id: identity.id,
+    provider: isAuthProviderSlug(identity.provider) ? identity.provider : "authentik",
+    issuer: identity.issuer,
+    subject: identity.subject,
+    createdAt: identity.createdAt,
+  };
+}
+
+function isAuthProviderSlug(value: unknown): value is AuthProviderSlug {
+  return value === "authentik";
+}
+
+function isAuthMethod(value: unknown): value is AuthMethod {
+  return value === "local" || value === "oauth";
 }
 
 function normalizePublicUser(user: {
@@ -466,6 +556,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function normalizeManagedUserSummary(user: {
   id: string;
   username: string;
+  authMethod?: unknown;
   disabledAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -473,6 +564,7 @@ function normalizeManagedUserSummary(user: {
 }): AdminUserSummary {
   return {
     ...user,
+    authMethod: isAuthMethod(user.authMethod) ? user.authMethod : "local",
     permissions: normalizePermissions(user.permissions),
   };
 }
@@ -480,6 +572,7 @@ function normalizeManagedUserSummary(user: {
 function normalizeManagedUserProfile(user: {
   id: string;
   username: string;
+  authMethod?: unknown;
   email: string;
   avatarId: unknown;
   bannerId: unknown;
@@ -491,6 +584,7 @@ function normalizeManagedUserProfile(user: {
 }): ManagedUserProfile {
   return {
     ...user,
+    authMethod: isAuthMethod(user.authMethod) ? user.authMethod : "local",
     avatarId: isProfileAvatarId(user.avatarId) ? user.avatarId : DEFAULT_PROFILE_AVATAR_ID,
     bannerId: isProfileBannerId(user.bannerId) ? user.bannerId : DEFAULT_PROFILE_BANNER_ID,
     permissions: normalizePermissions(user.permissions),

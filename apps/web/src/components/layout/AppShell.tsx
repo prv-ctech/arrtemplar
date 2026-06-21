@@ -172,7 +172,10 @@ export function AppShell({ children, user }: { children: ReactNode; user: Public
         },
         user.notificationPreferences,
       );
-      navigate({ to: "/login" });
+      navigate({
+        search: { signedOut: true },
+        to: "/login",
+      });
     },
     onError: (error) => {
       notify(

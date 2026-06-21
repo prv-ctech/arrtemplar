@@ -1,4 +1,6 @@
 import {
+  AUTH_METHOD_VALUES,
+  AUTH_PROVIDER_SLUGS,
   DEFAULT_PROFILE_AVATAR_ID,
   DEFAULT_PROFILE_BANNER_ID,
   NOTIFICATION_FREQUENCY_VALUES,
@@ -16,6 +18,14 @@ export const userPermissions = USER_PERMISSION_VALUES;
 const userPermissionEnum = [...userPermissions] as [
   (typeof userPermissions)[number],
   ...(typeof userPermissions)[number][],
+];
+const authMethodEnum = [...AUTH_METHOD_VALUES] as [
+  (typeof AUTH_METHOD_VALUES)[number],
+  ...(typeof AUTH_METHOD_VALUES)[number][],
+];
+const authProviderSlugEnum = [...AUTH_PROVIDER_SLUGS] as [
+  (typeof AUTH_PROVIDER_SLUGS)[number],
+  ...(typeof AUTH_PROVIDER_SLUGS)[number][],
 ];
 const notificationFrequencyEnum = [...NOTIFICATION_FREQUENCY_VALUES] as [
   (typeof NOTIFICATION_FREQUENCY_VALUES)[number],
@@ -51,6 +61,7 @@ export const users = sqliteTable(
     })
       .notNull()
       .default("all"),
+    authMethod: text("auth_method", { enum: authMethodEnum }).notNull().default("local"),
     passwordHash: text("password_hash").notNull(),
     disabledAt: text("disabled_at"),
     createdAt: text("created_at").notNull().default(timestampNow),
@@ -61,6 +72,47 @@ export const users = sqliteTable(
     uniqueIndex("users_public_id_unique").on(table.publicId),
     uniqueIndex("users_username_unique").on(table.username),
     uniqueIndex("users_email_unique").on(table.email),
+  ],
+);
+
+export const authProviders = sqliteTable(
+  "auth_providers",
+  {
+    id: text("id").primaryKey(),
+    slug: text("slug", { enum: authProviderSlugEnum }).notNull(),
+    label: text("label").notNull(),
+    issuer: text("issuer").notNull(),
+    clientId: text("client_id").notNull(),
+    clientSecretEncrypted: text("client_secret_encrypted").notNull(),
+    masterKeyId: text("master_key_id").notNull(),
+    scopes: text("scopes").notNull(),
+    redirectUris: text("redirect_uris").notNull(),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+    createdAt: text("created_at").notNull().default(timestampNow),
+    updatedAt: text("updated_at").notNull().default(timestampNow),
+  },
+  (table) => [uniqueIndex("auth_providers_slug_unique").on(table.slug)],
+);
+
+export const authIdentities = sqliteTable(
+  "auth_identities",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    provider: text("provider", { enum: authProviderSlugEnum }).notNull(),
+    issuer: text("issuer").notNull(),
+    subject: text("subject").notNull(),
+    createdAt: text("created_at").notNull().default(timestampNow),
+  },
+  (table) => [
+    uniqueIndex("auth_identities_provider_issuer_subject_unique").on(
+      table.provider,
+      table.issuer,
+      table.subject,
+    ),
+    index("auth_identities_user_id_idx").on(table.userId),
   ],
 );
 
@@ -148,6 +200,10 @@ export const auditLogs = sqliteTable(
 
 export type User = InferSelectModel<typeof users>;
 export type NewUser = InferInsertModel<typeof users>;
+export type AuthProvider = InferSelectModel<typeof authProviders>;
+export type NewAuthProvider = InferInsertModel<typeof authProviders>;
+export type AuthIdentity = InferSelectModel<typeof authIdentities>;
+export type NewAuthIdentity = InferInsertModel<typeof authIdentities>;
 export type NotificationHistory = InferSelectModel<typeof notificationHistory>;
 export type NewNotificationHistory = InferInsertModel<typeof notificationHistory>;
 export type UserPermissionGrant = InferSelectModel<typeof userPermissionGrants>;

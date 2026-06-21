@@ -2,12 +2,15 @@ import { describe, expect, it } from "bun:test";
 import { readWorkspaceSource, readWorkspaceSources } from "./admin-settings-test-sources";
 
 const settingsSourcePath = "apps/web/src/features/admin/AdminSettings.tsx";
+const authSettingsSourcePath = "apps/web/src/features/auth-settings/AuthSettings.tsx";
 const settingsPrimitivesSourcePath = "apps/web/src/features/settings/SettingsPrimitives.tsx";
 const usersSourcePaths = [
   "apps/web/src/features/admin/AdminUsersSettings.tsx",
   "apps/web/src/features/admin/admin-users-table.tsx",
   "apps/web/src/features/admin/change-user-password-dialog.tsx",
   "apps/web/src/features/admin/create-user-dialog.tsx",
+  "apps/web/src/features/admin/delete-user-dialog-content.tsx",
+  "apps/web/src/features/admin/delete-user-dialog.tsx",
   "apps/web/src/features/admin/edit-user-permissions-dialog.tsx",
   "apps/web/src/features/admin/user-permission-summary.tsx",
   "apps/web/src/features/admin/user-row-actions.tsx",
@@ -25,6 +28,10 @@ describe("app settings layout", () => {
     expect(source).not.toContain("CATPPUCCIN_LOGO_SRC");
     expect(source).not.toContain("Theme preference for the signed-in user.");
     expect(source).toContain('path: "/settings/services"');
+    expect(source).toContain('path: "/settings/auth"');
+    expect(source).toContain("AuthSettings");
+    expect(source).toContain("SYSTEM_ADMIN_PERMISSION");
+    expect(source).not.toContain('hasRequiredPermission(user, "settings:auth")');
     expect(source).not.toContain('path: "/admin/');
     expect(source).not.toContain("Admin settings");
     expect(source).not.toContain("mod role");
@@ -33,6 +40,9 @@ describe("app settings layout", () => {
   it("keeps the users section as a real directory-driven management surface", async () => {
     const settingsSource = await readWorkspaceSource(settingsSourcePath);
     const usersSource = await readWorkspaceSources(usersSourcePaths);
+    const usersTableSource = await readWorkspaceSource(
+      "apps/web/src/features/admin/admin-users-table.tsx",
+    );
     const hooksSource = await readWorkspaceSource(usersHooksSourcePath);
 
     expect(settingsSource).toContain("AdminUsersSettings");
@@ -42,6 +52,7 @@ describe("app settings layout", () => {
     expect(settingsSource).not.toContain("<AccountSettings");
     expect(settingsSource).not.toContain('activePage="theme"');
     expect(usersSource).toContain("Public ID");
+    expect(usersSource).toContain("AuthMethodBadge");
     expect(usersSource).toContain("Permissions");
     expect(usersSource).toContain("Status");
     expect(usersSource).toContain("Created");
@@ -56,11 +67,17 @@ describe("app settings layout", () => {
     expect(usersSource).toContain("Service operator");
     expect(usersSource).toContain("User manager");
     expect(usersSource).toContain("users:manage");
+    expect(usersSource).toContain("users:delete");
     expect(usersSource).toContain("settings:theme");
     expect(usersSource).toContain("DropdownMenu");
     expect(usersSource).toContain("Open user actions");
+    expect(usersSource).toContain("Delete user");
+    expect(usersSource).toContain("DeleteUserDialog");
+    expect(usersSource).toContain("Delete this user?");
+    expect(usersTableSource.match(/onDeleteUser=\{onDeleteUser\}/g)).toHaveLength(3);
     expect(usersSource).toContain("Default: admin");
     expect(usersSource).toContain("canToggleUserStatus");
+    expect(usersSource).toContain("canDeleteUser");
     expect(usersSource).toContain("UserCirclePlusIcon");
     expect(usersSource).toContain('aria-label="Create user"');
     expect(usersSource).toContain('containerClassName="max-w-full bg-card"');
@@ -109,6 +126,7 @@ describe("app settings layout", () => {
     expect(hooksSource).toContain("usePermissionCatalogQuery");
     expect(hooksSource).toContain("useUpdateManagedUserPermissionsMutation");
     expect(hooksSource).toContain("useUpdateManagedUserStatusMutation");
+    expect(hooksSource).toContain("useDeleteManagedUserMutation");
     expect(hooksSource).not.toContain("useChangeAdminUserRoleMutation");
   });
 
@@ -132,5 +150,27 @@ describe("app settings layout", () => {
     expect(source).toContain("text-muted-foreground");
     expect(source).not.toContain("text-foreground/60");
     expect(source).not.toContain("dark:data-[state=active]:bg-input/30");
+  });
+
+  it("keeps Auth settings focused on controls and linked identities, not setup reference copy", async () => {
+    const source = await readWorkspaceSource(authSettingsSourcePath);
+    const forbiddenAuthDefaults = [
+      ["Create a confidential OAuth2", "/OIDC provider."].join(""),
+      ["Subject", " mode"].join(""),
+      ["RSA or EC", " CertificateKeyPair"].join(""),
+      ["default", "Issuer"].join(""),
+      ["default", "Scopes"].join(""),
+      ["getDefault", "RedirectUri"].join(""),
+      ["https://auth", ".prvmr.com"].join(""),
+      ["openid", "profile", "email"].join(" "),
+      ["/application/o/", ["arr", "templar/"].join("")].join(""),
+    ] as const;
+
+    expect(source).toContain("AuthProviderCard");
+    expect(source).toContain("LinkedIdentitiesCard");
+    expect(source).not.toContain("AuthentikHelpCard");
+    for (const forbiddenDefault of forbiddenAuthDefaults) {
+      expect(source).not.toContain(forbiddenDefault);
+    }
   });
 });

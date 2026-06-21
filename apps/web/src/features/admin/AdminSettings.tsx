@@ -1,8 +1,9 @@
-import type { PublicUser } from "@arrtemplar/shared";
+import { type PublicUser, SYSTEM_ADMIN_PERMISSION } from "@arrtemplar/shared";
 import {
   BellIcon,
   BookOpenIcon,
   DownloadSimpleIcon,
+  FingerprintIcon,
   GearIcon,
   InfoIcon,
   PaletteIcon,
@@ -15,6 +16,7 @@ import type { ReactElement } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ThemeSettings } from "@/features/account/AccountSettings";
 import { canManageUsers, hasRequiredPermission } from "@/features/auth/auth-state";
+import { AuthSettings } from "@/features/auth-settings/AuthSettings";
 import { useAuthenticatedRouteUser } from "@/routes/authenticated-route-user";
 import { type SettingsEntry, SettingsNav } from "../settings/SettingsNav";
 import { SettingsPanel } from "../settings/SettingsPrimitives";
@@ -27,6 +29,7 @@ export type AdminSettingsPage =
   | "library"
   | "import"
   | "notifications"
+  | "auth"
   | "services"
   | "logs"
   | "users";
@@ -39,6 +42,7 @@ type SettingsRouteTarget =
   | "/settings/library"
   | "/settings/import"
   | "/settings/notifications"
+  | "/settings/auth"
   | "/settings/services"
   | "/settings/logs";
 
@@ -104,6 +108,15 @@ function createSettingsEntries(user: PublicUser) {
       label: "Notifications",
       icon: <BellIcon aria-hidden="true" className="size-5" />,
       path: "/settings/notifications",
+    });
+  }
+
+  if (hasRequiredPermission(user, SYSTEM_ADMIN_PERMISSION)) {
+    entries.push({
+      id: "auth",
+      label: "Auth",
+      icon: <FingerprintIcon aria-hidden="true" className="size-5" />,
+      path: "/settings/auth",
     });
   }
 
@@ -181,6 +194,8 @@ function ActiveSettingsPage({ activePage }: { activePage: AdminSettingsPage }) {
         title: "Notifications",
         description: "App-wide notification channels and delivery settings.",
       });
+    case "auth":
+      return <AuthSettings />;
     case "services":
       return SettingsPlaceholder({
         title: "Services",

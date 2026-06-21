@@ -1,3 +1,5 @@
+import { APP_IDENTIFIER } from "@arrtemplar/shared";
+import { assertOAuthClientSecretEncryptionKey } from "../security/oauth-crypto";
 import { DEV_DATABASE_URL, TEST_DATABASE_URL } from "./database-paths";
 import { DEFAULT_WEB_ORIGIN, DEV_SERVER_PORT, TEST_SERVER_PORT } from "./runtime-defaults";
 
@@ -16,12 +18,13 @@ export type RuntimeEnv = {
   logFileMaxSizeBytes: number;
   logFileMaxFiles: number;
   logConsoleEnabled: boolean;
+  oauthClientSecretEncryptionKey: string | null;
 };
 
 export type RuntimeLogLevel = "trace" | "debug" | "info" | "warning" | "error" | "fatal";
 
 const runtimeLogLevels = ["trace", "debug", "info", "warning", "error", "fatal"] as const;
-const DEFAULT_LOG_FILE_PATH = "data/logs/arrtemplar.jsonl";
+const DEFAULT_LOG_FILE_PATH = `data/logs/${APP_IDENTIFIER}.jsonl`;
 const DEFAULT_LOG_FILE_MAX_SIZE_BYTES = 10 * 1024 * 1024;
 const DEFAULT_LOG_FILE_MAX_FILES = 5;
 
@@ -125,6 +128,18 @@ function readPositiveInteger(
   return parsedValue;
 }
 
+function readOAuthClientSecretEncryptionKey(value: string | undefined): string | null {
+  const key = value?.trim();
+
+  if (!key) {
+    return null;
+  }
+
+  assertOAuthClientSecretEncryptionKey(key);
+
+  return key;
+}
+
 function readDatabaseUrl(environment: RuntimeEnvironment): string {
   const databaseUrl = readConfiguredDatabaseUrl(environment);
 
@@ -195,6 +210,9 @@ export function readRuntimeEnv(environment: RuntimeEnvironment = Bun.env): Runti
       "LOG_CONSOLE",
       environment.LOG_CONSOLE,
       defaultLogConsoleEnabled(environment),
+    ),
+    oauthClientSecretEncryptionKey: readOAuthClientSecretEncryptionKey(
+      environment.OAUTH_CLIENT_SECRET_ENCRYPTION_KEY,
     ),
   };
 }

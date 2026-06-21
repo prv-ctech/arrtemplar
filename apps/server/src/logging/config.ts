@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { dirname } from "node:path";
+import { APP_LOG_CATEGORY } from "@arrtemplar/shared";
 import { getRotatingFileSink } from "@logtape/file";
 import {
   configure,
@@ -55,12 +56,12 @@ export async function configureServerLogging(runtimeEnv: RuntimeEnv = env): Prom
     },
     loggers: [
       {
-        category: ["arrtemplar", "meta"],
+        category: [APP_LOG_CATEGORY, "meta"],
         filters: ["metaWarnings"],
         sinks: ["meta"],
       },
       {
-        category: ["arrtemplar"],
+        category: [APP_LOG_CATEGORY],
         filters: ["runtimeLevel"],
         sinks: [...appSinks],
       },
@@ -75,7 +76,7 @@ async function ensureParentDirectory(filePath: string): Promise<void> {
     return;
   }
 
-  const markerPath = `${directory}/.arrtemplar-log-dir`;
+  const markerPath = `${directory}/.${APP_LOG_CATEGORY}-log-dir`;
 
   await Bun.write(markerPath, "", { createPath: true });
   await Bun.file(markerPath).delete();

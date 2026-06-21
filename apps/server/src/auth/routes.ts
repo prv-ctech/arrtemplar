@@ -1,5 +1,10 @@
 import type {
+  ApiErrorResponse,
+  AuthPatchProviderRequest,
+  AuthProviderSlug,
+  AuthProvidersListResponse,
   AuthSetupStatusResponse,
+  AuthUpsertProviderRequest,
   AuthUserResponse,
   ChangePasswordResponse,
   ClearNotificationHistoryResponse,
@@ -7,6 +12,7 @@ import type {
   CreateLocalUserResponse,
   CreateNotificationHistoryRequest,
   CreateNotificationHistoryResponse,
+  DeleteManagedUserResponse,
   LoginResponse,
   LogoutResponse,
   ManagedUserProfileResponse,
@@ -22,6 +28,8 @@ import type {
   UserProfileResponse,
 } from "@arrtemplar/shared";
 import {
+  AUTH_METHOD_VALUES,
+  AUTH_PROVIDER_SLUGS,
   isProfileAvatarId,
   isProfileBannerId,
   isToastNotificationId,
@@ -34,19 +42,38 @@ import {
   PERMISSION_ROUTE_SURFACES,
   PROFILE_AVATAR_IDS,
   PROFILE_BANNER_IDS,
+  SYSTEM_ADMIN_PERMISSION,
   TOAST_NOTIFICATION_EVENT_IDS,
   TOAST_NOTIFICATION_IMPORTANCE_VALUES,
   TOAST_NOTIFICATION_SEVERITY_VALUES,
   USER_PERMISSION_VALUES,
 } from "@arrtemplar/shared";
 import { Elysia, t } from "elysia";
+import { env } from "../config/env";
 import type { DatabaseClient } from "../db/client";
+import {
+  OAUTH_STATE_COOKIE_MAX_AGE_SECONDS,
+  OAUTH_STATE_COOKIE_NAME,
+} from "../security/oauth-state";
 import { AuthService } from "./auth.service";
+import { OAuthService } from "./oauth/oauth.service";
 import { MIN_PASSWORD_LENGTH } from "./password";
 import type { LoginRateLimiter } from "./rate-limit";
 import { SESSION_COOKIE_NAME, SESSION_DURATION_SECONDS } from "./session-token";
 
 const publicUserIdSchema = t.String({ minLength: 9, maxLength: 9, pattern: "^[A-Za-z0-9]{9}$" });
+const authMethodSchema = t.Union(
+  AUTH_METHOD_VALUES.map((authMethod) => t.Literal(authMethod)) as [
+    ReturnType<typeof t.Literal>,
+    ...ReturnType<typeof t.Literal>[],
+  ],
+);
+const authProviderSlugSchema = t.Union(
+  AUTH_PROVIDER_SLUGS.map((slug) => t.Literal(slug)) as [
+    ReturnType<typeof t.Literal>,
+    ...ReturnType<typeof t.Literal>[],
+  ],
+);
 const userPermissionSchema = t.Union(
   USER_PERMISSION_VALUES.map((permission) => t.Literal(permission)) as [
     ReturnType<typeof t.Literal>,
@@ -155,10 +182,32 @@ const publicUserSchema = t.Object({
 const managedUserSummarySchema = t.Object({
   id: publicUserIdSchema,
   username: t.String(),
+  authMethod: t.Optional(authMethodSchema),
   disabledAt: t.Union([t.String({ format: "date-time" }), t.Null()]),
   createdAt: t.String({ format: "date-time" }),
   updatedAt: t.String({ format: "date-time" }),
   permissions: t.Array(userPermissionSchema),
+});
+
+const authProviderSummarySchema = t.Object({
+  slug: authProviderSlugSchema,
+  label: t.String(),
+  issuer: t.String({ format: "uri" }),
+  clientId: t.String(),
+  scopes: t.String(),
+  redirectUris: t.Array(t.String({ format: "uri" })),
+  enabled: t.Boolean(),
+  hasClientSecret: t.Boolean(),
+  createdAt: t.String({ format: "date-time" }),
+  updatedAt: t.String({ format: "date-time" }),
+});
+
+const authIdentitySchema = t.Object({
+  id: t.String(),
+  provider: authProviderSlugSchema,
+  issuer: t.String({ format: "uri" }),
+  subject: t.String(),
+  createdAt: t.String({ format: "date-time" }),
 });
 
 const managedUserProfileSchema = t.Object({
@@ -217,6 +266,41 @@ const createNotificationHistoryRequestSchema = t.Object({
 const markNotificationReadRequestSchema = t.Object({
   read: t.Literal(true),
 });
+const oauthStartQuerySchema = t.Object({
+  mode: t.Optional(t.Union([t.Literal("login"), t.Literal("link")])),
+  prompt: t.Optional(t.Literal("login")),
+  returnTo: t.Optional(t.String({ maxLength: 2048 })),
+});
+const oauthCallbackQuerySchema = t.Object({
+  code: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
+  state: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
+  error: t.Optional(t.String({ maxLength: 200 })),
+});
+const authProviderParamsSchema = t.Object({
+  provider: authProviderSlugSchema,
+});
+const authProviderSlugParamsSchema = t.Object({
+  slug: authProviderSlugSchema,
+});
+const redirectUrisSchema = t.Array(t.String({ format: "uri" }), { minItems: 1, maxItems: 10 });
+const upsertAuthProviderRequestSchema = t.Object({
+  label: t.String({ minLength: 1, maxLength: 80, pattern: ".*\\S.*" }),
+  issuer: t.String({ format: "uri", maxLength: 2048 }),
+  clientId: t.String({ minLength: 1, maxLength: 512, pattern: ".*\\S.*" }),
+  clientSecret: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
+  scopes: t.String({ minLength: 1, maxLength: 500, pattern: ".*\\S.*" }),
+  redirectUris: redirectUrisSchema,
+  enabled: t.Boolean(),
+});
+const patchAuthProviderRequestSchema = t.Object({
+  label: t.Optional(t.String({ minLength: 1, maxLength: 80, pattern: ".*\\S.*" })),
+  issuer: t.Optional(t.String({ format: "uri", maxLength: 2048 })),
+  clientId: t.Optional(t.String({ minLength: 1, maxLength: 512, pattern: ".*\\S.*" })),
+  clientSecret: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
+  scopes: t.Optional(t.String({ minLength: 1, maxLength: 500, pattern: ".*\\S.*" })),
+  redirectUris: t.Optional(redirectUrisSchema),
+  enabled: t.Optional(t.Boolean()),
+});
 const notificationHistoryQuerySchema = t.Object({
   page: t.Optional(t.Numeric({ minimum: 1 })),
   pageSize: t.Optional(t.Numeric({ minimum: 1, maximum: 50 })),
@@ -246,12 +330,19 @@ const createAdminResponseSchema = t.Object({ user: publicUserSchema });
 const createLocalUserResponseSchema = t.Object({ user: managedUserSummarySchema });
 const managedUsersListResponseSchema = t.Object({ users: t.Array(managedUserSummarySchema) });
 const managedUserResponseSchema = t.Object({ user: managedUserSummarySchema });
+const deleteManagedUserResponseSchema = t.Object({
+  status: t.Literal("ok"),
+  deletedUserId: publicUserIdSchema,
+});
 const managedUserProfileResponseSchema = t.Object({ user: managedUserProfileSchema });
 const permissionCatalogResponseSchema = t.Object({
   permissions: t.Array(permissionCatalogEntrySchema),
 });
 const authSetupStatusResponseSchema = t.Object({ required: t.Boolean() });
 const authUserResponseSchema = t.Object({ user: t.Union([publicUserSchema, t.Null()]) });
+const authProvidersListResponseSchema = t.Object({ providers: t.Array(authProviderSummarySchema) });
+const authProviderResponseSchema = t.Object({ provider: authProviderSummarySchema });
+const authIdentitiesResponseSchema = t.Object({ identities: t.Array(authIdentitySchema) });
 const userProfileResponseSchema = t.Object({ user: publicUserSchema });
 const updateUserProfileResponseSchema = t.Object({ user: publicUserSchema });
 const notificationPreferencesResponseSchema = t.Object({
@@ -277,12 +368,44 @@ const changePasswordResponseSchema = t.Object({ status: t.Literal("ok") });
 const sessionCookieSchema = t.Cookie({
   [SESSION_COOKIE_NAME]: t.Optional(t.String()),
 });
+const oauthCookieSchema = t.Cookie({
+  [SESSION_COOKIE_NAME]: t.Optional(t.String()),
+  [OAUTH_STATE_COOKIE_NAME]: t.Optional(t.String()),
+});
 const apiErrorResponseSchema = t.Object({
   error: t.Object({
     code: t.String(),
     message: t.String(),
   }),
 });
+const oauthRedirectResponseSchema = {
+  302: t.Void(),
+  400: apiErrorResponseSchema,
+  401: apiErrorResponseSchema,
+  403: apiErrorResponseSchema,
+  404: apiErrorResponseSchema,
+  502: apiErrorResponseSchema,
+  503: apiErrorResponseSchema,
+};
+const oauthCallbackResponseSchema = {
+  ...oauthRedirectResponseSchema,
+  409: apiErrorResponseSchema,
+};
+const authProviderMutationResponseSchema = {
+  200: authProviderResponseSchema,
+  400: apiErrorResponseSchema,
+  401: apiErrorResponseSchema,
+  403: apiErrorResponseSchema,
+  404: apiErrorResponseSchema,
+  503: apiErrorResponseSchema,
+};
+const authProviderDeleteResponseSchema = {
+  200: logoutResponseSchema,
+  400: apiErrorResponseSchema,
+  401: apiErrorResponseSchema,
+  403: apiErrorResponseSchema,
+  404: apiErrorResponseSchema,
+};
 
 export type AuthRoutesOptions = {
   database: DatabaseClient;
@@ -290,15 +413,273 @@ export type AuthRoutesOptions = {
   rateLimiter?: LoginRateLimiter;
 };
 
+type OAuthLinkActorResult =
+  | { ok: true; linkToUserId?: string }
+  | { ok: false; status: 401 | 403; body: ApiErrorResponse };
+type AuthProviderSlugResult =
+  | { ok: true; slug: AuthProviderSlug }
+  | { ok: false; status: 400; body: ApiErrorResponse };
+type AuthProviderParamResult =
+  | { ok: true; provider: AuthProviderSlug }
+  | { ok: false; response: ReturnType<StatusHandler> };
+type ProviderMutationResult =
+  | { ok: true; body: unknown }
+  | { ok: false; status: number; body: ApiErrorResponse };
+type ProviderMutationContext<TInput> = {
+  body: TInput;
+  cookie: Record<string, { value?: unknown } | undefined>;
+  params: { slug: unknown };
+  status: StatusHandler;
+};
+
 export function createAuthRoutes(options: AuthRoutesOptions) {
   const authService = new AuthService(options.database, options.rateLimiter);
+  const oauthService = new OAuthService(options.database, authService, {
+    encryptionKey: env.oauthClientSecretEncryptionKey,
+    webOrigin: env.webOrigin,
+  });
 
   return new Elysia({ prefix: "/api" })
+    .use(createOAuthRoutes(authService, oauthService, options))
     .use(createSetupRoutes(authService, options))
     .use(createSessionRoutes(authService, options))
     .use(createProfileRoutes(authService))
     .use(createPermissionRoutes(authService))
     .use(createUsersRoutes(authService));
+}
+
+function createOAuthRoutes(
+  authService: AuthService,
+  oauthService: OAuthService,
+  options: AuthRoutesOptions,
+) {
+  return new Elysia()
+    .use(createOAuthProviderListRoute(oauthService))
+    .use(createOAuthStartRoute(authService, oauthService, options))
+    .use(createOAuthCallbackRoute(oauthService, options))
+    .use(createOAuthProviderUpsertRoute(authService, oauthService))
+    .use(createOAuthProviderPatchRoute(authService, oauthService))
+    .use(createOAuthProviderDeleteRoute(authService, oauthService))
+    .use(createOAuthIdentitiesRoute(authService));
+}
+
+function createOAuthProviderListRoute(oauthService: OAuthService) {
+  return new Elysia().get(
+    "/auth/providers",
+    (): AuthProvidersListResponse => oauthService.listProviders(),
+    {
+      response: authProvidersListResponseSchema,
+      detail: {
+        summary: "List OAuth providers",
+        description: "Returns configured OAuth providers without exposing client secrets.",
+        tags: ["Auth"],
+      },
+    },
+  );
+}
+
+function createOAuthStartRoute(
+  authService: AuthService,
+  oauthService: OAuthService,
+  options: AuthRoutesOptions,
+) {
+  return new Elysia().get(
+    "/auth/oauth/:provider/start",
+    async ({ cookie, params, query, request, status }) => {
+      const providerResult = readAuthProviderParam(params.provider, status);
+
+      if (!providerResult.ok) {
+        return providerResult.response;
+      }
+
+      const linkActorResult = readOAuthLinkActor(
+        authService,
+        query.mode,
+        cookie[SESSION_COOKIE_NAME].value,
+      );
+
+      if (!linkActorResult.ok) {
+        return status(linkActorResult.status, linkActorResult.body);
+      }
+
+      const result = await oauthService.buildAuthorizationRedirect({
+        provider: providerResult.provider,
+        mode: query.mode ?? "login",
+        ...(linkActorResult.linkToUserId ? { linkToUserId: linkActorResult.linkToUserId } : {}),
+        ...(query.prompt ? { prompt: query.prompt } : {}),
+        ...(query.returnTo ? { returnTo: query.returnTo } : {}),
+        requestUrl: request.url,
+      });
+
+      if (!result.ok) {
+        return status(result.status, result.body);
+      }
+
+      writeOAuthStateCookie(cookie[OAUTH_STATE_COOKIE_NAME], result.stateCookieValue, options);
+
+      return redirectResponse(result.authorizationUrl);
+    },
+    {
+      params: authProviderParamsSchema,
+      query: oauthStartQuerySchema,
+      cookie: oauthCookieSchema,
+      response: oauthRedirectResponseSchema,
+      detail: {
+        summary: "Start OAuth login",
+        description: "Creates signed OAuth state and redirects to the configured OIDC provider.",
+        tags: ["Auth"],
+      },
+    },
+  );
+}
+
+function createOAuthCallbackRoute(oauthService: OAuthService, options: AuthRoutesOptions) {
+  return new Elysia().get(
+    "/auth/callback/:provider",
+    async (context) => {
+      const { cookie, params, query, request, status } = context;
+      const providerResult = readAuthProviderParam(params.provider, status);
+
+      if (!providerResult.ok) {
+        return providerResult.response;
+      }
+
+      if (query.error || !query.code || !query.state) {
+        return status(400, oauthCallbackInvalidResponse());
+      }
+
+      const result = await oauthService.completeCallback({
+        provider: providerResult.provider,
+        code: query.code,
+        state: query.state,
+        stateCookieValue: cookie[OAUTH_STATE_COOKIE_NAME].value,
+        sessionToken: readSessionToken(cookie[SESSION_COOKIE_NAME].value),
+        requestUrl: request.url,
+        context: createRequestContext(request),
+      });
+
+      cookie[OAUTH_STATE_COOKIE_NAME].remove();
+
+      if (!result.ok) {
+        return status(result.status, result.body);
+      }
+
+      if (result.sessionToken && result.expiresAt) {
+        writeSessionCookie(
+          cookie[SESSION_COOKIE_NAME],
+          result.sessionToken,
+          result.expiresAt,
+          options,
+        );
+      }
+
+      return redirectResponse(result.location);
+    },
+    {
+      params: authProviderParamsSchema,
+      query: oauthCallbackQuerySchema,
+      cookie: oauthCookieSchema,
+      response: oauthCallbackResponseSchema,
+      detail: {
+        summary: "Complete OAuth callback",
+        description: "Validates OAuth state and ID token, then logs in or links the identity.",
+        tags: ["Auth"],
+      },
+    },
+  );
+}
+
+function createOAuthProviderUpsertRoute(authService: AuthService, oauthService: OAuthService) {
+  return new Elysia().put(
+    "/auth/providers/:slug",
+    createOAuthProviderMutationHandler<AuthUpsertProviderRequest>(authService, (slug, input) =>
+      oauthService.upsertProvider(slug, input),
+    ),
+    {
+      params: authProviderSlugParamsSchema,
+      body: upsertAuthProviderRequestSchema,
+      cookie: sessionCookieSchema,
+      response: authProviderMutationResponseSchema,
+      detail: {
+        summary: "Create or replace OAuth provider",
+        description: "Stores OAuth provider configuration and encrypts the client secret at rest.",
+        tags: ["Auth"],
+      },
+    },
+  );
+}
+
+function createOAuthProviderPatchRoute(authService: AuthService, oauthService: OAuthService) {
+  return new Elysia().patch(
+    "/auth/providers/:slug",
+    createOAuthProviderMutationHandler<AuthPatchProviderRequest>(authService, (slug, input) =>
+      oauthService.patchProvider(slug, input),
+    ),
+    {
+      params: authProviderSlugParamsSchema,
+      body: patchAuthProviderRequestSchema,
+      cookie: sessionCookieSchema,
+      response: authProviderMutationResponseSchema,
+      detail: {
+        summary: "Patch OAuth provider",
+        description: "Updates OAuth provider configuration while preserving write-only secrets.",
+        tags: ["Auth"],
+      },
+    },
+  );
+}
+
+function createOAuthProviderDeleteRoute(authService: AuthService, oauthService: OAuthService) {
+  return new Elysia().delete(
+    "/auth/providers/:slug",
+    ({ cookie, params, status }) =>
+      withSystemAdmin(authService, cookie[SESSION_COOKIE_NAME].value, status, () => {
+        const slug = readAuthProviderSlug(params.slug);
+
+        if (!slug) {
+          return status(400, invalidAuthProviderResponse());
+        }
+
+        const result = oauthService.deleteProvider(slug);
+
+        return result.ok ? result.body : status(result.status, result.body);
+      }),
+    {
+      params: authProviderSlugParamsSchema,
+      cookie: sessionCookieSchema,
+      response: authProviderDeleteResponseSchema,
+      detail: {
+        summary: "Delete OAuth provider",
+        description: "Deletes an OAuth provider and its linked OAuth identities.",
+        tags: ["Auth"],
+      },
+    },
+  );
+}
+
+function createOAuthIdentitiesRoute(authService: AuthService) {
+  return new Elysia().get(
+    "/auth/identities/me",
+    ({ cookie, status }) => {
+      const result = authService.listOAuthIdentities(
+        readSessionToken(cookie[SESSION_COOKIE_NAME].value),
+      );
+
+      return result.ok ? result.body : status(result.status, result.body);
+    },
+    {
+      cookie: sessionCookieSchema,
+      response: {
+        200: authIdentitiesResponseSchema,
+        401: apiErrorResponseSchema,
+      },
+      detail: {
+        summary: "List current OAuth identities",
+        description: "Returns OAuth identities linked to the current session user.",
+        tags: ["Auth"],
+      },
+    },
+  );
 }
 
 function createSetupRoutes(authService: AuthService, options: AuthRoutesOptions) {
@@ -940,6 +1321,38 @@ function createUsersRoutes(authService: AuthService) {
           tags: ["Auth"],
         },
       },
+    )
+    .delete(
+      "/users/:publicUserId",
+      ({ cookie, params, request, status }) =>
+        withUsersManage(authService, cookie[SESSION_COOKIE_NAME].value, status, (user) => {
+          const result = authService.deleteManagedUser(
+            params.publicUserId,
+            user,
+            createRequestContext(request),
+          );
+
+          return result.ok
+            ? (result.body satisfies DeleteManagedUserResponse)
+            : status(result.status, result.body);
+        }),
+      {
+        params: managedUserParamsSchema,
+        cookie: sessionCookieSchema,
+        response: {
+          200: deleteManagedUserResponseSchema,
+          401: apiErrorResponseSchema,
+          403: apiErrorResponseSchema,
+          404: apiErrorResponseSchema,
+          409: apiErrorResponseSchema,
+        },
+        detail: {
+          summary: "Delete managed user",
+          description:
+            "Permanently deletes another user when the actor has users:manage plus users:delete.",
+          tags: ["Auth"],
+        },
+      },
     );
 }
 
@@ -947,8 +1360,82 @@ function readSessionToken(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
+function readOAuthLinkActor(
+  authService: AuthService,
+  mode: "link" | "login" | undefined,
+  sessionCookieValue: unknown,
+): OAuthLinkActorResult {
+  if (mode !== "link") {
+    return { ok: true };
+  }
+
+  const permissionResult = authService.requirePermission(
+    readSessionToken(sessionCookieValue),
+    SYSTEM_ADMIN_PERMISSION,
+  );
+
+  return permissionResult.ok
+    ? { ok: true, linkToUserId: permissionResult.user.id }
+    : permissionResult;
+}
+
+function readAuthProviderSlug(value: unknown): AuthProviderSlug | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  for (const slug of AUTH_PROVIDER_SLUGS) {
+    if (slug === value) {
+      return slug;
+    }
+  }
+
+  return null;
+}
+
+function readAuthProviderSlugResult(value: unknown): AuthProviderSlugResult {
+  const slug = readAuthProviderSlug(value);
+
+  return slug
+    ? { ok: true, slug }
+    : { ok: false, status: 400, body: invalidAuthProviderResponse() };
+}
+
+function readAuthProviderParam(value: unknown, status: StatusHandler): AuthProviderParamResult {
+  const result = readAuthProviderSlugResult(value);
+
+  return result.ok
+    ? { ok: true, provider: result.slug }
+    : { ok: false, response: status(result.status, result.body) };
+}
+
+function invalidAuthProviderResponse(): ApiErrorResponse {
+  return {
+    error: {
+      code: "OAUTH_PROVIDER_INVALID",
+      message: "OAuth provider is invalid.",
+    },
+  };
+}
+
+function oauthCallbackInvalidResponse(): ApiErrorResponse {
+  return {
+    error: {
+      code: "OAUTH_CALLBACK_INVALID",
+      message: "OAuth callback is missing required parameters.",
+    },
+  };
+}
+
 function requireUsersManage(authService: AuthService, sessionCookieValue: unknown) {
   return authService.requirePermission(readSessionToken(sessionCookieValue), "users:manage");
+}
+
+function requireSystemAdmin(authService: AuthService, sessionCookieValue: unknown) {
+  return authService.requirePermission(
+    readSessionToken(sessionCookieValue),
+    SYSTEM_ADMIN_PERMISSION,
+  );
 }
 
 function writeSessionUserResponse(
@@ -987,6 +1474,21 @@ function withUsersManage<T>(
   return onAllowed(permissionResult.user);
 }
 
+function withSystemAdmin<T>(
+  authService: AuthService,
+  sessionCookieValue: unknown,
+  status: StatusHandler,
+  onAllowed: (user: PublicUser) => T,
+): T | ReturnType<StatusHandler> {
+  const permissionResult = requireSystemAdmin(authService, sessionCookieValue);
+
+  if (!permissionResult.ok) {
+    return status(permissionResult.status, permissionResult.body);
+  }
+
+  return onAllowed(permissionResult.user);
+}
+
 async function withUsersManageAsync<T>(
   authService: AuthService,
   sessionCookieValue: unknown,
@@ -1000,6 +1502,53 @@ async function withUsersManageAsync<T>(
   }
 
   return onAllowed(permissionResult.user);
+}
+
+async function withSystemAdminAsync<T>(
+  authService: AuthService,
+  sessionCookieValue: unknown,
+  status: StatusHandler,
+  onAllowed: (user: PublicUser) => Promise<T>,
+): Promise<T | ReturnType<StatusHandler>> {
+  const permissionResult = requireSystemAdmin(authService, sessionCookieValue);
+
+  if (!permissionResult.ok) {
+    return status(permissionResult.status, permissionResult.body);
+  }
+
+  return onAllowed(permissionResult.user);
+}
+
+async function withSystemAdminProviderSlug<T>(
+  authService: AuthService,
+  sessionCookieValue: unknown,
+  rawSlug: unknown,
+  status: StatusHandler,
+  onAllowed: (slug: AuthProviderSlug) => Promise<T>,
+): Promise<T | ReturnType<StatusHandler>> {
+  return withSystemAdminAsync(authService, sessionCookieValue, status, async () => {
+    const slugResult = readAuthProviderSlugResult(rawSlug);
+
+    return slugResult.ok ? onAllowed(slugResult.slug) : status(slugResult.status, slugResult.body);
+  });
+}
+
+function createOAuthProviderMutationHandler<TInput>(
+  authService: AuthService,
+  mutate: (slug: AuthProviderSlug, input: TInput) => Promise<ProviderMutationResult>,
+) {
+  return ({ body, cookie, params, status }: ProviderMutationContext<TInput>) =>
+    withSystemAdminProviderSlug(
+      authService,
+      cookie[SESSION_COOKIE_NAME]?.value,
+      params.slug,
+      status,
+      async (slug) => {
+        const result = await mutate(slug, body);
+
+        return result.ok ? result.body : status(result.status, result.body);
+      },
+    );
 }
 
 function runManagedUserMutation<TBody>(
@@ -1115,6 +1664,35 @@ function writeSessionCookie(
   sessionCookie.path = "/";
   sessionCookie.maxAge = SESSION_DURATION_SECONDS;
   sessionCookie.expires = expiresAt;
+}
+
+function writeOAuthStateCookie(
+  stateCookie: {
+    value: string | undefined;
+    httpOnly?: boolean | undefined;
+    secure?: boolean | undefined;
+    sameSite?: boolean | "none" | "lax" | "strict" | undefined;
+    path?: string | undefined;
+    maxAge?: number | undefined;
+    expires?: Date | undefined;
+  },
+  value: string,
+  options: AuthRoutesOptions,
+): void {
+  stateCookie.value = value;
+  stateCookie.httpOnly = true;
+  stateCookie.secure = options.sessionCookieSecure;
+  stateCookie.sameSite = "lax";
+  stateCookie.path = "/api/auth";
+  stateCookie.maxAge = OAUTH_STATE_COOKIE_MAX_AGE_SECONDS;
+  stateCookie.expires = new Date(Date.now() + OAUTH_STATE_COOKIE_MAX_AGE_SECONDS * 1000);
+}
+
+function redirectResponse(location: string): Response {
+  return new Response(null, {
+    status: 302,
+    headers: { location },
+  });
 }
 
 function createRequestContext(request: Request): {

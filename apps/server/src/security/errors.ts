@@ -1,7 +1,7 @@
-import type { ApiErrorResponse } from "@arrtemplar/shared";
+import { APP_LOG_CATEGORY, type ApiErrorResponse } from "@arrtemplar/shared";
 import { getLogger } from "@logtape/logtape";
 
-const securityLogger = getLogger(["arrtemplar", "security"]);
+const securityLogger = getLogger([APP_LOG_CATEGORY, "security"]);
 
 const notFoundError: ApiErrorResponse = {
   error: {

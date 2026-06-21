@@ -1,9 +1,12 @@
 import {
   type AdminChangeUserPasswordRequest,
   type AdminChangeUserPasswordResponse,
+  type AdminDeleteUserResponse,
   type AdminUpdateUserPermissionsRequest,
   type AdminUpdateUserStatusRequest,
   type ApiErrorResponse,
+  type AuthIdentitiesResponse,
+  type AuthProviderSlug,
   type ChangePasswordRequest,
   type ChangePasswordResponse,
   type ClearNotificationHistoryResponse,
@@ -29,7 +32,9 @@ import {
   type NotificationHistoryItem,
   type NotificationHistoryListResponse,
   type NotificationPreferences,
+  OAUTH_LOCAL_EMAIL_DOMAIN,
   type PublicUser,
+  type AuthIdentity as SharedAuthIdentity,
   SYSTEM_ADMIN_PERMISSION,
   TOAST_NOTIFICATION_EVENTS,
   type ToastNotificationId,
@@ -43,9 +48,11 @@ import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 import type { DatabaseClient } from "../db/client";
 import {
   auditLogs,
+  authIdentities,
   type NewNotificationHistory,
   type NotificationHistory,
   notificationHistory,
+  type AuthIdentity as StoredAuthIdentity,
   sessions,
   type User,
   userPermissionGrants,
@@ -245,6 +252,11 @@ type ManagedUserPasswordSuccess = {
   body: AdminChangeUserPasswordResponse;
 };
 
+type ManagedUserDeleteSuccess = {
+  ok: true;
+  body: AdminDeleteUserResponse;
+};
+
 type ManagedUserMutationFailure = {
   ok: false;
   status: 401 | 403 | 404 | 409;
@@ -256,6 +268,42 @@ type ManagedUserProfileResult = ManagedUserProfileSuccess | ManagedUserProfileFa
 type ManagedUserProfileMutationResult = ManagedUserProfileSuccess | ManagedUserMutationFailure;
 type ManagedUserMutationResult = ManagedUserMutationSuccess | ManagedUserMutationFailure;
 type ManagedUserPasswordResult = ManagedUserPasswordSuccess | ManagedUserMutationFailure;
+type ManagedUserDeleteResult = ManagedUserDeleteSuccess | ManagedUserMutationFailure;
+
+type OAuthIdentityInput = {
+  provider: AuthProviderSlug;
+  issuer: string;
+  subject: string;
+  preferredUsername?: string;
+  name?: string;
+  email?: string;
+};
+
+type OAuthLoginResult =
+  | LoginSuccess
+  | {
+      ok: false;
+      status: 401 | 409;
+      body: ApiErrorResponse;
+    };
+
+type OAuthIdentityLinkResult =
+  | {
+      ok: true;
+      identity: SharedAuthIdentity;
+    }
+  | {
+      ok: false;
+      status: 401 | 403 | 409;
+      body: ApiErrorResponse;
+    };
+
+type OAuthIdentitiesResult =
+  | {
+      ok: true;
+      body: AuthIdentitiesResponse;
+    }
+  | UserProfileFailure;
 
 type DatabaseTransaction = Parameters<Parameters<DatabaseClient["db"]["transaction"]>[0]>[0];
 type DatabaseReader = DatabaseClient["db"] | DatabaseTransaction;
@@ -350,6 +398,20 @@ const lastSystemAdminRequiredError: ApiErrorResponse = {
   },
 };
 
+const oauthIdentityAlreadyLinkedError: ApiErrorResponse = {
+  error: {
+    code: "OAUTH_IDENTITY_ALREADY_LINKED",
+    message: "That OAuth identity is already linked to another user.",
+  },
+};
+
+const oauthUserUnavailableError: ApiErrorResponse = {
+  error: {
+    code: "OAUTH_USER_UNAVAILABLE",
+    message: "The linked user account is unavailable.",
+  },
+};
+
 const permissionOrder = new Map<UserPermission, number>(
   USER_PERMISSION_VALUES.map((permission, index) => [permission, index]),
 );
@@ -427,7 +489,11 @@ export class AuthService {
     const userRows = this.database.db.select().from(users).all();
     const permissionsByUserId = readEffectivePermissionsByUserId(this.database.db, userRows);
     const summaries = userRows
-      .map((user) => toManagedUserSummary(user, permissionsByUserId.get(user.id) ?? []))
+      .map((user) =>
+        toManagedUserSummary(user, permissionsByUserId.get(user.id) ?? [], {
+          includeAuthMethod: true,
+        }),
+      )
       .sort((left, right) => left.username.localeCompare(right.username));
 
     return { ok: true, users: summaries };
@@ -647,6 +713,44 @@ export class AuthService {
     });
   }
 
+  deleteManagedUser(
+    targetUserId: string,
+    actor: PublicUser,
+    context: AuthRequestContext,
+  ): ManagedUserDeleteResult {
+    return this.runManagedUserMutation({
+      actor,
+      context,
+      requiredPermission: "users:delete",
+      targetUserId,
+      mutate: (tx, targetUser, actorUser, now) => {
+        if (
+          !targetUser.disabledAt &&
+          hasExplicitPermissionGrant(tx, targetUser.id, SYSTEM_ADMIN_PERMISSION) &&
+          countActiveSystemAdmins(tx) <= 1
+        ) {
+          return { ok: false, status: 409, body: lastSystemAdminRequiredError };
+        }
+
+        writeManagedUserAuditLog(tx, {
+          action: "users.deleted",
+          actorUserId: actorUser.id,
+          context,
+          createdAt: now,
+          metadata: {
+            authMethod: targetUser.authMethod,
+            email: targetUser.email,
+            publicId: targetUser.publicId,
+          },
+          targetUser,
+        });
+        tx.delete(users).where(eq(users.id, targetUser.id)).run();
+
+        return { ok: true, body: { status: "ok", deletedUserId: targetUser.publicId } };
+      },
+    });
+  }
+
   async login(input: LoginRequest, context: AuthRequestContext): Promise<LoginResult> {
     const email = normalizeEmail(input.email);
     const rateLimitKey = createRateLimitKey(email);
@@ -662,7 +766,10 @@ export class AuthService {
     }
 
     const user = this.database.db.select().from(users).where(eq(users.email, email)).get();
-    const passwordMatches = user ? await verifyPassword(input.password, user.passwordHash) : false;
+    const passwordMatches =
+      user?.authMethod === "local"
+        ? await verifyPassword(input.password, user.passwordHash)
+        : false;
 
     if (!user || user.disabledAt || !passwordMatches) {
       this.rateLimiter.recordFailure(rateLimitKey);
@@ -706,6 +813,192 @@ export class AuthService {
       sessionToken: session.sessionToken,
       expiresAt: session.expiresAt,
     };
+  }
+
+  completeOAuthLogin(input: OAuthIdentityInput, context: AuthRequestContext): OAuthLoginResult {
+    const now = new Date();
+    const nowIso = now.toISOString();
+
+    return this.database.db.transaction((tx) => {
+      const existingIdentity = findOAuthIdentity(tx, input);
+
+      if (existingIdentity) {
+        const existingUser = tx
+          .select()
+          .from(users)
+          .where(eq(users.id, existingIdentity.userId))
+          .get();
+
+        if (!existingUser || existingUser.disabledAt) {
+          return { ok: false, status: 401, body: oauthUserUnavailableError };
+        }
+
+        tx.update(users)
+          .set({ lastLoginAt: nowIso, updatedAt: nowIso })
+          .where(eq(users.id, existingUser.id))
+          .run();
+
+        const updatedUser = { ...existingUser, lastLoginAt: nowIso, updatedAt: nowIso };
+        const session = this.createSession(updatedUser, context, now, tx);
+
+        writeOAuthAuditLog(tx, {
+          action: "auth.oauth.login.success",
+          actorUserId: updatedUser.id,
+          context,
+          createdAt: nowIso,
+          metadata: {
+            provider: input.provider,
+            issuer: input.issuer,
+            subject: input.subject,
+          },
+        });
+
+        return {
+          ok: true,
+          user: toPublicUser(updatedUser, readEffectivePermissions(tx, updatedUser)),
+          sessionToken: session.sessionToken,
+          expiresAt: session.expiresAt,
+        };
+      }
+
+      const publicId = generatePublicUserId();
+      const user = {
+        id: Bun.randomUUIDv7(),
+        publicId,
+        username: createOAuthUsername(tx, input),
+        email: createOAuthEmail(tx, input.email, publicId),
+        avatarId: DEFAULT_PROFILE_AVATAR_ID,
+        bannerId: DEFAULT_PROFILE_BANNER_ID,
+        toastNotificationsEnabled: DEFAULT_NOTIFICATION_PREFERENCES.toastsEnabled,
+        toastNotificationFrequency: DEFAULT_NOTIFICATION_PREFERENCES.frequency,
+        authMethod: "oauth",
+        passwordHash: "!oauth",
+        disabledAt: null,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        lastLoginAt: nowIso,
+      } satisfies User;
+
+      tx.insert(users).values(user).run();
+      tx.insert(authIdentities)
+        .values({
+          id: Bun.randomUUIDv7(),
+          userId: user.id,
+          provider: input.provider,
+          issuer: input.issuer,
+          subject: input.subject,
+          createdAt: nowIso,
+        })
+        .run();
+
+      if (DEFAULT_SIGNED_IN_USER_PERMISSIONS.length > 0) {
+        tx.insert(userPermissionGrants)
+          .values(
+            DEFAULT_SIGNED_IN_USER_PERMISSIONS.map((permission) => ({
+              id: Bun.randomUUIDv7(),
+              userId: user.id,
+              permission,
+              grantedByUserId: null,
+              createdAt: nowIso,
+              updatedAt: nowIso,
+            })),
+          )
+          .run();
+      }
+
+      const session = this.createSession(user, context, now, tx);
+
+      writeOAuthAuditLog(tx, {
+        action: "auth.oauth.user_created",
+        actorUserId: user.id,
+        context,
+        createdAt: nowIso,
+        metadata: {
+          provider: input.provider,
+          issuer: input.issuer,
+          subject: input.subject,
+          username: user.username,
+        },
+      });
+
+      return {
+        ok: true,
+        user: toPublicUser(user, readEffectivePermissions(tx, user)),
+        sessionToken: session.sessionToken,
+        expiresAt: session.expiresAt,
+      };
+    });
+  }
+
+  linkOAuthIdentityToAdmin(
+    input: OAuthIdentityInput,
+    actor: PublicUser,
+    context: AuthRequestContext,
+  ): OAuthIdentityLinkResult {
+    const nowIso = new Date().toISOString();
+
+    return this.database.db.transaction((tx) => {
+      const actorUser = tx.select().from(users).where(eq(users.publicId, actor.id)).get();
+
+      if (!actorUser || actorUser.disabledAt) {
+        return { ok: false, status: 401, body: unauthenticatedError };
+      }
+
+      if (!hasPermissionGrant(readEffectivePermissions(tx, actorUser), SYSTEM_ADMIN_PERMISSION)) {
+        return { ok: false, status: 403, body: forbiddenError(SYSTEM_ADMIN_PERMISSION) };
+      }
+
+      const existingIdentity = findOAuthIdentity(tx, input);
+
+      if (existingIdentity) {
+        if (existingIdentity.userId !== actorUser.id) {
+          return { ok: false, status: 409, body: oauthIdentityAlreadyLinkedError };
+        }
+
+        return { ok: true, identity: toSharedAuthIdentity(existingIdentity) };
+      }
+
+      const identity = {
+        id: Bun.randomUUIDv7(),
+        userId: actorUser.id,
+        provider: input.provider,
+        issuer: input.issuer,
+        subject: input.subject,
+        createdAt: nowIso,
+      } satisfies StoredAuthIdentity;
+
+      tx.insert(authIdentities).values(identity).run();
+      writeOAuthAuditLog(tx, {
+        action: "auth.oauth.identity.linked",
+        actorUserId: actorUser.id,
+        context,
+        createdAt: nowIso,
+        metadata: {
+          provider: input.provider,
+          issuer: input.issuer,
+          subject: input.subject,
+        },
+      });
+
+      return { ok: true, identity: toSharedAuthIdentity(identity) };
+    });
+  }
+
+  listOAuthIdentities(sessionToken: string | null): OAuthIdentitiesResult {
+    const currentSession = this.findSession(sessionToken);
+
+    if (!currentSession) {
+      return { ok: false, status: 401, body: unauthenticatedError };
+    }
+
+    const identities = this.database.db
+      .select()
+      .from(authIdentities)
+      .where(eq(authIdentities.userId, currentSession.user.id))
+      .all()
+      .map(toSharedAuthIdentity);
+
+    return { ok: true, body: { identities } };
   }
 
   logout(sessionToken: string | null, context: AuthRequestContext): void {
@@ -1319,13 +1612,13 @@ export class AuthService {
     user: User,
     context: AuthRequestContext,
     now = new Date(),
+    tx: DatabaseReader = this.database.db,
   ): { sessionId: string; sessionToken: string; expiresAt: Date } {
     const expiresAt = createSessionExpiresAt(now);
     const sessionToken = generateSessionToken();
     const sessionId = Bun.randomUUIDv7();
 
-    this.database.db
-      .insert(sessions)
+    tx.insert(sessions)
       .values({
         id: sessionId,
         userId: user.id,
@@ -1378,10 +1671,15 @@ function toPublicUser(user: User, permissions: UserPermission[]): PublicUser {
   };
 }
 
-function toManagedUserSummary(user: User, permissions: UserPermission[]): ManagedUserSummary {
+function toManagedUserSummary(
+  user: User,
+  permissions: UserPermission[],
+  options: { includeAuthMethod?: boolean } = {},
+): ManagedUserSummary {
   return {
     id: user.publicId,
     username: user.username,
+    ...(options.includeAuthMethod ? { authMethod: user.authMethod } : {}),
     disabledAt: user.disabledAt,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
@@ -1667,6 +1965,121 @@ function writeManagedUserAuditLog(
     .run();
 }
 
+function findOAuthIdentity(
+  tx: DatabaseReader,
+  input: Pick<OAuthIdentityInput, "issuer" | "provider" | "subject">,
+): StoredAuthIdentity | undefined {
+  return tx
+    .select()
+    .from(authIdentities)
+    .where(
+      and(
+        eq(authIdentities.provider, input.provider),
+        eq(authIdentities.issuer, input.issuer),
+        eq(authIdentities.subject, input.subject),
+      ),
+    )
+    .get();
+}
+
+function toSharedAuthIdentity(identity: StoredAuthIdentity): SharedAuthIdentity {
+  return {
+    id: identity.id,
+    provider: identity.provider,
+    issuer: identity.issuer,
+    subject: identity.subject,
+    createdAt: identity.createdAt,
+  };
+}
+
+function createOAuthUsername(tx: DatabaseReader, input: OAuthIdentityInput): string {
+  const subjectHash = createSubjectHash(input.subject);
+  const baseUsername = normalizeOAuthUsername(input.preferredUsername ?? input.name) ?? "authentik";
+  const baseCandidate = baseUsername.slice(0, 80);
+
+  if (!findUserByUsername(tx, baseCandidate)) {
+    return baseCandidate;
+  }
+
+  const suffix = `-${subjectHash.slice(0, 8)}`;
+  const suffixedCandidate = `${baseUsername.slice(0, 80 - suffix.length)}${suffix}`;
+
+  if (!findUserByUsername(tx, suffixedCandidate)) {
+    return suffixedCandidate;
+  }
+
+  const fallbackBase = `authentik-${subjectHash.slice(0, 16)}`;
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const candidate = attempt === 0 ? fallbackBase : `${fallbackBase}-${attempt}`;
+
+    if (!findUserByUsername(tx, candidate)) {
+      return candidate;
+    }
+  }
+
+  throw new Error("Unable to create a unique OAuth username.");
+}
+
+function createOAuthEmail(tx: DatabaseReader, email: string | undefined, publicId: string): string {
+  const normalizedEmail = email ? normalizeEmail(email) : null;
+
+  if (normalizedEmail && isUsableEmail(normalizedEmail) && !findUserByEmail(tx, normalizedEmail)) {
+    return normalizedEmail;
+  }
+
+  return `${publicId.toLowerCase()}@${OAUTH_LOCAL_EMAIL_DOMAIN}`;
+}
+
+function normalizeOAuthUsername(value: string | undefined): string | null {
+  const normalized = value?.trim().replace(/\s+/gu, "-");
+
+  return normalized || null;
+}
+
+function createSubjectHash(subject: string): string {
+  const hasher = new Bun.CryptoHasher("sha256");
+  hasher.update(subject);
+
+  return hasher.digest("hex");
+}
+
+function isUsableEmail(value: string): boolean {
+  return value.length <= 320 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value);
+}
+
+function findUserByUsername(tx: DatabaseReader, username: string): Pick<User, "id"> | undefined {
+  return tx.select({ id: users.id }).from(users).where(eq(users.username, username)).get();
+}
+
+function findUserByEmail(tx: DatabaseReader, email: string): Pick<User, "id"> | undefined {
+  return tx.select({ id: users.id }).from(users).where(eq(users.email, email)).get();
+}
+
+function writeOAuthAuditLog(
+  tx: DatabaseReader,
+  input: {
+    action: string;
+    actorUserId: string;
+    context: AuthRequestContext;
+    createdAt: string;
+    metadata: Record<string, unknown>;
+  },
+): void {
+  tx.insert(auditLogs)
+    .values({
+      id: Bun.randomUUIDv7(),
+      actorUserId: input.actorUserId,
+      action: input.action,
+      targetType: "oauth_identity",
+      targetId: null,
+      metadataJson: JSON.stringify(input.metadata),
+      ipAddress: input.context.ipAddress,
+      createdAt: input.createdAt,
+    })
+    .run();
+}
+
 async function createUserRecord(
   input: CreateAdminRequest | CreateLocalUserRequest,
   now: Date,
@@ -1680,6 +2093,7 @@ async function createUserRecord(
     bannerId: DEFAULT_PROFILE_BANNER_ID,
     toastNotificationsEnabled: DEFAULT_NOTIFICATION_PREFERENCES.toastsEnabled,
     toastNotificationFrequency: DEFAULT_NOTIFICATION_PREFERENCES.frequency,
+    authMethod: "local",
     passwordHash: await hashPassword(input.password),
     disabledAt: null,
     createdAt: now.toISOString(),

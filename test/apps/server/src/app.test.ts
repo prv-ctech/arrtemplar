@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { configure } from "@logtape/logtape";
 import { createApp } from "../../../../apps/server/src/app";
-import { APP_NAME, APP_VERSION } from "../../../../packages/shared/src";
+import { APP_LOG_CATEGORY, APP_NAME, APP_VERSION } from "../../../../packages/shared/src";
 import { resetAndOpenTestDatabase } from "../../../helpers/database";
 import {
   configureRedactedLogCapture,
@@ -65,7 +65,7 @@ describe("GET /health", () => {
 
     await configure({
       sinks: { buffer: sink },
-      loggers: [{ category: ["arrtemplar", "http"], sinks: ["buffer"] }],
+      loggers: [{ category: [APP_LOG_CATEGORY, "http"], sinks: ["buffer"] }],
     });
 
     try {
@@ -84,7 +84,9 @@ describe("GET /health", () => {
         ),
       );
 
-      const httpLogs = records.filter((record) => record.category.join(".") === "arrtemplar.http");
+      const httpLogs = records.filter(
+        (record) => record.category.join(".") === `${APP_LOG_CATEGORY}.http`,
+      );
       const serializedLogs = JSON.stringify(httpLogs);
 
       expect(healthResponse.status).toBe(200);
@@ -129,7 +131,9 @@ describe("GET /health", () => {
       const formattedRecords = formattedOutput.join("\n");
 
       expect(response.status).toBe(500);
-      expect(records.some((record) => record.category.join(".") === "arrtemplar.http")).toBe(true);
+      expect(
+        records.some((record) => record.category.join(".") === `${APP_LOG_CATEGORY}.http`),
+      ).toBe(true);
       expect(serializedRecords).not.toContain("super-secret-session-token");
       expect(serializedRecords).not.toContain("raw-cookie-value");
       expect(serializedRecords).not.toContain("query-secret");

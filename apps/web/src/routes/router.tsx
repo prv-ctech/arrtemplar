@@ -4,6 +4,7 @@ import { UserSettings } from "../features/user/UserSettings";
 import { AccountNotificationsRoute } from "./components/account-notifications-route";
 import { AccountRoute } from "./components/account-route";
 import { AdminAboutRoute } from "./components/admin-about-route";
+import { AdminAuthRoute } from "./components/admin-auth-route";
 import { AdminGeneralRoute } from "./components/admin-general-route";
 import { AdminImportRoute } from "./components/admin-import-route";
 import { AdminLibraryRoute } from "./components/admin-library-route";
@@ -34,6 +35,7 @@ const indexRoute = createRoute({
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/login",
+  validateSearch: validateLoginSearch,
   component: LoginRoute,
 });
 
@@ -169,6 +171,12 @@ const settingsNotificationsRoute = createRoute({
   component: AdminNotificationsRoute,
 });
 
+const settingsAuthRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "auth",
+  component: AdminAuthRoute,
+});
+
 const settingsServicesRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "services",
@@ -206,12 +214,17 @@ const routeTree = rootRoute.addChildren([
     settingsUsersRoute,
     settingsImportRoute,
     settingsNotificationsRoute,
+    settingsAuthRoute,
     settingsServicesRoute,
     settingsLogsRoute,
   ]),
 ]);
 
 export const router = createRouter({ routeTree });
+
+function validateLoginSearch(search: Record<string, unknown>): { signedOut?: boolean } {
+  return search.signedOut === true || search.signedOut === "true" ? { signedOut: true } : {};
+}
 
 declare module "@tanstack/react-router" {
   interface Register {

@@ -3,6 +3,7 @@ import {
   createRedactedSink,
   createRedactedTextFormatter,
 } from "../../apps/server/src/logging/redaction";
+import { APP_LOG_CATEGORY } from "../../packages/shared/src";
 
 export type LogBuffer = {
   records: LogRecord[];
@@ -36,7 +37,7 @@ export async function configureRedactedLogCapture(
         formattedOutput.push(redactedFormatter(record));
       }),
     },
-    loggers: [{ category: ["arrtemplar"], sinks: ["buffer"] }],
+    loggers: [{ category: [APP_LOG_CATEGORY], sinks: ["buffer"] }],
   });
 
   return { records, sink, formattedOutput };

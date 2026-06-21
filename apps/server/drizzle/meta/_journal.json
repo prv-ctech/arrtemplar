@@ -29,6 +29,13 @@
       "when": 1781862245412,
       "tag": "0004_notification_history",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1781934976183,
+      "tag": "0005_oauth_auth_providers_and_identities",
+      "breakpoints": true
     }
   ]
 }

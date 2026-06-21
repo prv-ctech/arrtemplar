@@ -1,24 +1,108 @@
-import { Navigate } from "@tanstack/react-router";
+import { Navigate, useSearch } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { LoginForm } from "@/components/auth/LoginForm";
+import { Button } from "@/components/ui/button";
 import { getLandingPathForUser } from "@/features/auth/auth-navigation";
-import { useCurrentUserQuery } from "@/features/auth/auth-state";
+import { useAuthSetupQuery, useCurrentUserQuery } from "@/features/auth/auth-state";
+import { useAuthProvidersQuery } from "@/features/auth-settings/auth-settings";
+
+const authentikStartPath = "/api/auth/oauth/authentik/start";
 
 const loginMediaAssets = {
-  backdrop: "https://picsum.photos/seed/arrtemplar-login-backdrop/1800/1200",
-  artwork: "https://picsum.photos/seed/arrtemplar-login-panel/1400/1600",
+  backdrop: "https://picsum.photos/seed/login-backdrop/1800/1200",
+  artwork: "https://picsum.photos/seed/login-panel/1400/1600",
 } as const;
 
 export function LoginRoute() {
+  const { signedOut } = useSearch({ from: "/login" });
   const userQuery = useCurrentUserQuery();
+  const setupQuery = useAuthSetupQuery();
+  const providersQuery = useAuthProvidersQuery();
 
   if (userQuery.data) {
     return <Navigate replace to={getLandingPathForUser(userQuery.data)} />;
+  }
+
+  if (userQuery.isPending) {
+    return (
+      <LoginRouteStatus description="Checking for an existing session." title="Restoring session" />
+    );
+  }
+
+  if (setupQuery.data?.required === false && providersQuery.data === undefined) {
+    return providersQuery.isError ? (
+      <LoginRouteStatus
+        action={
+          <Button onClick={() => providersQuery.refetch()} variant="secondary">
+            Retry provider check
+          </Button>
+        }
+        description="The API could not confirm whether Authentik is enabled."
+        title="Authentication check failed"
+      />
+    ) : (
+      <LoginRouteStatus
+        description="Checking whether Authentik should handle sign-in."
+        title="Checking authentication"
+      />
+    );
+  }
+
+  if (isAuthentikEnabled(providersQuery.data)) {
+    return <AuthentikPrimaryRedirect forceLogin={signedOut === true} />;
   }
 
   return (
     <main className="relative isolate min-h-dvh w-full max-w-full overflow-x-hidden bg-background text-foreground">
       <LoginBackdrop />
       <LoginPanel />
+    </main>
+  );
+}
+
+function isAuthentikEnabled(providers: ReturnType<typeof useAuthProvidersQuery>["data"]): boolean {
+  return providers?.some((provider) => provider.slug === "authentik" && provider.enabled) ?? false;
+}
+
+function AuthentikPrimaryRedirect({ forceLogin }: { forceLogin: boolean }) {
+  useEffect(() => {
+    window.location.assign(getAuthentikStartPath(forceLogin));
+  }, [forceLogin]);
+
+  return (
+    <LoginRouteStatus
+      description="Authenticator is enabled, so local sign-in stays hidden."
+      title="Redirecting to Authentik"
+    />
+  );
+}
+
+function getAuthentikStartPath(forceLogin: boolean): string {
+  return forceLogin ? `${authentikStartPath}?prompt=login` : authentikStartPath;
+}
+
+function LoginRouteStatus({
+  action,
+  description,
+  title,
+}: {
+  action?: React.ReactNode;
+  description: string;
+  title: string;
+}) {
+  return (
+    <main className="relative isolate grid min-h-dvh w-full max-w-full place-items-center overflow-x-hidden bg-background px-4 py-10 text-foreground">
+      <LoginBackdrop />
+      <div className="w-full max-w-sm rounded-[1.35rem] border border-border bg-card/90 p-6 text-center shadow-(--shadow-panel) backdrop-blur-xl">
+        <div className="mx-auto flex size-14 items-center justify-center rounded-2xl border border-border bg-foreground p-2.5 text-background shadow-(--shadow-soft)">
+          <span className="text-base font-black tracking-[-0.12em]" aria-hidden="true">
+            AW
+          </span>
+        </div>
+        <h1 className="mt-5 text-2xl font-semibold tracking-[-0.045em] text-foreground">{title}</h1>
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">{description}</p>
+        {action ? <div className="mt-5 flex justify-center">{action}</div> : null}
+      </div>
     </main>
   );
 }

@@ -14,9 +14,11 @@ import { cn } from "@/lib/utils";
 type UserRowActionsProps = {
   actor: PublicUser;
   canChangePasswords: boolean;
+  canDeleteUsers: boolean;
   canEditPermissions: boolean;
   canToggleStatus: boolean;
   onChangePassword: (user: AdminUserSummary) => void;
+  onDeleteUser: (user: AdminUserSummary) => void;
   onEditPermissions: (user: AdminUserSummary) => void;
   onToggleStatus: (user: AdminUserSummary) => void;
   user: AdminUserSummary;
@@ -24,6 +26,7 @@ type UserRowActionsProps = {
 
 type ManagedActionState = {
   canChangePassword: boolean;
+  canDeleteUser: boolean;
   canEditPermissions: boolean;
   canToggleStatus: boolean;
   showManagedActions: boolean;
@@ -32,9 +35,11 @@ type ManagedActionState = {
 export function UserRowActions({
   actor,
   canChangePasswords,
+  canDeleteUsers,
   canEditPermissions,
   canToggleStatus,
   onChangePassword,
+  onDeleteUser,
   onEditPermissions,
   onToggleStatus,
   user,
@@ -43,6 +48,7 @@ export function UserRowActions({
   const managedActions = getManagedActionState({
     actor,
     canChangePasswords,
+    canDeleteUsers,
     canEditPermissions,
     canToggleStatus,
     isActorRow,
@@ -59,6 +65,7 @@ export function UserRowActions({
         <ManagedUserActionItems
           actions={managedActions}
           onChangePassword={onChangePassword}
+          onDeleteUser={onDeleteUser}
           onEditPermissions={onEditPermissions}
           onToggleStatus={onToggleStatus}
           user={user}
@@ -71,19 +78,26 @@ export function UserRowActions({
 function getManagedActionState({
   actor,
   canChangePasswords,
+  canDeleteUsers,
   canEditPermissions,
   canToggleStatus,
   isActorRow,
   user,
 }: Pick<
   UserRowActionsProps,
-  "actor" | "canChangePasswords" | "canEditPermissions" | "canToggleStatus" | "user"
+  | "actor"
+  | "canChangePasswords"
+  | "canDeleteUsers"
+  | "canEditPermissions"
+  | "canToggleStatus"
+  | "user"
 > & {
   isActorRow: boolean;
 }): ManagedActionState {
   const canRunManagedMutation = !isActorRow;
   const state = {
     canChangePassword: canRunManagedMutation && canChangePasswords,
+    canDeleteUser: canRunManagedMutation && canDeleteUsers && canDeleteUser(actor, user),
     canEditPermissions: canRunManagedMutation && canEditPermissions,
     canToggleStatus: canRunManagedMutation && canToggleStatus && canToggleUserStatus(actor, user),
   };
@@ -91,7 +105,10 @@ function getManagedActionState({
   return {
     ...state,
     showManagedActions:
-      state.canChangePassword || state.canEditPermissions || state.canToggleStatus,
+      state.canChangePassword ||
+      state.canDeleteUser ||
+      state.canEditPermissions ||
+      state.canToggleStatus,
   };
 }
 
@@ -133,16 +150,22 @@ function ProfileMenuItem({ isActorRow, userId }: { isActorRow: boolean; userId: 
 function ManagedUserActionItems({
   actions,
   onChangePassword,
+  onDeleteUser,
   onEditPermissions,
   onToggleStatus,
   user,
 }: {
   actions: ManagedActionState;
   onChangePassword: (user: AdminUserSummary) => void;
+  onDeleteUser: (user: AdminUserSummary) => void;
   onEditPermissions: (user: AdminUserSummary) => void;
   onToggleStatus: (user: AdminUserSummary) => void;
   user: AdminUserSummary;
 }) {
+  const showDeleteSeparator =
+    actions.canDeleteUser &&
+    (actions.canChangePassword || actions.canEditPermissions || actions.canToggleStatus);
+
   return (
     <>
       {actions.canChangePassword ? (
@@ -162,8 +185,18 @@ function ManagedUserActionItems({
           {user.disabledAt ? "Restore user" : "Disable user"}
         </DropdownMenuItem>
       ) : null}
+      {showDeleteSeparator ? <DropdownMenuSeparator /> : null}
+      {actions.canDeleteUser ? (
+        <DropdownMenuItem onSelect={() => onDeleteUser(user)} variant="destructive">
+          Delete user
+        </DropdownMenuItem>
+      ) : null}
     </>
   );
+}
+
+function canDeleteUser(actor: PublicUser, user: AdminUserSummary): boolean {
+  return actor.id !== user.id;
 }
 
 function canToggleUserStatus(actor: PublicUser, user: AdminUserSummary): boolean {
