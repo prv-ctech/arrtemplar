@@ -11,7 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { UserPermissionSummary } from "./user-permission-summary";
-import { UserRowActions } from "./user-row-actions";
+import { type UserRowActionCapabilities, UserRowActions } from "./user-row-actions";
 
 const userActionColumnBaseClassName = [
   "sticky right-0 w-12 border-l border-border bg-card text-right",
@@ -22,12 +22,8 @@ const userActionColumnBaseClassName = [
 const userActionHeaderClassName = `${userActionColumnBaseClassName} z-30`;
 const userActionCellClassName = `${userActionColumnBaseClassName} z-20`;
 
-type AdminUsersTableCapabilities = {
-  canChangePasswords: boolean;
+type AdminUsersTableCapabilities = UserRowActionCapabilities & {
   canCreateUsers: boolean;
-  canDeleteUsers: boolean;
-  canEditPermissions: boolean;
-  canToggleStatus: boolean;
 };
 type AdminUsersTableProps = {
   actor: PublicUser;
@@ -177,10 +173,7 @@ function AdminUserTableRow({
       <TableCell className={userActionCellClassName}>
         <UserRowActions
           actor={actor}
-          canChangePasswords={capabilities.canChangePasswords}
-          canDeleteUsers={capabilities.canDeleteUsers}
-          canEditPermissions={capabilities.canEditPermissions}
-          canToggleStatus={capabilities.canToggleStatus}
+          capabilities={capabilities}
           onChangePassword={onChangePassword}
           onDeleteUser={onDeleteUser}
           onEditPermissions={onEditPermissions}

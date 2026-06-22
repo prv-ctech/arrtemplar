@@ -616,19 +616,24 @@
   --selected-border: color-mix(in srgb, var(--theme-park-accent) 62%, var(--theme-park-muted));
 }
 
+.arrbit-radioactive,
+.arrbit-retro-gaming {
+  --catppuccin-color-surface0: var(--arrbit-surface);
+  --catppuccin-color-surface2: var(--arrbit-muted);
+  --catppuccin-color-overlay1: var(--arrbit-muted);
+  --catppuccin-color-overlay2: var(--arrbit-accent);
+  --catppuccin-color-subtext0: color-mix(in srgb, var(--arrbit-text) 72%, var(--arrbit-muted));
+  --catppuccin-color-text: var(--arrbit-text);
+  --primary-foreground: var(--arrbit-primary-foreground);
+}
+
 .arrbit-radioactive {
   --catppuccin-color-base: var(--arrbit-base);
   --catppuccin-color-mantle: color-mix(in srgb, var(--arrbit-base) 88%, var(--arrbit-surface));
   --catppuccin-color-crust: color-mix(in srgb, var(--arrbit-base) 82%, black);
-  --catppuccin-color-surface0: var(--arrbit-surface);
   --catppuccin-color-surface1: color-mix(in srgb, var(--arrbit-surface) 74%, var(--arrbit-muted));
-  --catppuccin-color-surface2: var(--arrbit-muted);
   --catppuccin-color-overlay0: color-mix(in srgb, var(--arrbit-muted) 64%, var(--arrbit-surface));
-  --catppuccin-color-overlay1: var(--arrbit-muted);
-  --catppuccin-color-overlay2: var(--arrbit-accent);
-  --catppuccin-color-subtext0: color-mix(in srgb, var(--arrbit-text) 72%, var(--arrbit-muted));
   --catppuccin-color-subtext1: color-mix(in srgb, var(--arrbit-text) 86%, var(--arrbit-muted));
-  --catppuccin-color-text: var(--arrbit-text);
   --catppuccin-color-lavender: var(--arrbit-accent);
   --catppuccin-color-mauve: var(--arrbit-accent);
   --catppuccin-color-blue: var(--arrbit-muted);
@@ -645,7 +650,6 @@
   --catppuccin-color-pink: color-mix(in srgb, var(--arrbit-accent) 76%, white);
   --catppuccin-color-rosewater: color-mix(in srgb, var(--arrbit-accent) 56%, white);
   --catppuccin-color-flamingo: color-mix(in srgb, var(--arrbit-accent-muted) 58%, white);
-  --primary-foreground: var(--arrbit-primary-foreground);
   --selected: color-mix(in srgb, var(--arrbit-accent) 18%, var(--arrbit-surface));
   --selected-border: color-mix(in srgb, var(--arrbit-accent) 66%, var(--arrbit-muted));
 }
@@ -654,15 +658,9 @@
   --catppuccin-color-base: var(--arrbit-base);
   --catppuccin-color-mantle: color-mix(in srgb, var(--arrbit-base) 88%, black);
   --catppuccin-color-crust: color-mix(in srgb, var(--arrbit-base) 76%, black);
-  --catppuccin-color-surface0: var(--arrbit-surface);
   --catppuccin-color-surface1: color-mix(in srgb, var(--arrbit-surface) 72%, var(--arrbit-muted));
-  --catppuccin-color-surface2: var(--arrbit-muted);
   --catppuccin-color-overlay0: color-mix(in srgb, var(--arrbit-muted) 72%, var(--arrbit-surface));
-  --catppuccin-color-overlay1: var(--arrbit-muted);
-  --catppuccin-color-overlay2: var(--arrbit-accent);
-  --catppuccin-color-subtext0: color-mix(in srgb, var(--arrbit-text) 72%, var(--arrbit-muted));
   --catppuccin-color-subtext1: color-mix(in srgb, var(--arrbit-text) 88%, var(--arrbit-muted));
-  --catppuccin-color-text: var(--arrbit-text);
   --catppuccin-color-lavender: var(--arrbit-primary);
   --catppuccin-color-mauve: var(--arrbit-primary);
   --catppuccin-color-blue: var(--arrbit-accent);
@@ -675,7 +673,6 @@
   --catppuccin-color-pink: var(--arrbit-secondary);
   --catppuccin-color-rosewater: var(--arrbit-text);
   --catppuccin-color-flamingo: color-mix(in srgb, var(--arrbit-secondary) 60%, var(--arrbit-text));
-  --primary-foreground: var(--arrbit-primary-foreground);
   --selected: color-mix(in srgb, var(--arrbit-primary) 22%, var(--arrbit-surface));
   --selected-border: color-mix(in srgb, var(--arrbit-accent) 62%, var(--arrbit-primary));
 }

@@ -166,46 +166,57 @@ function SettingsPlaceholder({
 function ActiveSettingsPage({ activePage }: { activePage: AdminSettingsPage }) {
   switch (activePage) {
     case "about":
-      return SettingsPlaceholder({
-        title: "About",
-        description: "Version details, support context, and application information.",
-      });
+      return (
+        <SettingsPlaceholder
+          description="Version details, support context, and application information."
+          title="About"
+        />
+      );
     case "theme":
       return <ThemeSettings />;
     case "general":
-      return SettingsPlaceholder({
-        title: "General",
-        description: "Application settings and display preferences.",
-      });
+      return (
+        <SettingsPlaceholder
+          description="Application settings and display preferences."
+          title="General"
+        />
+      );
     case "library":
-      return SettingsPlaceholder({
-        title: "Library",
-        description: "Metadata import and library curation.",
-      });
+      return (
+        <SettingsPlaceholder description="Metadata import and library curation." title="Library" />
+      );
     case "users":
       return <AdminUsersSettings />;
     case "import":
-      return SettingsPlaceholder({
-        title: "Import",
-        description: "Import queue, files, and parser settings.",
-      });
+      return (
+        <SettingsPlaceholder
+          description="Import queue, files, and parser settings."
+          title="Import"
+        />
+      );
     case "notifications":
-      return SettingsPlaceholder({
-        title: "Notifications",
-        description: "App-wide notification channels and delivery settings.",
-      });
+      return (
+        <SettingsPlaceholder
+          description="App-wide notification channels and delivery settings."
+          title="Notifications"
+        />
+      );
     case "auth":
       return <AuthSettings />;
     case "services":
-      return SettingsPlaceholder({
-        title: "Services",
-        description: "External service integrations and connectivity.",
-      });
+      return (
+        <SettingsPlaceholder
+          description="External service integrations and connectivity."
+          title="Services"
+        />
+      );
     case "logs":
-      return SettingsPlaceholder({
-        title: "Logs",
-        description: "Audit, retention, and operational log settings.",
-      });
+      return (
+        <SettingsPlaceholder
+          description="Audit, retention, and operational log settings."
+          title="Logs"
+        />
+      );
   }
 }
 

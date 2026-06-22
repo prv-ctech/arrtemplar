@@ -5,7 +5,7 @@ import {
   type AuthUpsertProviderRequest,
 } from "@arrtemplar/shared";
 import { CaretDownIcon } from "@phosphor-icons/react";
-import { type FormEvent, type ReactNode, useEffect, useId, useState } from "react";
+import { type FormEvent, type ReactNode, useId, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,26 +33,50 @@ const authProviderSlug = AUTH_PROVIDER_SLUGS[0];
 const AUTHENTIK_LOGO_SRC = "/brand/authentik.svg";
 
 export function AuthSettings() {
-  const controls = useAuthSettingsController();
+  const providersQuery = useAuthProvidersQuery();
+  const identitiesQuery = useAuthIdentitiesQuery();
+  const provider = providersQuery.data?.find((candidate) => candidate.slug === authProviderSlug);
+
+  return (
+    <AuthSettingsFormController
+      identities={identitiesQuery.data ?? []}
+      key={createProviderFormKey(provider)}
+      provider={provider}
+      providerError={providersQuery.error}
+    />
+  );
+}
+
+function AuthSettingsFormController({
+  identities,
+  provider,
+  providerError,
+}: {
+  identities: readonly AuthIdentity[];
+  provider: AuthProviderSummary | undefined;
+  providerError: unknown;
+}) {
+  const controls = useAuthSettingsController({ identities, provider, providerError });
 
   return <AuthMethodGrid controls={controls} />;
 }
 
-function useAuthSettingsController() {
-  const providersQuery = useAuthProvidersQuery();
-  const identitiesQuery = useAuthIdentitiesQuery();
-  const provider = providersQuery.data?.find((candidate) => candidate.slug === authProviderSlug);
+function useAuthSettingsController({
+  identities,
+  provider,
+  providerError,
+}: {
+  identities: readonly AuthIdentity[];
+  provider: AuthProviderSummary | undefined;
+  providerError: unknown;
+}) {
   const [form, setForm] = useState(() => createFormState(provider));
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const saveMutation = useUpsertAuthProviderMutation();
   const statusId = useId();
   const isSaving = saveMutation.isPending;
-  const errorMessage = formError ?? getErrorMessage(providersQuery.error ?? saveMutation.error);
-
-  useEffect(() => {
-    setForm(createFormState(provider));
-  }, [provider]);
+  const errorMessage = formError ?? getErrorMessage(providerError ?? saveMutation.error);
 
   function updateForm(next: Partial<AuthProviderFormState>) {
     setStatusMessage(null);
@@ -92,7 +116,7 @@ function useAuthSettingsController() {
     errorMessage,
     form,
     handleSubmit,
-    identities: identitiesQuery.data ?? [],
+    identities,
     isSaving,
     provider,
     statusId,
@@ -279,6 +303,7 @@ function ProviderConfigRows({
       </SettingsRow>
       <SettingsRow controlId="auth-provider-redirect-uris" density="compact" label="Redirect URIs">
         <textarea
+          aria-label="Redirect URIs"
           className="min-h-20 w-full min-w-0 rounded-xl border border-input bg-background/50 px-3 py-2 text-sm text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted-foreground focus-visible:border-primary/70 focus-visible:ring-2 focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50 sm:w-96"
           disabled={disabled}
           id="auth-provider-redirect-uris"
@@ -300,10 +325,6 @@ function AuthentikAccountLinking({
 }) {
   const isConnected = identities.length > 0;
 
-  function startLinkFlow() {
-    window.location.assign("/api/auth/oauth/authentik/start?mode=link&returnTo=/settings/auth");
-  }
-
   return (
     <section
       aria-label="Authentik account linking"
@@ -323,7 +344,7 @@ function AuthentikAccountLinking({
       <Button
         className="w-fit rounded-xl"
         disabled={!isProviderEnabled}
-        onClick={startLinkFlow}
+        onClick={startAuthentikLinkFlow}
         type="button"
         variant="secondary"
       >
@@ -408,6 +429,7 @@ function AuthServiceToggleButton({
     <button
       aria-controls={contentId}
       aria-expanded={isExpanded}
+      aria-label={`${isExpanded ? "Collapse" : "Expand"} ${title} auth settings`}
       className={cn(
         "flex min-w-0 flex-1 cursor-pointer items-start gap-3 rounded-xl text-left transition-colors duration-200",
         "hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -420,6 +442,10 @@ function AuthServiceToggleButton({
       <AuthServiceExpandIcon isExpanded={isExpanded} />
     </button>
   );
+}
+
+function startAuthentikLinkFlow() {
+  window.location.assign("/api/auth/oauth/authentik/start?mode=link&returnTo=/settings/auth");
 }
 
 function AuthentikServiceLogo() {
@@ -496,11 +522,15 @@ function createFormState(provider: AuthProviderSummary | undefined): AuthProvide
   };
 }
 
+function createProviderFormKey(provider: AuthProviderSummary | undefined): string {
+  return provider ? `${provider.slug}:${provider.updatedAt}` : `${authProviderSlug}:new`;
+}
+
 function createProviderRequest(form: AuthProviderFormState): AuthUpsertProviderRequest | null {
-  const redirectUris = form.redirectUris
-    .split(/\r?\n/u)
-    .map((uri) => uri.trim())
-    .filter(Boolean);
+  const redirectUris = form.redirectUris.split(/\r?\n/u).flatMap((uri) => {
+    const trimmedUri = uri.trim();
+    return trimmedUri ? [trimmedUri] : [];
+  });
   const label = form.label.trim();
   const issuer = form.issuer.trim();
   const clientId = form.clientId.trim();

@@ -11,12 +11,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
-type UserRowActionsProps = {
-  actor: PublicUser;
+export type UserRowActionCapabilities = {
   canChangePasswords: boolean;
   canDeleteUsers: boolean;
   canEditPermissions: boolean;
   canToggleStatus: boolean;
+};
+
+type UserRowActionsProps = {
+  actor: PublicUser;
+  capabilities: UserRowActionCapabilities;
   onChangePassword: (user: AdminUserSummary) => void;
   onDeleteUser: (user: AdminUserSummary) => void;
   onEditPermissions: (user: AdminUserSummary) => void;
@@ -34,10 +38,7 @@ type ManagedActionState = {
 
 export function UserRowActions({
   actor,
-  canChangePasswords,
-  canDeleteUsers,
-  canEditPermissions,
-  canToggleStatus,
+  capabilities,
   onChangePassword,
   onDeleteUser,
   onEditPermissions,
@@ -47,10 +48,7 @@ export function UserRowActions({
   const isActorRow = actor.id === user.id;
   const managedActions = getManagedActionState({
     actor,
-    canChangePasswords,
-    canDeleteUsers,
-    canEditPermissions,
-    canToggleStatus,
+    capabilities,
     isActorRow,
     user,
   });
@@ -77,29 +75,20 @@ export function UserRowActions({
 
 function getManagedActionState({
   actor,
-  canChangePasswords,
-  canDeleteUsers,
-  canEditPermissions,
-  canToggleStatus,
+  capabilities,
   isActorRow,
   user,
-}: Pick<
-  UserRowActionsProps,
-  | "actor"
-  | "canChangePasswords"
-  | "canDeleteUsers"
-  | "canEditPermissions"
-  | "canToggleStatus"
-  | "user"
-> & {
+}: Pick<UserRowActionsProps, "actor" | "capabilities" | "user"> & {
   isActorRow: boolean;
 }): ManagedActionState {
   const canRunManagedMutation = !isActorRow;
   const state = {
-    canChangePassword: canRunManagedMutation && canChangePasswords,
-    canDeleteUser: canRunManagedMutation && canDeleteUsers && canDeleteUser(actor, user),
-    canEditPermissions: canRunManagedMutation && canEditPermissions,
-    canToggleStatus: canRunManagedMutation && canToggleStatus && canToggleUserStatus(actor, user),
+    canChangePassword: canRunManagedMutation && capabilities.canChangePasswords,
+    canDeleteUser:
+      canRunManagedMutation && capabilities.canDeleteUsers && canDeleteUser(actor, user),
+    canEditPermissions: canRunManagedMutation && capabilities.canEditPermissions,
+    canToggleStatus:
+      canRunManagedMutation && capabilities.canToggleStatus && canToggleUserStatus(actor, user),
   };
 
   return {
