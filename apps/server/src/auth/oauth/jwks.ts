@@ -1,4 +1,4 @@
-import { decodeBase64Url } from "../../security/oauth-crypto";
+import { base64UrlEncode, decodeBase64Url } from "../../security/oauth-crypto";
 import type { OidcDiscoveryDocument } from "./discovery";
 import { parseHttpIntegrationUrl } from "./discovery";
 
@@ -18,6 +18,8 @@ export type OidcIdTokenClaims = {
   iat: number;
   nonce: string;
   azp?: string;
+  at_hash?: string;
+  c_hash?: string;
   preferred_username?: string;
   name?: string;
   email?: string;
@@ -45,6 +47,8 @@ type JwksCacheEntry = {
 const jwksCache = new Map<string, JwksCacheEntry>();
 
 export async function verifyOidcIdToken(input: {
+  accessToken?: string;
+  authorizationCode?: string;
   clientId: string;
   discovery: OidcDiscoveryDocument;
   expectedNonce: string;
@@ -130,9 +134,16 @@ function parseJsonPart(encodedValue: string, label: string): unknown {
 }
 
 async function readVerificationJwk(jwksUri: string, header: JwtHeader): Promise<OidcJsonWebKey> {
-  const jwks = await fetchJwks(jwksUri);
+  let jwks = await fetchJwks(jwksUri);
   const candidates = jwks.keys.filter((key) => isUsableSigningKey(key, header.alg));
-  const matchingKeys = header.kid ? candidates.filter((key) => key.kid === header.kid) : candidates;
+  let matchingKeys = header.kid ? candidates.filter((key) => key.kid === header.kid) : candidates;
+
+  if (header.kid && matchingKeys.length === 0) {
+    jwks = await fetchJwks(jwksUri, { refresh: true });
+    matchingKeys = jwks.keys
+      .filter((key) => isUsableSigningKey(key, header.alg))
+      .filter((key) => key.kid === header.kid);
+  }
 
   const matchingKey = matchingKeys[0];
 
@@ -143,11 +154,14 @@ async function readVerificationJwk(jwksUri: string, header: JwtHeader): Promise<
   return matchingKey;
 }
 
-async function fetchJwks(jwksUri: string): Promise<JwksDocument> {
+async function fetchJwks(
+  jwksUri: string,
+  options: { refresh?: boolean } = {},
+): Promise<JwksDocument> {
   const url = parseHttpIntegrationUrl(jwksUri, "OIDC JWKS").toString();
   const cached = jwksCache.get(url);
 
-  if (cached && cached.expiresAt > Date.now()) {
+  if (!options.refresh && cached && cached.expiresAt > Date.now()) {
     return cached.document;
   }
 
@@ -215,12 +229,21 @@ function verifyAlgorithm(algorithm: SupportedJwtAlgorithm): AlgorithmIdentifier 
   return algorithm === "RS256" ? { name: "RSASSA-PKCS1-v1_5" } : { name: "ECDSA", hash: "SHA-256" };
 }
 
-function validateIdTokenClaims(
+async function validateIdTokenClaims(
   claims: Record<string, unknown>,
-  input: { clientId: string; discovery: OidcDiscoveryDocument; expectedNonce: string },
-): OidcIdTokenClaims {
+  input: {
+    accessToken?: string;
+    authorizationCode?: string;
+    clientId: string;
+    discovery: OidcDiscoveryDocument;
+    expectedNonce: string;
+  },
+): Promise<OidcIdTokenClaims> {
+  await validateTokenHashClaims(claims, input);
+
   return {
     ...validateRegisteredClaims(claims, input),
+    ...readOptionalTokenHashClaims(claims),
     ...readOptionalProfileClaims(claims),
   };
 }
@@ -301,6 +324,63 @@ function readOptionalProfileClaims(
   }
 
   return profileClaims;
+}
+
+function readOptionalTokenHashClaims(
+  claims: Record<string, unknown>,
+): Pick<OidcIdTokenClaims, "at_hash" | "c_hash"> {
+  const hashClaims: Pick<OidcIdTokenClaims, "at_hash" | "c_hash"> = {};
+
+  if (typeof claims.c_hash === "string") {
+    hashClaims.c_hash = claims.c_hash;
+  }
+
+  if (typeof claims.at_hash === "string") {
+    hashClaims.at_hash = claims.at_hash;
+  }
+
+  return hashClaims;
+}
+
+async function validateTokenHashClaims(
+  claims: Record<string, unknown>,
+  input: {
+    accessToken?: string;
+    authorizationCode?: string;
+  },
+): Promise<void> {
+  await validateTokenHashClaim("c_hash", claims.c_hash, input.authorizationCode);
+  await validateTokenHashClaim("at_hash", claims.at_hash, input.accessToken);
+}
+
+async function validateTokenHashClaim(
+  claimName: "at_hash" | "c_hash",
+  claimValue: unknown,
+  tokenValue: string | undefined,
+): Promise<void> {
+  if (claimValue === undefined) {
+    return;
+  }
+
+  if (typeof claimValue !== "string" || !claimValue) {
+    throw new Error(`OIDC ID token ${claimName} must be a non-empty string.`);
+  }
+
+  if (!tokenValue) {
+    throw new Error(`OIDC ID token ${claimName} cannot be verified without its source token.`);
+  }
+
+  const expected = await createTokenHashClaim(tokenValue);
+
+  if (claimValue !== expected) {
+    throw new Error(`OIDC ID token ${claimName} does not match.`);
+  }
+}
+
+async function createTokenHashClaim(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", textEncoder.encode(value));
+
+  return base64UrlEncode(digest.slice(0, digest.byteLength / 2));
 }
 
 function normalizeAudience(audience: unknown): string[] {

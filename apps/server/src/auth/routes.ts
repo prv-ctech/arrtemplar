@@ -52,6 +52,8 @@ import { Elysia, t } from "elysia";
 import { env } from "../config/env";
 import type { DatabaseClient } from "../db/client";
 import {
+  OAUTH_LOGOUT_STATE_COOKIE_MAX_AGE_SECONDS,
+  OAUTH_LOGOUT_STATE_COOKIE_NAME,
   OAUTH_STATE_COOKIE_MAX_AGE_SECONDS,
   OAUTH_STATE_COOKIE_NAME,
 } from "../security/oauth-state";
@@ -372,6 +374,11 @@ const oauthCookieSchema = t.Cookie({
   [SESSION_COOKIE_NAME]: t.Optional(t.String()),
   [OAUTH_STATE_COOKIE_NAME]: t.Optional(t.String()),
 });
+const logoutCookieSchema = t.Cookie({
+  [SESSION_COOKIE_NAME]: t.Optional(t.String()),
+  [OAUTH_STATE_COOKIE_NAME]: t.Optional(t.String()),
+  [OAUTH_LOGOUT_STATE_COOKIE_NAME]: t.Optional(t.String()),
+});
 const apiErrorResponseSchema = t.Object({
   error: t.Object({
     code: t.String(),
@@ -384,12 +391,20 @@ const oauthRedirectResponseSchema = {
   401: apiErrorResponseSchema,
   403: apiErrorResponseSchema,
   404: apiErrorResponseSchema,
+  429: apiErrorResponseSchema,
   502: apiErrorResponseSchema,
   503: apiErrorResponseSchema,
 };
 const oauthCallbackResponseSchema = {
   ...oauthRedirectResponseSchema,
   409: apiErrorResponseSchema,
+};
+const logoutCallbackQuerySchema = t.Object({
+  state: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
+});
+const logoutCallbackResponseSchema = {
+  302: t.Void(),
+  400: apiErrorResponseSchema,
 };
 const authProviderMutationResponseSchema = {
   200: authProviderResponseSchema,
@@ -409,6 +424,7 @@ const authProviderDeleteResponseSchema = {
 
 export type AuthRoutesOptions = {
   database: DatabaseClient;
+  oauthClientSecretEncryptionKey: string | null;
   sessionCookieSecure: boolean;
   rateLimiter?: LoginRateLimiter;
 };
@@ -435,14 +451,14 @@ type ProviderMutationContext<TInput> = {
 export function createAuthRoutes(options: AuthRoutesOptions) {
   const authService = new AuthService(options.database, options.rateLimiter);
   const oauthService = new OAuthService(options.database, authService, {
-    encryptionKey: env.oauthClientSecretEncryptionKey,
+    encryptionKey: options.oauthClientSecretEncryptionKey,
     webOrigin: env.webOrigin,
   });
 
   return new Elysia({ prefix: "/api" })
     .use(createOAuthRoutes(authService, oauthService, options))
     .use(createSetupRoutes(authService, options))
-    .use(createSessionRoutes(authService, options))
+    .use(createSessionRoutes(authService, oauthService, options))
     .use(createProfileRoutes(authService))
     .use(createPermissionRoutes(authService))
     .use(createUsersRoutes(authService));
@@ -456,7 +472,8 @@ function createOAuthRoutes(
   return new Elysia()
     .use(createOAuthProviderListRoute(oauthService))
     .use(createOAuthStartRoute(authService, oauthService, options))
-    .use(createOAuthCallbackRoute(oauthService, options))
+    .use(createOAuthCallbackRoute(authService, oauthService, options))
+    .use(createLogoutCallbackRoute(oauthService))
     .use(createOAuthProviderUpsertRoute(authService, oauthService))
     .use(createOAuthProviderPatchRoute(authService, oauthService))
     .use(createOAuthProviderDeleteRoute(authService, oauthService))
@@ -485,12 +502,26 @@ function createOAuthStartRoute(
 ) {
   return new Elysia().get(
     "/auth/oauth/:provider/start",
-    async ({ cookie, params, query, request, status }) => {
+    async ({ cookie, params, query, request, server, status }) => {
       const providerResult = readAuthProviderParam(params.provider, status);
 
       if (!providerResult.ok) {
         return providerResult.response;
       }
+
+      const requestContext = createRequestContext(request, server);
+      const routeLimit = authService.checkOAuthRouteRateLimit({
+        provider: providerResult.provider,
+        route: "start",
+        mode: query.mode ?? "login",
+        context: requestContext,
+      });
+
+      if (!routeLimit.ok) {
+        return status(routeLimit.status, routeLimit.body);
+      }
+
+      authService.recordOAuthRouteAttempt(routeLimit.key);
 
       const linkActorResult = readOAuthLinkActor(
         authService,
@@ -533,18 +564,43 @@ function createOAuthStartRoute(
   );
 }
 
-function createOAuthCallbackRoute(oauthService: OAuthService, options: AuthRoutesOptions) {
+function createOAuthCallbackRoute(
+  authService: AuthService,
+  oauthService: OAuthService,
+  options: AuthRoutesOptions,
+) {
   return new Elysia().get(
     "/auth/callback/:provider",
     async (context) => {
-      const { cookie, params, query, request, status } = context;
+      const { cookie, params, query, request, server, status } = context;
       const providerResult = readAuthProviderParam(params.provider, status);
 
       if (!providerResult.ok) {
         return providerResult.response;
       }
 
+      const requestContext = createRequestContext(request, server);
+      const callbackMode = query.state
+        ? await oauthService.readCallbackStateMode({
+            provider: providerResult.provider,
+            requestUrl: request.url,
+            state: query.state,
+            stateCookieValue: cookie[OAUTH_STATE_COOKIE_NAME].value,
+          })
+        : null;
+      const routeLimit = authService.checkOAuthRouteRateLimit({
+        provider: providerResult.provider,
+        route: "callback",
+        ...(callbackMode ? { mode: callbackMode } : {}),
+        context: requestContext,
+      });
+
+      if (!routeLimit.ok) {
+        return status(routeLimit.status, routeLimit.body);
+      }
+
       if (query.error || !query.code || !query.state) {
+        authService.recordOAuthRouteAttempt(routeLimit.key);
         return status(400, oauthCallbackInvalidResponse());
       }
 
@@ -555,14 +611,17 @@ function createOAuthCallbackRoute(oauthService: OAuthService, options: AuthRoute
         stateCookieValue: cookie[OAUTH_STATE_COOKIE_NAME].value,
         sessionToken: readSessionToken(cookie[SESSION_COOKIE_NAME].value),
         requestUrl: request.url,
-        context: createRequestContext(request),
+        context: requestContext,
       });
 
       cookie[OAUTH_STATE_COOKIE_NAME].remove();
 
       if (!result.ok) {
+        authService.recordOAuthRouteAttempt(routeLimit.key);
         return status(result.status, result.body);
       }
+
+      authService.clearOAuthRouteRateLimit(routeLimit.key);
 
       if (result.sessionToken && result.expiresAt) {
         writeSessionCookie(
@@ -583,6 +642,40 @@ function createOAuthCallbackRoute(oauthService: OAuthService, options: AuthRoute
       detail: {
         summary: "Complete OAuth callback",
         description: "Validates OAuth state and ID token, then logs in or links the identity.",
+        tags: ["Auth"],
+      },
+    },
+  );
+}
+
+function createLogoutCallbackRoute(oauthService: OAuthService) {
+  return new Elysia().get(
+    "/auth/logout/callback",
+    async ({ cookie, query, status }) => {
+      if (!query.state) {
+        return status(400, oauthLogoutStateInvalidResponse());
+      }
+
+      const validState = await oauthService.verifyLogoutState({
+        state: query.state,
+        logoutStateCookieValue: cookie[OAUTH_LOGOUT_STATE_COOKIE_NAME].value,
+      });
+
+      cookie[OAUTH_LOGOUT_STATE_COOKIE_NAME].remove();
+
+      if (!validState) {
+        return status(400, oauthLogoutStateInvalidResponse());
+      }
+
+      return redirectResponse(new URL("/login", env.webOrigin).toString());
+    },
+    {
+      query: logoutCallbackQuerySchema,
+      cookie: logoutCookieSchema,
+      response: logoutCallbackResponseSchema,
+      detail: {
+        summary: "Complete OAuth logout",
+        description: "Validates OAuth logout state and redirects back to the login page.",
         tags: ["Auth"],
       },
     },
@@ -698,14 +791,13 @@ function createSetupRoutes(authService: AuthService, options: AuthRoutesOptions)
     )
     .post(
       "/auth/setup",
-      async ({ body, cookie, request, status }) => {
-        const result = await authService.createInitialAdmin(body, createRequestContext(request));
+      async ({ body, cookie, request, server, status }) => {
+        const result = await authService.createInitialAdmin(
+          body,
+          createRequestContext(request, server),
+        );
 
-        if (!result.ok) {
-          return status(result.status, result.body);
-        }
-
-        return writeSessionUserResponse(cookie[SESSION_COOKIE_NAME], options, result);
+        return writeSessionRouteResponse(cookie[SESSION_COOKIE_NAME], options, status, result);
       },
       {
         body: createAdminRequestSchema,
@@ -724,18 +816,18 @@ function createSetupRoutes(authService: AuthService, options: AuthRoutesOptions)
     );
 }
 
-function createSessionRoutes(authService: AuthService, options: AuthRoutesOptions) {
+function createSessionRoutes(
+  authService: AuthService,
+  oauthService: OAuthService,
+  options: AuthRoutesOptions,
+) {
   return new Elysia()
     .post(
       "/auth/login",
-      async ({ body, cookie, request, status }) => {
-        const result = await authService.login(body, createRequestContext(request));
+      async ({ body, cookie, request, server, status }) => {
+        const result = await authService.login(body, createRequestContext(request, server));
 
-        if (!result.ok) {
-          return status(result.status, result.body);
-        }
-
-        return writeSessionUserResponse(cookie[SESSION_COOKIE_NAME], options, result);
+        return writeSessionRouteResponse(cookie[SESSION_COOKIE_NAME], options, status, result);
       },
       {
         body: loginRequestSchema,
@@ -754,19 +846,45 @@ function createSessionRoutes(authService: AuthService, options: AuthRoutesOption
     )
     .post(
       "/auth/logout",
-      ({ cookie, request }) => {
+      async ({ cookie, request, server }) => {
         const sessionCookie = cookie[SESSION_COOKIE_NAME];
-        authService.logout(readSessionToken(sessionCookie.value), createRequestContext(request));
-        sessionCookie.remove();
+        const sessionToken = readSessionToken(sessionCookie.value);
+        const logoutResult = await oauthService.buildLogout({
+          sessionToken,
+          requestUrl: request.url,
+        });
 
-        return { status: "ok" } satisfies LogoutResponse;
+        authService.logout(sessionToken, createRequestContext(request, server));
+
+        sessionCookie.remove();
+        cookie[OAUTH_STATE_COOKIE_NAME].remove();
+
+        if (logoutResult.kind === "sso") {
+          writeLogoutStateCookie(
+            cookie[OAUTH_LOGOUT_STATE_COOKIE_NAME],
+            logoutResult.logoutStateCookieValue,
+            options,
+          );
+
+          return new Response(logoutResult.html, {
+            status: 200,
+            headers: {
+              "content-type": "text/html; charset=utf-8",
+              "cache-control": "no-store",
+              "referrer-policy": "no-referrer",
+            },
+          });
+        }
+
+        return Response.json({ status: "ok" } satisfies LogoutResponse);
       },
       {
-        cookie: sessionCookieSchema,
+        cookie: logoutCookieSchema,
         response: logoutResponseSchema,
         detail: {
           summary: "Log out",
-          description: "Deletes the current server-side session and clears the session cookie.",
+          description:
+            "Deletes the current server-side session. OAuth sessions continue to provider-initiated SSO logout via an auto-submitting POST form.",
           tags: ["Auth"],
         },
       },
@@ -850,11 +968,11 @@ function createProfileRoutes(authService: AuthService) {
     )
     .put(
       "/profile/notifications",
-      ({ body, cookie, request, status }) => {
+      ({ body, cookie, request, server, status }) => {
         const result = authService.updateNotificationPreferences(
           readSessionToken(cookie[SESSION_COOKIE_NAME].value),
           body,
-          createRequestContext(request),
+          createRequestContext(request, server),
         );
 
         if (!result.ok) {
@@ -1006,11 +1124,11 @@ function createProfileRoutes(authService: AuthService) {
     )
     .put(
       "/profile",
-      ({ body, cookie, request, status }) => {
+      ({ body, cookie, request, server, status }) => {
         const result = authService.updateUserProfile(
           readSessionToken(cookie[SESSION_COOKIE_NAME].value),
           normalizeUpdateUserProfileRequest(body),
-          createRequestContext(request),
+          createRequestContext(request, server),
         );
 
         if (!result.ok) {
@@ -1036,11 +1154,11 @@ function createProfileRoutes(authService: AuthService) {
     )
     .put(
       "/profile/password",
-      async ({ body, cookie, request, status }) => {
+      async ({ body, cookie, request, server, status }) => {
         const result = await authService.changePassword(
           readSessionToken(cookie[SESSION_COOKIE_NAME].value),
           body,
-          createRequestContext(request),
+          createRequestContext(request, server),
         );
 
         if (!result.ok) {
@@ -1123,7 +1241,7 @@ function createUsersRoutes(authService: AuthService) {
     )
     .post(
       "/users",
-      async ({ body, cookie, request, status }) => {
+      async ({ body, cookie, request, server, status }) => {
         return withUsersManageAsync(
           authService,
           cookie[SESSION_COOKIE_NAME].value,
@@ -1132,7 +1250,7 @@ function createUsersRoutes(authService: AuthService) {
             const result = await authService.createLocalUser(
               body,
               user,
-              createRequestContext(request),
+              createRequestContext(request, server),
             );
 
             return result.ok
@@ -1188,13 +1306,14 @@ function createUsersRoutes(authService: AuthService) {
     )
     .put(
       "/users/:publicUserId/settings/main",
-      ({ body, cookie, params, request, status }) =>
+      ({ body, cookie, params, request, server, status }) =>
         runManagedUserMutation(
           authService,
           cookie[SESSION_COOKIE_NAME].value,
           params.publicUserId,
           normalizeUpdateUserProfileRequest(body),
           request,
+          server,
           status,
           (publicUserId, input, user, context) =>
             authService.updateManagedUserProfile(publicUserId, input, user, context),
@@ -1220,7 +1339,7 @@ function createUsersRoutes(authService: AuthService) {
     )
     .put(
       "/users/:publicUserId/settings/password",
-      async ({ body, cookie, params, request, status }) => {
+      async ({ body, cookie, params, request, server, status }) => {
         return withUsersManageAsync(
           authService,
           cookie[SESSION_COOKIE_NAME].value,
@@ -1230,7 +1349,7 @@ function createUsersRoutes(authService: AuthService) {
               params.publicUserId,
               body,
               user,
-              createRequestContext(request),
+              createRequestContext(request, server),
             );
 
             return result.ok
@@ -1260,7 +1379,7 @@ function createUsersRoutes(authService: AuthService) {
     )
     .put(
       "/users/:publicUserId/settings/permissions",
-      ({ body, cookie, params, request, status }) => {
+      ({ body, cookie, params, request, server, status }) => {
         return runManagedUserMutation<Parameters<AuthService["updateManagedUserPermissions"]>[1]>(
           authService,
           cookie[SESSION_COOKIE_NAME].value,
@@ -1272,6 +1391,7 @@ function createUsersRoutes(authService: AuthService) {
             ),
           },
           request,
+          server,
           status,
           (publicUserId, input, user, context) =>
             authService.updateManagedUserPermissions(publicUserId, input, user, context),
@@ -1324,12 +1444,12 @@ function createUsersRoutes(authService: AuthService) {
     )
     .delete(
       "/users/:publicUserId",
-      ({ cookie, params, request, status }) =>
+      ({ cookie, params, request, server, status }) =>
         withUsersManage(authService, cookie[SESSION_COOKIE_NAME].value, status, (user) => {
           const result = authService.deleteManagedUser(
             params.publicUserId,
             user,
-            createRequestContext(request),
+            createRequestContext(request, server),
           );
 
           return result.ok
@@ -1427,6 +1547,15 @@ function oauthCallbackInvalidResponse(): ApiErrorResponse {
   };
 }
 
+function oauthLogoutStateInvalidResponse(): ApiErrorResponse {
+  return {
+    error: {
+      code: "OAUTH_LOGOUT_STATE_INVALID",
+      message: "OAuth logout state is invalid or expired.",
+    },
+  };
+}
+
 function requireUsersManage(authService: AuthService, sessionCookieValue: unknown) {
   return authService.requirePermission(readSessionToken(sessionCookieValue), "users:manage");
 }
@@ -1438,16 +1567,35 @@ function requireSystemAdmin(authService: AuthService, sessionCookieValue: unknow
   );
 }
 
+type WritableRouteCookie = {
+  value: string | undefined;
+  httpOnly?: boolean | undefined;
+  secure?: boolean | undefined;
+  sameSite?: boolean | "none" | "lax" | "strict" | undefined;
+  path?: string | undefined;
+  maxAge?: number | undefined;
+  expires?: Date | undefined;
+};
+
+type SessionRouteResult =
+  | { ok: false; status: number; body: ApiErrorResponse }
+  | { ok: true; expiresAt: Date; sessionToken: string; user: PublicUser };
+
+function writeSessionRouteResponse(
+  sessionCookie: WritableRouteCookie,
+  options: AuthRoutesOptions,
+  status: StatusHandler,
+  result: SessionRouteResult,
+): CreateAdminResponse | LoginResponse | ReturnType<StatusHandler> {
+  if (!result.ok) {
+    return status(result.status, result.body);
+  }
+
+  return writeSessionUserResponse(sessionCookie, options, result);
+}
+
 function writeSessionUserResponse(
-  sessionCookie: {
-    value: string | undefined;
-    httpOnly?: boolean | undefined;
-    secure?: boolean | undefined;
-    sameSite?: boolean | "none" | "lax" | "strict" | undefined;
-    path?: string | undefined;
-    maxAge?: number | undefined;
-    expires?: Date | undefined;
-  },
+  sessionCookie: WritableRouteCookie,
   options: AuthRoutesOptions,
   result: { expiresAt: Date; sessionToken: string; user: PublicUser },
 ): CreateAdminResponse | LoginResponse {
@@ -1458,6 +1606,9 @@ function writeSessionUserResponse(
 
 // biome-ignore lint/suspicious/noExplicitAny: Elysia's SelectiveStatus callback type varies per route and is impractical to model precisely for these shared helpers.
 type StatusHandler = (...args: any[]) => any;
+type RequestIpReader = {
+  requestIP(request: Request): { address: string } | null;
+};
 
 function withUsersManage<T>(
   authService: AuthService,
@@ -1557,6 +1708,7 @@ function runManagedUserMutation<TBody>(
   publicUserId: string,
   input: TBody,
   request: Request,
+  server: RequestIpReader | null,
   status: StatusHandler,
   mutate: (
     publicUserId: string,
@@ -1567,7 +1719,7 @@ function runManagedUserMutation<TBody>(
 ): { user: unknown } | ReturnType<StatusHandler> {
   return withUsersManage(authService, sessionCookieValue, status, (user) =>
     managedUserResponseOrStatus(
-      mutate(publicUserId, input, user, createRequestContext(request)),
+      mutate(publicUserId, input, user, createRequestContext(request, server)),
       status,
     ),
   );
@@ -1594,12 +1746,14 @@ function createManagedUserMutationHandler<TBody>(
     cookie,
     params,
     request,
+    server,
     status,
   }: {
     body: TBody;
     cookie: Record<string, { value?: unknown } | undefined>;
     params: { publicUserId: string };
     request: Request;
+    server: RequestIpReader | null;
     status: StatusHandler;
   }) =>
     runManagedUserMutation(
@@ -1608,6 +1762,7 @@ function createManagedUserMutationHandler<TBody>(
       params.publicUserId,
       body,
       request,
+      server,
       status,
       mutate,
     );
@@ -1644,15 +1799,7 @@ function normalizeCreateNotificationHistoryRequest(input: {
 }
 
 function writeSessionCookie(
-  sessionCookie: {
-    value: string | undefined;
-    httpOnly?: boolean | undefined;
-    secure?: boolean | undefined;
-    sameSite?: boolean | "none" | "lax" | "strict" | undefined;
-    path?: string | undefined;
-    maxAge?: number | undefined;
-    expires?: Date | undefined;
-  },
+  sessionCookie: WritableRouteCookie,
   sessionToken: string,
   expiresAt: Date,
   options: AuthRoutesOptions,
@@ -1667,16 +1814,25 @@ function writeSessionCookie(
 }
 
 function writeOAuthStateCookie(
-  stateCookie: {
-    value: string | undefined;
-    httpOnly?: boolean | undefined;
-    secure?: boolean | undefined;
-    sameSite?: boolean | "none" | "lax" | "strict" | undefined;
-    path?: string | undefined;
-    maxAge?: number | undefined;
-    expires?: Date | undefined;
-  },
+  stateCookie: WritableRouteCookie,
   value: string,
+  options: AuthRoutesOptions,
+): void {
+  writeOAuthFlowStateCookie(stateCookie, value, OAUTH_STATE_COOKIE_MAX_AGE_SECONDS, options);
+}
+
+function writeLogoutStateCookie(
+  stateCookie: WritableRouteCookie,
+  value: string,
+  options: AuthRoutesOptions,
+): void {
+  writeOAuthFlowStateCookie(stateCookie, value, OAUTH_LOGOUT_STATE_COOKIE_MAX_AGE_SECONDS, options);
+}
+
+function writeOAuthFlowStateCookie(
+  stateCookie: WritableRouteCookie,
+  value: string,
+  maxAgeSeconds: number,
   options: AuthRoutesOptions,
 ): void {
   stateCookie.value = value;
@@ -1684,8 +1840,8 @@ function writeOAuthStateCookie(
   stateCookie.secure = options.sessionCookieSecure;
   stateCookie.sameSite = "lax";
   stateCookie.path = "/api/auth";
-  stateCookie.maxAge = OAUTH_STATE_COOKIE_MAX_AGE_SECONDS;
-  stateCookie.expires = new Date(Date.now() + OAUTH_STATE_COOKIE_MAX_AGE_SECONDS * 1000);
+  stateCookie.maxAge = maxAgeSeconds;
+  stateCookie.expires = new Date(Date.now() + maxAgeSeconds * 1000);
 }
 
 function redirectResponse(location: string): Response {
@@ -1695,12 +1851,15 @@ function redirectResponse(location: string): Response {
   });
 }
 
-function createRequestContext(request: Request): {
+export function createRequestContext(
+  request: Request,
+  server: RequestIpReader | null = null,
+): {
   ipAddress: string | null;
   userAgent: string | null;
 } {
   return {
-    ipAddress: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
+    ipAddress: server?.requestIP(request)?.address ?? null,
     userAgent: request.headers.get("user-agent"),
   };
 }

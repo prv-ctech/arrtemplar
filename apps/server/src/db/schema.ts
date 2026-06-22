@@ -169,6 +169,9 @@ export const sessions = sqliteTable(
     expiresAt: text("expires_at").notNull(),
     ipAddress: text("ip_address"),
     userAgent: text("user_agent"),
+    oauthProvider: text("oauth_provider", { enum: authProviderSlugEnum }),
+    oauthIdTokenEncrypted: text("oauth_id_token_encrypted"),
+    oauthMasterKeyId: text("oauth_master_key_id"),
     createdAt: text("created_at").notNull().default(timestampNow),
   },
   (table) => [

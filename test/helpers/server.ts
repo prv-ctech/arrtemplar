@@ -13,16 +13,23 @@ export type TestAppContext = {
 
 export async function createServerTestApp(
   openDatabases: DatabaseClient[],
-  options: { loginRateLimiter?: LoginRateLimiter } = {},
+  options: {
+    loginRateLimiter?: LoginRateLimiter;
+    oauthClientSecretEncryptionKey?: string | null;
+  } = {},
 ): Promise<TestAppContext> {
   const database = await resetAndOpenTestDatabase();
   openDatabases.push(database);
-  const appOptions = options.loginRateLimiter
-    ? { database, sessionCookieSecure: true, loginRateLimiter: options.loginRateLimiter }
-    : { database, sessionCookieSecure: true };
 
   return {
-    app: createApp(appOptions),
+    app: createApp({
+      database,
+      sessionCookieSecure: true,
+      ...(options.loginRateLimiter ? { loginRateLimiter: options.loginRateLimiter } : {}),
+      ...("oauthClientSecretEncryptionKey" in options
+        ? { oauthClientSecretEncryptionKey: options.oauthClientSecretEncryptionKey }
+        : {}),
+    }),
     database,
   };
 }

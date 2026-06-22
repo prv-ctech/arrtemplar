@@ -15,6 +15,7 @@ import {
   userPermissionGrants,
   users,
 } from "../../../../../../apps/server/src/db/schema";
+import { encryptOAuthIdToken } from "../../../../../../apps/server/src/security/oauth-crypto";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   DEFAULT_PROFILE_AVATAR_ID,
@@ -26,11 +27,13 @@ import {
   type UserPermission,
 } from "../../../../../../packages/shared/src";
 import { openTestDatabase, resetTestDatabase } from "../../../../../helpers/database";
+import { readFormAction } from "../../../../../helpers/html";
 
 const DEFAULT_PASSWORD = "correct-horse-battery-staple";
 const issuer = "https://auth.example.test/application/o/template-app/";
 const testScopes = ["openid", "profile", "email"].join(" ");
 const context: AuthRequestContext = { ipAddress: "127.0.0.1", userAgent: "oauth-test" };
+const encryptionKey = "hex:000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
 const openDatabases: DatabaseClient[] = [];
 
 afterEach(() => {
@@ -93,6 +96,96 @@ describe("OAuth auth service", () => {
       userId: storedUsers[0]?.id,
     });
     expect(database.db.select().from(sessions).all()).toHaveLength(2);
+  });
+
+  it("persists the encrypted OAuth ID token only on the new login session", async () => {
+    const database = await createDatabase();
+    const authService = new AuthService(database);
+
+    const firstLogin = authService.completeOAuthLogin(
+      {
+        provider: "authentik",
+        issuer,
+        subject: "token-subject",
+        preferredUsername: "token-user",
+        email: "token-user@example.test",
+      },
+      context,
+      {
+        provider: "authentik",
+        idTokenEncrypted: "first-encrypted-id-token",
+        masterKeyId: "first-master-key-id",
+      },
+    );
+
+    if (!firstLogin.ok) {
+      throw new Error(firstLogin.body.error.message);
+    }
+
+    authService.completeOAuthLogin(
+      {
+        provider: "authentik",
+        issuer,
+        subject: "token-subject",
+        preferredUsername: "token-user",
+        email: "token-user@example.test",
+      },
+      context,
+      {
+        provider: "authentik",
+        idTokenEncrypted: "second-encrypted-id-token",
+        masterKeyId: "second-master-key-id",
+      },
+    );
+
+    const storedSessions = database.db.select().from(sessions).all();
+
+    expect(storedSessions).toHaveLength(2);
+    expect(
+      storedSessions.some(
+        (session) =>
+          session.oauthProvider === "authentik" &&
+          session.oauthIdTokenEncrypted === "first-encrypted-id-token" &&
+          session.oauthMasterKeyId === "first-master-key-id",
+      ),
+    ).toBe(true);
+    expect(
+      storedSessions.some(
+        (session) =>
+          session.oauthProvider === "authentik" &&
+          session.oauthIdTokenEncrypted === "second-encrypted-id-token" &&
+          session.oauthMasterKeyId === "second-master-key-id",
+      ),
+    ).toBe(true);
+  });
+
+  it("leaves OAuth token columns null for local sessions", async () => {
+    const database = await createDatabase();
+    const authService = new AuthService(database);
+    await insertUser(database, {
+      username: "local-owner",
+      email: "local@example.test",
+      permissions: [SYSTEM_ADMIN_PERMISSION],
+    });
+
+    const login = await authService.login(
+      { email: "local@example.test", password: DEFAULT_PASSWORD },
+      context,
+    );
+
+    if (!login.ok) {
+      throw new Error(login.body.error.message);
+    }
+
+    const storedSession = database.db.select().from(sessions).get();
+
+    if (!storedSession) {
+      throw new Error("Expected local login to create a session.");
+    }
+
+    expect(storedSession.oauthProvider).toBeNull();
+    expect(storedSession.oauthIdTokenEncrypted).toBeNull();
+    expect(storedSession.oauthMasterKeyId).toBeNull();
   });
 
   it("does not key OAuth users by email and blocks local login for OAuth accounts", async () => {
@@ -294,6 +387,132 @@ describe("OAuth auth service", () => {
       }
 
       expect(new URL(result.authorizationUrl).searchParams.get("prompt")).toBe("login");
+    } finally {
+      discoveryServer.stop(true);
+    }
+  });
+
+  it("builds an end-session POST form without token data in the action URL", async () => {
+    const database = await createDatabase();
+    const authService = new AuthService(database);
+    const oauthService = new OAuthService(database, authService, {
+      encryptionKey,
+      webOrigin: "http://localhost:5173",
+    });
+    let logoutIssuer = "";
+    const discoveryServer = Bun.serve({
+      port: 0,
+      fetch: () =>
+        Response.json({
+          issuer: logoutIssuer,
+          authorization_endpoint: `${logoutIssuer}authorize/`,
+          token_endpoint: `${logoutIssuer}token/`,
+          jwks_uri: `${logoutIssuer}jwks/`,
+          end_session_endpoint: `${logoutIssuer}end-session/`,
+          id_token_signing_alg_values_supported: ["RS256"],
+        }),
+    });
+
+    logoutIssuer = new URL("/application/o/sso-logout/", discoveryServer.url).toString();
+    insertEnabledProvider(database, logoutIssuer);
+
+    try {
+      const encryptedIdToken = await encryptOAuthIdToken("test-id-token", encryptionKey);
+      const loginResult = authService.completeOAuthLogin(
+        {
+          provider: "authentik",
+          issuer: logoutIssuer,
+          subject: "logout-subject",
+          preferredUsername: "logout-user",
+          email: "logout-user@example.test",
+        },
+        context,
+        {
+          provider: "authentik",
+          idTokenEncrypted: encryptedIdToken.encrypted,
+          masterKeyId: encryptedIdToken.masterKeyId,
+        },
+      );
+
+      if (!loginResult.ok) {
+        throw new Error(loginResult.body.error.message);
+      }
+
+      const logout = await oauthService.buildLogout({
+        sessionToken: loginResult.sessionToken,
+        requestUrl: "http://localhost:3000/api/auth/logout",
+      });
+
+      if (logout.kind !== "sso") {
+        throw new Error("Expected SSO logout form.");
+      }
+
+      const action = readFormAction(logout.html);
+
+      expect(action).toBe(`${logoutIssuer}end-session/`);
+      expect(new URL(action).searchParams.has("id_token_hint")).toBe(false);
+      expect(logout.html).toContain('method="post"');
+      expect(logout.html).toContain('name="id_token_hint"');
+      expect(logout.html).toContain('name="post_logout_redirect_uri"');
+      expect(logout.html).toContain('name="client_id"');
+      expect(logout.html).toContain('name="state"');
+      expect(logout.logoutStateCookieValue).toContain(".");
+    } finally {
+      discoveryServer.stop(true);
+    }
+  });
+
+  it("falls back to local logout when discovery has no end-session endpoint", async () => {
+    const database = await createDatabase();
+    const authService = new AuthService(database);
+    const oauthService = new OAuthService(database, authService, {
+      encryptionKey,
+      webOrigin: "http://localhost:5173",
+    });
+    let noLogoutIssuer = "";
+    const discoveryServer = Bun.serve({
+      port: 0,
+      fetch: () =>
+        Response.json({
+          issuer: noLogoutIssuer,
+          authorization_endpoint: `${noLogoutIssuer}authorize/`,
+          token_endpoint: `${noLogoutIssuer}token/`,
+          jwks_uri: `${noLogoutIssuer}jwks/`,
+          id_token_signing_alg_values_supported: ["RS256"],
+        }),
+    });
+
+    noLogoutIssuer = new URL("/application/o/no-sso-logout/", discoveryServer.url).toString();
+    insertEnabledProvider(database, noLogoutIssuer);
+
+    try {
+      const encryptedIdToken = await encryptOAuthIdToken("test-id-token", encryptionKey);
+      const loginResult = authService.completeOAuthLogin(
+        {
+          provider: "authentik",
+          issuer: noLogoutIssuer,
+          subject: "local-fallback-subject",
+          preferredUsername: "fallback-user",
+          email: "fallback-user@example.test",
+        },
+        context,
+        {
+          provider: "authentik",
+          idTokenEncrypted: encryptedIdToken.encrypted,
+          masterKeyId: encryptedIdToken.masterKeyId,
+        },
+      );
+
+      if (!loginResult.ok) {
+        throw new Error(loginResult.body.error.message);
+      }
+
+      await expect(
+        oauthService.buildLogout({
+          sessionToken: loginResult.sessionToken,
+          requestUrl: "http://localhost:3000/api/auth/logout",
+        }),
+      ).resolves.toEqual({ kind: "local" });
     } finally {
       discoveryServer.stop(true);
     }

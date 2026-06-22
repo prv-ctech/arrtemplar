@@ -95,6 +95,118 @@ describe("OIDC JWKS ID-token verification", () => {
       }),
     ).rejects.toThrow("nonce");
   });
+
+  it("refetches JWKS once on cached kid miss and verifies the rotated key", async () => {
+    const oldKeys = await createRsaFixture();
+    const rotatedKeys = await createRsaFixture();
+    const discovery = createDiscovery(oldKeys.jwk);
+    const responses = [{ keys: [oldKeys.jwk] }, { keys: [rotatedKeys.jwk] }];
+    let fetchCount = 0;
+
+    globalThis.fetch = Object.assign(
+      async () => jsonResponse(responses[Math.min(fetchCount++, responses.length - 1)]),
+      { preconnect: originalFetch.preconnect },
+    );
+
+    await verifyOidcIdToken({
+      clientId,
+      discovery,
+      expectedNonce: nonce,
+      idToken: await signJwt(oldKeys.privateKey, oldKeys.jwk.kid, {
+        iss: issuer,
+        sub: "cached-key-subject",
+        aud: clientId,
+        exp: nowSeconds() + 300,
+        iat: nowSeconds(),
+        nonce,
+      }),
+    });
+
+    const rotatedClaims = await verifyOidcIdToken({
+      clientId,
+      discovery,
+      expectedNonce: nonce,
+      idToken: await signJwt(rotatedKeys.privateKey, rotatedKeys.jwk.kid, {
+        iss: issuer,
+        sub: "rotated-key-subject",
+        aud: clientId,
+        exp: nowSeconds() + 300,
+        iat: nowSeconds(),
+        nonce,
+      }),
+    });
+
+    expect(fetchCount).toBe(2);
+    expect(rotatedClaims.sub).toBe("rotated-key-subject");
+  });
+
+  it("validates c_hash and at_hash claims when they are present", async () => {
+    const keys = await createRsaFixture();
+    const discovery = createDiscovery(keys.jwk);
+    const authorizationCode = "authorization-code-value";
+    const accessToken = "access-token-value";
+    globalThis.fetch = Object.assign(async () => jsonResponse({ keys: [keys.jwk] }), {
+      preconnect: originalFetch.preconnect,
+    });
+
+    const claims = await verifyOidcIdToken({
+      clientId,
+      discovery,
+      expectedNonce: nonce,
+      authorizationCode,
+      accessToken,
+      idToken: await signJwt(keys.privateKey, keys.jwk.kid, {
+        iss: issuer,
+        sub: "hash-subject",
+        aud: clientId,
+        exp: nowSeconds() + 300,
+        iat: nowSeconds(),
+        nonce,
+        c_hash: await createTokenHashClaim(authorizationCode),
+        at_hash: await createTokenHashClaim(accessToken),
+      }),
+    });
+
+    expect(claims.sub).toBe("hash-subject");
+
+    await expect(
+      verifyOidcIdToken({
+        clientId,
+        discovery,
+        expectedNonce: nonce,
+        authorizationCode,
+        accessToken,
+        idToken: await signJwt(keys.privateKey, keys.jwk.kid, {
+          iss: issuer,
+          sub: "bad-code-hash-subject",
+          aud: clientId,
+          exp: nowSeconds() + 300,
+          iat: nowSeconds(),
+          nonce,
+          c_hash: await createTokenHashClaim("different-code"),
+        }),
+      }),
+    ).rejects.toThrow("c_hash");
+
+    await expect(
+      verifyOidcIdToken({
+        clientId,
+        discovery,
+        expectedNonce: nonce,
+        authorizationCode,
+        accessToken,
+        idToken: await signJwt(keys.privateKey, keys.jwk.kid, {
+          iss: issuer,
+          sub: "bad-access-hash-subject",
+          aud: clientId,
+          exp: nowSeconds() + 300,
+          iat: nowSeconds(),
+          nonce,
+          at_hash: await createTokenHashClaim("different-access-token"),
+        }),
+      }),
+    ).rejects.toThrow("at_hash");
+  });
 });
 
 async function createRsaFixture(): Promise<{ jwk: TestJwk; privateKey: CryptoKey }> {
@@ -174,4 +286,10 @@ function jsonResponse(value: unknown): Response {
     status: 200,
     headers: { "content-type": "application/json" },
   });
+}
+
+async function createTokenHashClaim(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+
+  return Buffer.from(digest.slice(0, digest.byteLength / 2)).toString("base64url");
 }

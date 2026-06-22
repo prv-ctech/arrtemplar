@@ -152,7 +152,7 @@ describe("app settings layout", () => {
     expect(source).not.toContain("dark:data-[state=active]:bg-input/30");
   });
 
-  it("keeps Auth settings focused on controls and linked identities, not setup reference copy", async () => {
+  it("keeps Auth settings as compact expandable OAuth method cards", async () => {
     const source = await readWorkspaceSource(authSettingsSourcePath);
     const forbiddenAuthDefaults = [
       ["Create a confidential OAuth2", "/OIDC provider."].join(""),
@@ -166,9 +166,32 @@ describe("app settings layout", () => {
       ["/application/o/", ["arr", "templar/"].join("")].join(""),
     ] as const;
 
-    expect(source).toContain("AuthProviderCard");
-    expect(source).toContain("LinkedIdentitiesCard");
+    expect(source).toContain("AuthMethodGrid");
+    expect(source).toContain("AuthentikMethodCard");
+    expect(source).toContain("AuthServiceCard");
+    expect(source).toContain('title="Authentik"');
+    expect(source).toContain("ProviderEnabledSwitch");
+    expect(source).toContain("AuthentikAccountLinking");
+    expect(source).toContain("Account linking");
+    expect(source).toContain("sm:gap-6");
+    expect(source).toContain('<Separator className="my-3" />');
+    expect(source).toContain("This admin account is connected to Authentik.");
+    expect(source).toContain("LinkedIdentityBadge");
+    expect(source).toContain("Connected");
+    expect(source).toContain("AUTHENTIK_LOGO_SRC");
+    expect(source).toContain('const AUTHENTIK_LOGO_SRC = "/brand/authentik.svg";');
+    expect(source).toContain('className="size-10 shrink-0 object-contain"');
+    expect(source).not.toContain("AuthMethodStatusBadges");
+    expect(source).not.toContain("OAuth login method.");
+    expect(source).not.toContain("Authentik login and identity links.");
+    expect(source).not.toContain("authentik-icon-white");
+    expect(source).not.toContain("rounded-full border border-border bg-card/70 p-1.5");
+    expect(source).not.toContain("LinkedIdentitiesPanel");
+    expect(source).not.toContain("LinkedIdentityItem");
+    expect(source).not.toContain("identity.subject");
+    expect(source).not.toContain("identity.issuer");
     expect(source).not.toContain("AuthentikHelpCard");
+    expect(source).not.toContain("LinkedIdentitiesCard");
     for (const forbiddenDefault of forbiddenAuthDefaults) {
       expect(source).not.toContain(forbiddenDefault);
     }

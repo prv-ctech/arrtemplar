@@ -3,6 +3,13 @@ type LoginAttemptBucket = {
   resetAt: number;
 };
 
+export type OAuthRouteRateLimitInput = {
+  ipAddress: string | null;
+  mode?: "login" | "link";
+  provider: string;
+  route: "start" | "callback";
+};
+
 export class LoginRateLimiter {
   readonly maxFailures: number;
   readonly windowMs: number;
@@ -47,4 +54,14 @@ export class LoginRateLimiter {
 
     return bucket;
   }
+}
+
+export function createOAuthRouteRateLimitKey(input: OAuthRouteRateLimitInput): string {
+  return [
+    "oauth",
+    input.route,
+    input.provider,
+    input.mode ?? "none",
+    input.ipAddress?.trim() || "unknown",
+  ].join(":");
 }

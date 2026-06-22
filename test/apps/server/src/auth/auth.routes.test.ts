@@ -2,18 +2,29 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { hashPassword } from "../../../../../apps/server/src/auth/password";
 import { generatePublicUserId } from "../../../../../apps/server/src/auth/public-user-id";
 import { LoginRateLimiter } from "../../../../../apps/server/src/auth/rate-limit";
+import { createRequestContext } from "../../../../../apps/server/src/auth/routes";
 import {
+  createSessionExpiresAt,
+  generateSessionToken,
   hashSessionToken,
   SESSION_COOKIE_NAME,
 } from "../../../../../apps/server/src/auth/session-token";
 import type { DatabaseClient } from "../../../../../apps/server/src/db/client";
 import {
   auditLogs,
+  authProviders,
   notificationHistory,
   sessions,
   userPermissionGrants,
   users,
 } from "../../../../../apps/server/src/db/schema";
+import { encryptOAuthIdToken } from "../../../../../apps/server/src/security/oauth-crypto";
+import {
+  createLogoutStateCookieValue,
+  createOAuthStateCookieValue,
+  OAUTH_LOGOUT_STATE_COOKIE_NAME,
+  OAUTH_STATE_COOKIE_NAME,
+} from "../../../../../apps/server/src/security/oauth-state";
 import {
   CSRF_HEADER_NAME,
   CSRF_HEADER_VALUE,
@@ -28,6 +39,7 @@ import {
   USER_PERMISSION_VALUES,
   type UserPermission,
 } from "../../../../../packages/shared/src";
+import { readFormAction } from "../../../../helpers/html";
 import {
   closeServerTestDatabases,
   createServerTestApp,
@@ -37,6 +49,8 @@ import {
 } from "../../../../helpers/server";
 
 const DEFAULT_PASSWORD = "correct-horse-battery-staple";
+const OAUTH_TEST_ENCRYPTION_KEY =
+  "hex:000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
 const openDatabases: DatabaseClient[] = [];
 
 afterEach(() => {
@@ -553,6 +567,150 @@ describe("auth routes", () => {
     });
   });
 
+  it("derives auth request IP from direct server metadata only", () => {
+    const request = new Request("http://localhost/api/auth/oauth/authentik/start", {
+      headers: { "x-forwarded-for": "203.0.113.10", "user-agent": "auth-test" },
+    });
+    const context = createRequestContext(request, {
+      requestIP: () => ({ address: "198.51.100.10" }),
+    });
+    const noServerContext = createRequestContext(request);
+
+    expect(context).toEqual({ ipAddress: "198.51.100.10", userAgent: "auth-test" });
+    expect(noServerContext).toEqual({ ipAddress: null, userAgent: "auth-test" });
+  });
+
+  it("rate-limits OAuth authorization starts without trusting spoofed forwarded IPs", async () => {
+    const { app, database } = await createEmptyAuthTestApp(
+      new LoginRateLimiter(1, 60_000),
+      OAUTH_TEST_ENCRYPTION_KEY,
+    );
+    let startIssuer = "";
+    const discoveryServer = Bun.serve({
+      port: 0,
+      fetch: () =>
+        Response.json({
+          issuer: startIssuer,
+          authorization_endpoint: `${startIssuer}authorize/`,
+          token_endpoint: `${startIssuer}token/`,
+          jwks_uri: `${startIssuer}jwks/`,
+          id_token_signing_alg_values_supported: ["RS256"],
+        }),
+    });
+
+    startIssuer = new URL("/application/o/start-rate-limit/", discoveryServer.url).toString();
+    insertAuthProvider(database, startIssuer);
+
+    try {
+      const firstResponse = await app.handle(
+        new Request("http://localhost/api/auth/oauth/authentik/start", {
+          headers: { "x-forwarded-for": "198.51.100.10" },
+        }),
+      );
+      const blockedResponse = await app.handle(
+        new Request("http://localhost/api/auth/oauth/authentik/start", {
+          headers: { "x-forwarded-for": "198.51.100.10" },
+        }),
+      );
+      const spoofedIpResponse = await app.handle(
+        new Request("http://localhost/api/auth/oauth/authentik/start", {
+          headers: { "x-forwarded-for": "198.51.100.11" },
+        }),
+      );
+
+      expect(firstResponse.status).toBe(302);
+      expect(blockedResponse.status).toBe(429);
+      expect(await blockedResponse.json()).toEqual({
+        error: {
+          code: "RATE_LIMITED",
+          message: "Too many OAuth requests. Try again later.",
+        },
+      });
+      expect(spoofedIpResponse.status).toBe(429);
+    } finally {
+      discoveryServer.stop(true);
+    }
+  });
+
+  it("partitions failed OAuth callbacks by signed state mode", async () => {
+    const { app, database } = await createEmptyAuthTestApp(
+      new LoginRateLimiter(1, 60_000),
+      OAUTH_TEST_ENCRYPTION_KEY,
+    );
+    insertAuthProvider(database, "http://localhost/application/o/callback-mode-rate-limit/");
+    const loginState = await createOAuthCallbackStateCookie("login", "login-state");
+    const linkState = await createOAuthCallbackStateCookie("link", "link-state");
+
+    const loginFailure = await app.handle(
+      new Request(
+        `http://localhost/api/auth/callback/authentik?code=login-code&state=${loginState.state}`,
+        {
+          headers: { cookie: loginState.cookie },
+        },
+      ),
+    );
+    const linkFailure = await app.handle(
+      new Request(
+        `http://localhost/api/auth/callback/authentik?code=link-code&state=${linkState.state}`,
+        {
+          headers: { cookie: linkState.cookie },
+        },
+      ),
+    );
+    const blockedLogin = await app.handle(
+      new Request(
+        `http://localhost/api/auth/callback/authentik?code=other-login-code&state=${loginState.state}`,
+        {
+          headers: { cookie: loginState.cookie },
+        },
+      ),
+    );
+
+    expect(loginFailure.status).not.toBe(429);
+    expect(linkFailure.status).not.toBe(429);
+    expect(blockedLogin.status).toBe(429);
+  });
+
+  it("rate-limits failed OAuth callbacks and audits without code or state values", async () => {
+    const { app, database } = await createEmptyAuthTestApp(
+      new LoginRateLimiter(1, 60_000),
+      OAUTH_TEST_ENCRYPTION_KEY,
+    );
+    insertAuthProvider(database, "http://localhost/application/o/callback-rate-limit/");
+
+    const firstResponse = await app.handle(
+      new Request(
+        "http://localhost/api/auth/callback/authentik?code=first-code&state=first-state",
+        {
+          headers: { "x-forwarded-for": "198.51.100.12" },
+        },
+      ),
+    );
+    const blockedResponse = await app.handle(
+      new Request(
+        "http://localhost/api/auth/callback/authentik?code=second-code&state=second-state",
+        { headers: { "x-forwarded-for": "198.51.100.12" } },
+      ),
+    );
+    const auditLog = database.db
+      .select()
+      .from(auditLogs)
+      .all()
+      .find((log) => log.action === "auth.oauth.route_rate_limited");
+
+    expect(firstResponse.status).toBe(400);
+    expect(blockedResponse.status).toBe(429);
+    expect(auditLog?.metadataJson).toBe(
+      JSON.stringify({
+        provider: "authentik",
+        route: "callback",
+        mode: null,
+      }),
+    );
+    expect(auditLog?.metadataJson).not.toContain("second-code");
+    expect(auditLog?.metadataJson).not.toContain("second-state");
+  });
+
   it("updates and protects the signed-in user's own profile surfaces", async () => {
     const { app, database } = await createAuthTestApp();
     const viewerCookie = await loginAndReadCookie(app, "viewer@example.local");
@@ -780,6 +938,7 @@ describe("auth routes", () => {
     const logoutResponse = await app.handle(
       csrfJsonRequest("/api/auth/logout", {}, { cookie: viewerCookie }),
     );
+    const logoutBody = await logoutResponse.json();
     const meResponse = await app.handle(
       new Request("http://localhost/api/auth/me", { headers: { cookie: viewerCookie } }),
     );
@@ -791,6 +950,7 @@ describe("auth routes", () => {
       .filter((notification) => notification.userId === viewer.id);
 
     expect(logoutResponse.status).toBe(200);
+    expect(logoutBody).toEqual({ status: "ok" });
     expect(meBody).toEqual({ user: null });
     expect(viewerNotifications).toHaveLength(1);
     expect(viewerNotifications[0]).toMatchObject({
@@ -839,6 +999,153 @@ describe("auth routes", () => {
         .some((session) => session.tokenHash === viewerSessionTokenHash),
     ).toBe(false);
     expect(auditLog?.metadataJson).toBe(JSON.stringify({ notificationHistoryRecorded: false }));
+  });
+
+  it("clears OAuth state cookies during local logout", async () => {
+    const { app } = await createAuthTestApp();
+    const viewerCookie = await loginAndReadCookie(app, "viewer@example.local");
+    const logoutResponse = await app.handle(
+      csrfJsonRequest(
+        "/api/auth/logout",
+        {},
+        {
+          cookie: `${viewerCookie}; ${OAUTH_STATE_COOKIE_NAME}=stale-state`,
+        },
+      ),
+    );
+    const setCookie = logoutResponse.headers.get("set-cookie") ?? "";
+
+    expect(logoutResponse.status).toBe(200);
+    expect(await logoutResponse.json()).toEqual({ status: "ok" });
+    expect(setCookie).toContain(`${SESSION_COOKIE_NAME}=`);
+    expect(setCookie).toContain(`${OAUTH_STATE_COOKIE_NAME}=`);
+  });
+
+  it("serves OAuth logout as a no-store POST continuation and deletes the local session", async () => {
+    const { app, database } = await createEmptyAuthTestApp(
+      new LoginRateLimiter(),
+      OAUTH_TEST_ENCRYPTION_KEY,
+    );
+    await insertTestUser(database, {
+      username: "oauth-user",
+      email: "oauth-user@example.local",
+      password: DEFAULT_PASSWORD,
+    });
+    const oauthUser = requireStoredUserByEmail(database, "oauth-user@example.local");
+    let logoutIssuer = "";
+    const discoveryServer = Bun.serve({
+      port: 0,
+      fetch: () =>
+        Response.json({
+          issuer: logoutIssuer,
+          authorization_endpoint: `${logoutIssuer}authorize/`,
+          token_endpoint: `${logoutIssuer}token/`,
+          jwks_uri: `${logoutIssuer}jwks/`,
+          end_session_endpoint: `${logoutIssuer}end-session/`,
+          id_token_signing_alg_values_supported: ["RS256"],
+        }),
+    });
+
+    logoutIssuer = new URL("/application/o/route-sso-logout/", discoveryServer.url).toString();
+    insertAuthProvider(database, logoutIssuer);
+
+    try {
+      const sessionToken = generateSessionToken();
+      const encryptedIdToken = await encryptOAuthIdToken(
+        "test-id-token",
+        OAUTH_TEST_ENCRYPTION_KEY,
+      );
+      const now = new Date();
+      database.db
+        .insert(sessions)
+        .values({
+          id: Bun.randomUUIDv7(),
+          userId: oauthUser.id,
+          tokenHash: hashSessionToken(sessionToken),
+          expiresAt: createSessionExpiresAt(now).toISOString(),
+          ipAddress: "127.0.0.1",
+          userAgent: "route-test",
+          oauthProvider: "authentik",
+          oauthIdTokenEncrypted: encryptedIdToken.encrypted,
+          oauthMasterKeyId: encryptedIdToken.masterKeyId,
+          createdAt: now.toISOString(),
+        })
+        .run();
+
+      const logoutResponse = await app.handle(
+        csrfJsonRequest(
+          "/api/auth/logout",
+          {},
+          {
+            cookie: `${SESSION_COOKIE_NAME}=${sessionToken}; ${OAUTH_STATE_COOKIE_NAME}=stale-state`,
+          },
+        ),
+      );
+      const html = await logoutResponse.text();
+      const setCookie = logoutResponse.headers.get("set-cookie") ?? "";
+      const action = readFormAction(html);
+
+      expect(logoutResponse.status).toBe(200);
+      expect(logoutResponse.headers.get("content-type")).toStartWith("text/html");
+      expect(logoutResponse.headers.get("cache-control")).toBe("no-store");
+      expect(logoutResponse.headers.get("referrer-policy")).toBe("no-referrer");
+      expect(action).toBe(`${logoutIssuer}end-session/`);
+      expect(new URL(action).searchParams.has("id_token_hint")).toBe(false);
+      expect(html).toContain('method="post"');
+      expect(html).toContain('name="id_token_hint"');
+      expect(html).toContain('name="post_logout_redirect_uri"');
+      expect(html).toContain('name="client_id"');
+      expect(html).toContain('name="state"');
+      expect(setCookie).toContain(`${SESSION_COOKIE_NAME}=`);
+      expect(setCookie).toContain(`${OAUTH_STATE_COOKIE_NAME}=`);
+      expect(setCookie).toContain(`${OAUTH_LOGOUT_STATE_COOKIE_NAME}=`);
+      expect(
+        database.db
+          .select()
+          .from(sessions)
+          .all()
+          .some((session) => session.tokenHash === hashSessionToken(sessionToken)),
+      ).toBe(false);
+    } finally {
+      discoveryServer.stop(true);
+    }
+  });
+
+  it("validates OAuth logout callback state before redirecting to login", async () => {
+    const { app } = await createEmptyAuthTestApp(new LoginRateLimiter(), OAUTH_TEST_ENCRYPTION_KEY);
+    const state = "valid-logout-state";
+    const stateCookie = await createLogoutStateCookieValue(state, OAUTH_TEST_ENCRYPTION_KEY);
+    const response = await app.handle(
+      new Request(`http://localhost/api/auth/logout/callback?state=${state}`, {
+        headers: { cookie: `${OAUTH_LOGOUT_STATE_COOKIE_NAME}=${stateCookie}` },
+      }),
+    );
+    const setCookie = response.headers.get("set-cookie") ?? "";
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe(`${TEST_WEB_ORIGIN}/login`);
+    expect(setCookie).toContain(`${OAUTH_LOGOUT_STATE_COOKIE_NAME}=`);
+  });
+
+  it("rejects OAuth logout callbacks with missing or invalid state", async () => {
+    const { app } = await createEmptyAuthTestApp(new LoginRateLimiter(), OAUTH_TEST_ENCRYPTION_KEY);
+    const missingResponse = await app.handle(
+      new Request("http://localhost/api/auth/logout/callback"),
+    );
+    const invalidResponse = await app.handle(
+      new Request("http://localhost/api/auth/logout/callback?state=wrong", {
+        headers: { cookie: `${OAUTH_LOGOUT_STATE_COOKIE_NAME}=not-a-valid-state-cookie` },
+      }),
+    );
+
+    expect(missingResponse.status).toBe(400);
+    expect(await missingResponse.json()).toEqual({
+      error: {
+        code: "OAUTH_LOGOUT_STATE_INVALID",
+        message: "OAuth logout state is invalid or expired.",
+      },
+    });
+    expect(invalidResponse.status).toBe(400);
   });
 
   it("keeps notification history self-only and validates history inputs", async () => {
@@ -995,8 +1302,12 @@ async function createAuthTestApp(
 
 async function createEmptyAuthTestApp(
   rateLimiter = new LoginRateLimiter(),
+  oauthClientSecretEncryptionKey?: string | null,
 ): Promise<TestAppContext> {
-  return createServerTestApp(openDatabases, { loginRateLimiter: rateLimiter });
+  return createServerTestApp(openDatabases, {
+    loginRateLimiter: rateLimiter,
+    ...(oauthClientSecretEncryptionKey !== undefined ? { oauthClientSecretEncryptionKey } : {}),
+  });
 }
 
 async function insertTestUser(
@@ -1123,6 +1434,48 @@ function findStoredUserByEmail(database: DatabaseClient, email: string) {
     .from(users)
     .all()
     .find((user) => user.email === email);
+}
+
+function insertAuthProvider(database: DatabaseClient, providerIssuer: string): void {
+  const now = new Date().toISOString();
+
+  database.db
+    .insert(authProviders)
+    .values({
+      id: Bun.randomUUIDv7(),
+      slug: "authentik",
+      label: "Authentik",
+      issuer: providerIssuer,
+      clientId: "template-client",
+      clientSecretEncrypted: "unused-by-logout",
+      masterKeyId: "oauth-client-secret-v1",
+      scopes: "openid profile email",
+      redirectUris: JSON.stringify(["http://localhost/api/auth/callback/authentik"]),
+      enabled: true,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .run();
+}
+
+async function createOAuthCallbackStateCookie(
+  mode: "login" | "link",
+  state: string,
+): Promise<{ cookie: string; state: string }> {
+  const value = await createOAuthStateCookieValue(
+    {
+      provider: "authentik",
+      state,
+      nonce: `${mode}-nonce`,
+      codeVerifier: `${mode}-code-verifier`,
+      mode,
+      returnTo: "/settings/auth",
+      redirectUri: "http://localhost/api/auth/callback/authentik",
+    },
+    OAUTH_TEST_ENCRYPTION_KEY,
+  );
+
+  return { cookie: `${OAUTH_STATE_COOKIE_NAME}=${value}`, state };
 }
 
 function requireStoredUserByEmail(database: DatabaseClient, email: string) {

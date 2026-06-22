@@ -31,7 +31,9 @@ describe("login route layout", () => {
     );
     expect(loginRouteSource).toContain("useAuthProvidersQuery");
     expect(loginRouteSource).toContain("isAuthentikEnabled(providersQuery.data)");
-    expect(loginRouteSource).toContain("window.location.assign(getAuthentikStartPath(forceLogin))");
+    expect(loginRouteSource).toContain(
+      "window.location.assign(getAuthentikStartPath(forceProviderLogin))",
+    );
     expect(loginRouteSource).toContain("Redirecting to Authentik");
     expect(loginFormSource).not.toContain("Continue with Authentik");
     expect(loginFormSource).not.toContain("AuthentikSignInButton");
@@ -41,7 +43,8 @@ describe("login route layout", () => {
     const loginRouteSource = await Bun.file(loginRouteSourcePath).text();
 
     expect(loginRouteSource).toContain('useSearch({ from: "/login" })');
-    expect(loginRouteSource).toContain("forceLogin={signedOut === true}");
+    expect(loginRouteSource).toContain("shouldForceProviderLogin = signedOut === true");
+    expect(loginRouteSource).toContain("forceProviderLogin={shouldForceProviderLogin}");
     expect(loginRouteSource).toContain("?prompt=login");
   });
 });

@@ -21,6 +21,17 @@ describe("api client CSRF headers", () => {
     expect(createApiRequestHeaders("OPTIONS")).toBeUndefined();
     expect(createApiRequestHeaders(undefined)).toBeUndefined();
   });
+
+  it("handles logout as raw JSON or HTML instead of forcing Eden JSON parsing", async () => {
+    const source = await Bun.file(apiSourcePath).text();
+
+    expect(source).toContain("export type LogoutResult");
+    expect(source).toContain('fetch(resolveApiRequestUrl("/api/auth/logout")');
+    expect(source).toContain('response.headers.get("content-type")');
+    expect(source).toContain('contentType.includes("text/html")');
+    expect(source).toContain("html: await response.text()");
+    expect(source).not.toContain("unwrapData(await api.api.auth.logout.post()");
+  });
 });
 
 describe("user profile api client", () => {

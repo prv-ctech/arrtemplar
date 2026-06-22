@@ -74,6 +74,10 @@ type EdenResult<T> = {
   status: number;
 };
 
+export type LogoutResult =
+  | { kind: "local"; response: LogoutResponse }
+  | { kind: "sso"; html: string };
+
 export type NotificationHistoryListParams = {
   page?: number;
   pageSize?: number;
@@ -99,8 +103,31 @@ export async function createInitialAdmin(input: CreateAdminRequest): Promise<Cre
   return { user: normalizePublicUser(response.user) };
 }
 
-export async function logout(): Promise<LogoutResponse> {
-  return unwrapData(await api.api.auth.logout.post(), "Logout failed.");
+export async function logout(): Promise<LogoutResult> {
+  const headers = createApiRequestHeaders("POST");
+  const response = await fetch(resolveApiRequestUrl("/api/auth/logout"), {
+    method: "POST",
+    credentials: "include",
+    ...(headers ? { headers } : {}),
+  });
+
+  if (!response.ok) {
+    throw await createApiClientErrorFromResponse(response, "Logout failed.");
+  }
+
+  const contentType = response.headers.get("content-type") ?? "";
+
+  if (contentType.includes("text/html")) {
+    return { kind: "sso", html: await response.text() };
+  }
+
+  const body = await readJsonResponse(response);
+
+  if (!isLogoutResponse(body)) {
+    throw new ApiClientError("Logout failed.", response.status);
+  }
+
+  return { kind: "local", response: body };
 }
 
 export async function getCurrentUser(): Promise<PublicUser | null> {
@@ -316,6 +343,35 @@ export function createApiRequestHeaders(
   }
 
   return { [CSRF_HEADER_NAME]: CSRF_HEADER_VALUE };
+}
+
+function resolveApiRequestUrl(path: string): string {
+  return apiBaseUrl ? new URL(path, apiBaseUrl).toString() : path;
+}
+
+async function createApiClientErrorFromResponse(
+  response: Response,
+  fallback: string,
+): Promise<ApiClientError> {
+  const body = await readJsonResponse(response);
+
+  return new ApiClientError(
+    getApiErrorMessage(body, fallback),
+    response.status,
+    getApiErrorCode(body),
+  );
+}
+
+async function readJsonResponse(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+function isLogoutResponse(value: unknown): value is LogoutResponse {
+  return isRecord(value) && value.status === "ok";
 }
 
 function unwrapData<T>({ data, error, status }: EdenResult<T>, fallback: string): T {

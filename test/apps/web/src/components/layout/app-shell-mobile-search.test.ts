@@ -65,7 +65,7 @@ describe("app shell primary navigation", () => {
   it("keeps failed sign-out attempts on the current session", async () => {
     const source = await Bun.file(appShellSourcePath).text();
 
-    expect(source).toContain("onSuccess: () =>");
+    expect(source).toContain("onSuccess: (logoutResult) =>");
     expect(source).toContain("onError: (error) =>");
     expect(source).toContain('id: "auth.signed_out"');
     expect(source).toContain('id: "auth.sign_out.failed"');
@@ -77,5 +77,17 @@ describe("app shell primary navigation", () => {
 
     expect(source).toContain('to: "/login"');
     expect(source).toContain("search: { signedOut: true }");
+  });
+
+  it("continues SSO logout HTML without showing the local sign-out toast", async () => {
+    const source = await Bun.file(appShellSourcePath).text();
+
+    expect(source).toContain('if (logoutResult.kind === "sso")');
+    expect(source).toContain("continueSsoLogoutDocument(logoutResult.html)");
+    expect(source).toContain("function continueSsoLogoutDocument(html: string): void");
+    expect(source).toContain('new DOMParser().parseFromString(html, "text/html")');
+    expect(source).toContain('document.createElement("form")');
+    expect(source).toContain('actionUrl.searchParams.has("id_token_hint")');
+    expect(source).not.toContain("document.write");
   });
 });

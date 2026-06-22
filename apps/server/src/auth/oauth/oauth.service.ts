@@ -17,13 +17,18 @@ import {
   createPkcePair,
   decryptOAuthClientSecret,
   encryptOAuthClientSecret,
+  encryptOAuthIdToken,
 } from "../../security/oauth-crypto";
 import {
   createOAuthStateCookieValue,
+  type OAuthStateMode,
+  type OAuthStatePayload,
+  verifyLogoutStateCookieValue,
   verifyOAuthStateCookieValue,
 } from "../../security/oauth-state";
 import type { AuthRequestContext, AuthService } from "../auth.service";
 import { fetchOidcDiscovery, normalizeIssuerUrl, parseHttpIntegrationUrl } from "./discovery";
+import { buildEndSessionRedirect } from "./end-session";
 import { type OidcIdTokenClaims, verifyOidcIdToken } from "./jwks";
 
 type OAuthServiceOptions = {
@@ -60,6 +65,14 @@ type OAuthCallbackResult =
     }
   | OAuthFailure<400 | 401 | 403 | 404 | 409 | 502 | 503>;
 
+type OAuthCallbackStateResult =
+  | { ok: true; encryptionKey: string; provider: AuthProvider; statePayload: OAuthStatePayload }
+  | OAuthFailure<400 | 404 | 503>;
+
+type LogoutResult =
+  | { kind: "local" }
+  | { kind: "sso"; html: string; logoutStateCookieValue: string };
+
 type NormalizedProviderConfig = {
   label: string;
   issuer: string;
@@ -70,6 +83,7 @@ type NormalizedProviderConfig = {
 };
 
 type TokenResponse = {
+  accessToken?: string;
   idToken: string;
 };
 
@@ -307,29 +321,13 @@ export class OAuthService {
     stateCookieValue: string | undefined;
     context: AuthRequestContext;
   }): Promise<OAuthCallbackResult> {
-    const provider = this.findEnabledProvider(input.provider);
+    const stateResult = await this.verifyCallbackState(input);
 
-    if (!provider) {
-      return { ok: false, status: 404, body: oauthProviderNotFoundError };
+    if (!stateResult.ok) {
+      return stateResult;
     }
 
-    if (!this.options.encryptionKey) {
-      return { ok: false, status: 503, body: oauthEncryptionKeyRequiredError };
-    }
-
-    const statePayload = await verifyOAuthStateCookieValue(
-      input.stateCookieValue,
-      this.options.encryptionKey,
-    );
-
-    if (
-      !statePayload ||
-      statePayload.provider !== provider.slug ||
-      statePayload.state !== input.state ||
-      statePayload.redirectUri !== resolveCallbackRedirectUri(provider, input.requestUrl)
-    ) {
-      return { ok: false, status: 400, body: oauthStateInvalidError };
-    }
+    const { encryptionKey, provider, statePayload } = stateResult;
 
     const discovery = await readDiscovery(provider.issuer);
 
@@ -337,7 +335,7 @@ export class OAuthService {
       return discovery;
     }
 
-    const clientSecret = await readClientSecret(provider, this.options.encryptionKey);
+    const clientSecret = await readClientSecret(provider, encryptionKey);
 
     if (!clientSecret.ok) {
       return clientSecret;
@@ -357,10 +355,12 @@ export class OAuthService {
     }
 
     const claims = await readVerifiedClaims({
+      authorizationCode: input.code,
       clientId: provider.clientId,
       discovery: discovery.document,
       expectedNonce: statePayload.nonce,
       idToken: tokenResponse.token.idToken,
+      ...(tokenResponse.token.accessToken ? { accessToken: tokenResponse.token.accessToken } : {}),
     });
 
     if (!claims.ok) {
@@ -388,7 +388,12 @@ export class OAuthService {
       });
     }
 
-    const loginResult = this.authService.completeOAuthLogin(identityInput, input.context);
+    const idTokenEncrypted = await encryptOAuthIdToken(tokenResponse.token.idToken, encryptionKey);
+    const loginResult = this.authService.completeOAuthLogin(identityInput, input.context, {
+      provider: provider.slug,
+      idTokenEncrypted: idTokenEncrypted.encrypted,
+      masterKeyId: idTokenEncrypted.masterKeyId,
+    });
 
     if (!loginResult.ok) {
       return loginResult;
@@ -400,6 +405,49 @@ export class OAuthService {
       sessionToken: loginResult.sessionToken,
       expiresAt: loginResult.expiresAt,
     };
+  }
+
+  async readCallbackStateMode(input: {
+    provider: AuthProviderSlug;
+    requestUrl: string;
+    state: string;
+    stateCookieValue: string | undefined;
+  }): Promise<OAuthStateMode | null> {
+    const result = await this.verifyCallbackState(input);
+
+    return result.ok ? result.statePayload.mode : null;
+  }
+
+  private async verifyCallbackState(input: {
+    provider: AuthProviderSlug;
+    requestUrl: string;
+    state: string;
+    stateCookieValue: string | undefined;
+  }): Promise<OAuthCallbackStateResult> {
+    const provider = this.findEnabledProvider(input.provider);
+
+    if (!provider) {
+      return { ok: false, status: 404, body: oauthProviderNotFoundError };
+    }
+
+    const encryptionKey = this.options.encryptionKey;
+
+    if (!encryptionKey) {
+      return { ok: false, status: 503, body: oauthEncryptionKeyRequiredError };
+    }
+
+    const statePayload = await verifyOAuthStateCookieValue(input.stateCookieValue, encryptionKey);
+
+    if (
+      !statePayload ||
+      statePayload.provider !== provider.slug ||
+      statePayload.state !== input.state ||
+      statePayload.redirectUri !== resolveCallbackRedirectUri(provider, input.requestUrl)
+    ) {
+      return { ok: false, status: 400, body: oauthStateInvalidError };
+    }
+
+    return { ok: true, encryptionKey, provider, statePayload };
   }
 
   private completeLinkCallback(input: {
@@ -450,6 +498,61 @@ export class OAuthService {
 
     return provider?.enabled ? provider : undefined;
   }
+
+  async buildLogout(input: {
+    sessionToken: string | null;
+    requestUrl: string;
+  }): Promise<LogoutResult> {
+    if (!this.options.encryptionKey) {
+      return { kind: "local" };
+    }
+
+    const oauthSessionToken = this.authService.getOAuthLogoutToken(input.sessionToken);
+
+    if (!oauthSessionToken) {
+      return { kind: "local" };
+    }
+
+    const provider = this.findProvider(oauthSessionToken.provider);
+
+    if (!provider) {
+      return { kind: "local" };
+    }
+
+    const postLogoutRedirectUri = new URL("/api/auth/logout/callback", input.requestUrl).toString();
+    const result = await buildEndSessionRedirect({
+      provider,
+      oauthSessionToken,
+      encryptionKey: this.options.encryptionKey,
+      postLogoutRedirectUri,
+    });
+
+    if (!result) {
+      return { kind: "local" };
+    }
+
+    return {
+      kind: "sso",
+      html: result.html,
+      logoutStateCookieValue: result.logoutStateCookieValue,
+    };
+  }
+
+  async verifyLogoutState(input: {
+    state: string;
+    logoutStateCookieValue: string | undefined;
+  }): Promise<boolean> {
+    if (!this.options.encryptionKey) {
+      return false;
+    }
+
+    const expectedState = await verifyLogoutStateCookieValue(
+      input.logoutStateCookieValue,
+      this.options.encryptionKey,
+    );
+
+    return !!expectedState && expectedState === input.state;
+  }
 }
 
 async function readDiscovery(
@@ -479,6 +582,8 @@ async function readClientSecret(
 }
 
 async function readVerifiedClaims(input: {
+  accessToken?: string;
+  authorizationCode: string;
   clientId: string;
   discovery: Awaited<ReturnType<typeof fetchOidcDiscovery>>;
   expectedNonce: string;
@@ -541,7 +646,12 @@ function validateTokenResponse(value: unknown): TokenResponse {
     throw new Error("OIDC token response must include id_token.");
   }
 
-  return { idToken: record.id_token };
+  return {
+    idToken: record.id_token,
+    ...(typeof record.access_token === "string" && record.access_token
+      ? { accessToken: record.access_token }
+      : {}),
+  };
 }
 
 function normalizeProviderConfig(

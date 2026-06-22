@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { LoginRateLimiter } from "../../../../../apps/server/src/auth/rate-limit";
+import {
+  createOAuthRouteRateLimitKey,
+  LoginRateLimiter,
+} from "../../../../../apps/server/src/auth/rate-limit";
 
 describe("LoginRateLimiter", () => {
   it("tracks lockout independently per account key", () => {
@@ -37,5 +40,39 @@ describe("LoginRateLimiter", () => {
     limiter.clear(key);
 
     expect(limiter.isBlocked(key)).toBe(false);
+  });
+
+  it("partitions OAuth route keys by IP, route, provider, and mode", () => {
+    const baseKey = createOAuthRouteRateLimitKey({
+      ipAddress: "198.51.100.10",
+      provider: "authentik",
+      route: "start",
+      mode: "login",
+    });
+
+    expect(
+      createOAuthRouteRateLimitKey({
+        ipAddress: "198.51.100.11",
+        provider: "authentik",
+        route: "start",
+        mode: "login",
+      }),
+    ).not.toBe(baseKey);
+    expect(
+      createOAuthRouteRateLimitKey({
+        ipAddress: "198.51.100.10",
+        provider: "authentik",
+        route: "callback",
+        mode: "login",
+      }),
+    ).not.toBe(baseKey);
+    expect(
+      createOAuthRouteRateLimitKey({
+        ipAddress: "198.51.100.10",
+        provider: "authentik",
+        route: "start",
+        mode: "link",
+      }),
+    ).not.toBe(baseKey);
   });
 });

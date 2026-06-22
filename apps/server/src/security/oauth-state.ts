@@ -3,11 +3,16 @@ import { AUTH_PROVIDER_SLUGS } from "@arrtemplar/shared";
 import {
   base64UrlEncode,
   decodeBase64Url,
-  decodeOAuthClientSecretEncryptionKey,
+  importOAuthSigningKey,
+  OAUTH_LOGOUT_STATE_PURPOSE,
+  OAUTH_STATE_PURPOSE,
+  type OAuthKeyPurpose,
 } from "./oauth-crypto";
 
 export const OAUTH_STATE_COOKIE_NAME = "arrtemplar_oauth_state" as const;
 export const OAUTH_STATE_COOKIE_MAX_AGE_SECONDS = 10 * 60;
+export const OAUTH_LOGOUT_STATE_COOKIE_NAME = "arrtemplar_oauth_logout_state" as const;
+export const OAUTH_LOGOUT_STATE_COOKIE_MAX_AGE_SECONDS = 2 * 60;
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
@@ -26,6 +31,11 @@ export type OAuthStatePayload = {
   expiresAt: number;
 };
 
+type OAuthLogoutStatePayload = {
+  state: string;
+  expiresAt: number;
+};
+
 export async function createOAuthStateCookieValue(
   payload: Omit<OAuthStatePayload, "expiresAt">,
   signingKey: string,
@@ -35,7 +45,7 @@ export async function createOAuthStateCookieValue(
     expiresAt: Math.floor(Date.now() / 1000) + OAUTH_STATE_COOKIE_MAX_AGE_SECONDS,
   } satisfies OAuthStatePayload);
   const encodedPayload = base64UrlEncode(textEncoder.encode(payloadJson));
-  const signature = await signOAuthState(encodedPayload, signingKey);
+  const signature = await signStateValue(encodedPayload, signingKey, OAUTH_STATE_PURPOSE);
 
   return `${encodedPayload}.${signature}`;
 }
@@ -44,6 +54,65 @@ export async function verifyOAuthStateCookieValue(
   value: string | undefined,
   signingKey: string,
 ): Promise<OAuthStatePayload | null> {
+  const payload = await verifyStateCookieValue<OAuthStatePayload>(
+    value,
+    signingKey,
+    OAUTH_STATE_PURPOSE,
+    parseOAuthStatePayload,
+  );
+
+  return payload && payload.expiresAt > Math.floor(Date.now() / 1000) ? payload : null;
+}
+
+export async function createLogoutStateCookieValue(
+  state: string,
+  signingKey: string,
+): Promise<string> {
+  const payloadJson = JSON.stringify({
+    state,
+    expiresAt: Math.floor(Date.now() / 1000) + OAUTH_LOGOUT_STATE_COOKIE_MAX_AGE_SECONDS,
+  } satisfies OAuthLogoutStatePayload);
+  const encodedPayload = base64UrlEncode(textEncoder.encode(payloadJson));
+  const signature = await signStateValue(encodedPayload, signingKey, OAUTH_LOGOUT_STATE_PURPOSE);
+
+  return `${encodedPayload}.${signature}`;
+}
+
+export async function verifyLogoutStateCookieValue(
+  value: string | undefined,
+  signingKey: string,
+): Promise<string | null> {
+  const payload = await verifyStateCookieValue<OAuthLogoutStatePayload>(
+    value,
+    signingKey,
+    OAUTH_LOGOUT_STATE_PURPOSE,
+    parseLogoutStatePayload,
+  );
+
+  if (!payload || payload.expiresAt <= Math.floor(Date.now() / 1000)) {
+    return null;
+  }
+
+  return payload.state;
+}
+
+async function signStateValue(
+  payload: string,
+  signingKey: string,
+  purpose: OAuthKeyPurpose,
+): Promise<string> {
+  const key = await importOAuthSigningKey(signingKey, purpose, ["sign"]);
+  const signature = await crypto.subtle.sign("HMAC", key, textEncoder.encode(payload));
+
+  return base64UrlEncode(signature);
+}
+
+async function verifyStateCookieValue<T>(
+  value: string | undefined,
+  signingKey: string,
+  purpose: OAuthKeyPurpose,
+  parsePayload: (encodedPayload: string) => T | null,
+): Promise<T | null> {
   if (!value) {
     return null;
   }
@@ -54,58 +123,24 @@ export async function verifyOAuthStateCookieValue(
     return null;
   }
 
-  const verified = await verifyOAuthStateSignature(encodedPayload, encodedSignature, signingKey);
-
-  if (!verified) {
-    return null;
-  }
-
-  const payload = parseOAuthStatePayload(encodedPayload);
-
-  if (!payload || payload.expiresAt <= Math.floor(Date.now() / 1000)) {
-    return null;
-  }
-
-  return payload;
-}
-
-async function signOAuthState(payload: string, signingKey: string): Promise<string> {
-  const key = await importOAuthStateSigningKey(signingKey, ["sign"]);
-  const signature = await crypto.subtle.sign("HMAC", key, textEncoder.encode(payload));
-
-  return base64UrlEncode(signature);
-}
-
-async function verifyOAuthStateSignature(
-  payload: string,
-  signature: string,
-  signingKey: string,
-): Promise<boolean> {
-  const key = await importOAuthStateSigningKey(signingKey, ["verify"]);
+  const key = await importOAuthSigningKey(signingKey, purpose, ["verify"]);
 
   try {
-    return await crypto.subtle.verify(
+    const verified = await crypto.subtle.verify(
       "HMAC",
       key,
-      decodeBase64Url(signature),
-      textEncoder.encode(payload),
+      decodeBase64Url(encodedSignature),
+      textEncoder.encode(encodedPayload),
     );
-  } catch {
-    return false;
-  }
-}
 
-async function importOAuthStateSigningKey(
-  value: string,
-  keyUsages: KeyUsage[],
-): Promise<CryptoKey> {
-  return crypto.subtle.importKey(
-    "raw",
-    decodeOAuthClientSecretEncryptionKey(value),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    keyUsages,
-  );
+    if (!verified) {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+
+  return parsePayload(encodedPayload);
 }
 
 function parseOAuthStatePayload(encodedPayload: string): OAuthStatePayload | null {
@@ -113,6 +148,27 @@ function parseOAuthStatePayload(encodedPayload: string): OAuthStatePayload | nul
     const payload = JSON.parse(textDecoder.decode(decodeBase64Url(encodedPayload)));
 
     return isOAuthStatePayload(payload) ? payload : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseLogoutStatePayload(encodedPayload: string): OAuthLogoutStatePayload | null {
+  try {
+    const payload = JSON.parse(textDecoder.decode(decodeBase64Url(encodedPayload)));
+
+    if (
+      payload &&
+      typeof payload === "object" &&
+      typeof payload.state === "string" &&
+      payload.state.length > 0 &&
+      typeof payload.expiresAt === "number" &&
+      Number.isInteger(payload.expiresAt)
+    ) {
+      return { state: payload.state, expiresAt: payload.expiresAt };
+    }
+
+    return null;
   } catch {
     return null;
   }

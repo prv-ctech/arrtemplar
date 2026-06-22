@@ -35,6 +35,28 @@ describe("canonical test database helper", () => {
     }
   });
 
+  it("adds nullable oauth logout columns to sessions", async () => {
+    await resetTestDatabase();
+
+    const database = openTestDatabase();
+
+    try {
+      const columns = database.sqlite
+        .query<{ name: string; notnull: number; type: string }, []>("pragma table_info(sessions)")
+        .all();
+      const columnsByName = new Map(columns.map((column) => [column.name, column]));
+
+      for (const name of ["oauth_provider", "oauth_id_token_encrypted", "oauth_master_key_id"]) {
+        const column = columnsByName.get(name);
+        expect(column, `sessions.${name} should exist`).toBeDefined();
+        expect(column?.type.toLowerCase()).toBe("text");
+        expect(column?.notnull).toBe(0);
+      }
+    } finally {
+      database.close();
+    }
+  });
+
   it("opens explicit relative database paths from the workspace root", () => {
     const previousDirectory = process.cwd();
     process.chdir("apps/server");

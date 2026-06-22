@@ -4,17 +4,14 @@ import {
   type AuthProviderSummary,
   type AuthUpsertProviderRequest,
 } from "@arrtemplar/shared";
-import { FingerprintIcon } from "@phosphor-icons/react";
-import { type FormEvent, useEffect, useId, useState } from "react";
+import { CaretDownIcon } from "@phosphor-icons/react";
+import { type FormEvent, type ReactNode, useEffect, useId, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import {
-  SettingsRow,
-  SettingsSection,
-  SettingsStatus,
-} from "@/features/settings/SettingsPrimitives";
+import { Separator } from "@/components/ui/separator";
+import { SettingsRow, SettingsStatus } from "@/features/settings/SettingsPrimitives";
 import { cn } from "@/lib/utils";
 import {
   useAuthIdentitiesQuery,
@@ -33,19 +30,12 @@ type AuthProviderFormState = {
 };
 
 const authProviderSlug = AUTH_PROVIDER_SLUGS[0];
+const AUTHENTIK_LOGO_SRC = "/brand/authentik.svg";
 
 export function AuthSettings() {
   const controls = useAuthSettingsController();
 
-  return (
-    <div className="space-y-6">
-      <AuthProviderCard controls={controls} />
-      <LinkedIdentitiesCard
-        identities={controls.identities}
-        isProviderEnabled={Boolean(controls.provider?.enabled)}
-      />
-    </div>
-  );
+  return <AuthMethodGrid controls={controls} />;
 }
 
 function useAuthSettingsController() {
@@ -113,24 +103,47 @@ function useAuthSettingsController() {
 
 type AuthSettingsController = ReturnType<typeof useAuthSettingsController>;
 
-function AuthProviderCard({ controls }: { controls: AuthSettingsController }) {
+function AuthMethodGrid({ controls }: { controls: AuthSettingsController }) {
   return (
-    <Card className="shadow-(--shadow-panel)">
-      <CardHeader>
-        <CardTitle>Auth</CardTitle>
-        <CardDescription>Configure native Authentik login.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <AuthProviderForm controls={controls} />
-      </CardContent>
-    </Card>
+    <div className="grid items-start gap-4 grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))]">
+      <AuthentikMethodCard controls={controls} />
+    </div>
+  );
+}
+
+function AuthentikMethodCard({ controls }: { controls: AuthSettingsController }) {
+  const [isExpanded, setIsExpanded] = useState(true);
+  const providerContentId = useId();
+
+  return (
+    <AuthServiceCard
+      action={
+        <ProviderEnabledSwitch
+          disabled={controls.isSaving}
+          enabled={controls.form.enabled}
+          onChange={(enabled) => controls.updateForm({ enabled })}
+          statusId={controls.statusId}
+        />
+      }
+      contentId={providerContentId}
+      isExpanded={isExpanded}
+      onToggle={() => setIsExpanded((current) => !current)}
+      title="Authentik"
+    >
+      <AuthentikAccountLinking
+        identities={controls.identities}
+        isProviderEnabled={Boolean(controls.provider?.enabled)}
+      />
+      <Separator className="my-3" />
+      <AuthProviderForm controls={controls} />
+    </AuthServiceCard>
   );
 }
 
 function AuthProviderForm({ controls }: { controls: AuthSettingsController }) {
   return (
-    <form className="space-y-4" onSubmit={controls.handleSubmit}>
-      <AuthProviderSection controls={controls} />
+    <form className="space-y-3" onSubmit={controls.handleSubmit}>
+      <AuthProviderFields controls={controls} />
       <SettingsStatus
         errorMessage={controls.errorMessage}
         statusId={controls.statusId}
@@ -141,28 +154,21 @@ function AuthProviderForm({ controls }: { controls: AuthSettingsController }) {
   );
 }
 
-function AuthProviderSection({ controls }: { controls: AuthSettingsController }) {
+function AuthProviderFields({ controls }: { controls: AuthSettingsController }) {
   return (
-    <SettingsSection density="compact" title="Authentik provider">
-      <ProviderStatusRow
-        enabled={controls.form.enabled}
-        {...(controls.provider ? { provider: controls.provider } : {})}
-      />
-      <ProviderEnabledRow
-        disabled={controls.isSaving}
-        enabled={controls.form.enabled}
-        onChange={(enabled) => controls.updateForm({ enabled })}
-        statusId={controls.statusId}
-      />
-
+    <div className="overflow-hidden rounded-xl border border-border bg-card/50">
       {controls.form.enabled ? (
         <ProviderConfigRows
           disabled={controls.isSaving}
           form={controls.form}
           onChange={controls.updateForm}
         />
-      ) : null}
-    </SettingsSection>
+      ) : (
+        <p className="px-3 py-2.5 text-sm text-muted-foreground sm:px-4">
+          Turn on the provider to edit Authentik OAuth settings.
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -180,28 +186,7 @@ function AuthProviderSaveButton({ controls }: { controls: AuthSettingsController
   );
 }
 
-function ProviderStatusRow({
-  provider,
-  enabled,
-}: {
-  provider?: AuthProviderSummary;
-  enabled: boolean;
-}) {
-  return (
-    <SettingsRow density="compact" label="Status">
-      <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 text-sm text-muted-foreground">
-        <Badge variant={enabled ? "default" : "secondary"}>
-          {enabled ? "Enabled" : "Disabled"}
-        </Badge>
-        <span className="truncate">
-          {provider ? `Saved ${new Date(provider.updatedAt).toLocaleDateString()}` : "Not saved"}
-        </span>
-      </div>
-    </SettingsRow>
-  );
-}
-
-function ProviderEnabledRow({
+function ProviderEnabledSwitch({
   disabled,
   enabled,
   onChange,
@@ -213,29 +198,28 @@ function ProviderEnabledRow({
   statusId: string;
 }) {
   return (
-    <SettingsRow controlId="auth-provider-enabled" density="compact" label="Provider">
-      <label
-        className={cn(
-          "inline-flex min-w-24 cursor-pointer items-center justify-end gap-2 text-sm font-medium",
-          disabled && "cursor-not-allowed opacity-60",
-        )}
-      >
-        <input
-          aria-describedby={statusId}
-          checked={enabled}
-          className="peer sr-only"
-          disabled={disabled}
-          id="auth-provider-enabled"
-          onChange={(event) => onChange(event.currentTarget.checked)}
-          type="checkbox"
-        />
-        <span
-          aria-hidden="true"
-          className="relative h-5 w-9 rounded-full border border-border bg-muted transition-colors after:absolute after:top-0.5 after:left-0.5 after:size-4 after:rounded-full after:bg-background after:shadow-sm after:transition-transform peer-checked:border-primary/60 peer-checked:bg-primary peer-checked:after:translate-x-4"
-        />
-        <span className="text-foreground">{enabled ? "On" : "Off"}</span>
-      </label>
-    </SettingsRow>
+    <label
+      className={cn(
+        "inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-border bg-card/65 px-2.5 py-1.5 text-xs font-medium",
+        disabled && "cursor-not-allowed opacity-60",
+      )}
+    >
+      <input
+        aria-describedby={statusId}
+        aria-label="Enable Authentik provider"
+        checked={enabled}
+        className="peer sr-only"
+        disabled={disabled}
+        id="auth-provider-enabled"
+        onChange={(event) => onChange(event.currentTarget.checked)}
+        type="checkbox"
+      />
+      <span
+        aria-hidden="true"
+        className="relative h-5 w-9 rounded-full border border-border bg-muted transition-colors after:absolute after:top-0.5 after:left-0.5 after:size-4 after:rounded-full after:bg-background after:shadow-sm after:transition-transform peer-checked:border-primary/60 peer-checked:bg-primary peer-checked:after:translate-x-4"
+      />
+      <span className="text-foreground">{enabled ? "On" : "Off"}</span>
+    </label>
   );
 }
 
@@ -307,51 +291,196 @@ function ProviderConfigRows({
   );
 }
 
-function LinkedIdentitiesCard({
+function AuthentikAccountLinking({
   identities,
   isProviderEnabled,
 }: {
   identities: readonly AuthIdentity[];
   isProviderEnabled: boolean;
 }) {
+  const isConnected = identities.length > 0;
+
   function startLinkFlow() {
     window.location.assign("/api/auth/oauth/authentik/start?mode=link&returnTo=/settings/auth");
   }
 
   return (
-    <Card className="shadow-(--shadow-panel)">
-      <CardHeader>
-        <CardTitle>Linked accounts</CardTitle>
-        <CardDescription>Attach your Authentik identity to this admin account.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <Button
-          className="rounded-xl"
-          disabled={!isProviderEnabled}
-          onClick={startLinkFlow}
-          type="button"
-          variant="secondary"
-        >
-          <FingerprintIcon aria-hidden="true" className="size-4" />
-          Link Authentik account
-        </Button>
-        {identities.length > 0 ? (
-          <div className="space-y-2">
-            {identities.map((identity) => (
-              <div
-                className="min-w-0 rounded-2xl border border-border bg-card/55 px-3 py-2 text-sm"
-                key={identity.id}
-              >
-                <div className="truncate font-medium text-foreground">{identity.subject}</div>
-                <div className="truncate text-xs text-muted-foreground">{identity.issuer}</div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">No linked Authentik identities yet.</p>
-        )}
-      </CardContent>
+    <section
+      aria-label="Authentik account linking"
+      className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-6"
+    >
+      <div className="min-w-0 space-y-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <h4 className="text-sm font-medium text-foreground">Account linking</h4>
+          <LinkedIdentityBadge count={identities.length} />
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {isConnected
+            ? "This admin account is connected to Authentik."
+            : "Connect this admin account to Authentik."}
+        </p>
+      </div>
+      <Button
+        className="w-fit rounded-xl"
+        disabled={!isProviderEnabled}
+        onClick={startLinkFlow}
+        type="button"
+        variant="secondary"
+      >
+        <img alt="" aria-hidden="true" className="size-4 shrink-0" src={AUTHENTIK_LOGO_SRC} />
+        Link Authentik account
+      </Button>
+    </section>
+  );
+}
+
+function AuthServiceCard({
+  action,
+  children,
+  contentId,
+  isExpanded,
+  onToggle,
+  title,
+}: {
+  action?: ReactNode;
+  children: ReactNode;
+  contentId: string;
+  isExpanded: boolean;
+  onToggle: () => void;
+  title: string;
+}) {
+  return (
+    <Card className="w-full overflow-hidden rounded-2xl bg-card/50 shadow-none">
+      <AuthServiceCardHeader
+        action={action}
+        contentId={contentId}
+        isExpanded={isExpanded}
+        onToggle={onToggle}
+        title={title}
+      />
+      <AuthServiceCardBody contentId={contentId} isExpanded={isExpanded}>
+        {children}
+      </AuthServiceCardBody>
     </Card>
+  );
+}
+
+function AuthServiceCardHeader({
+  action,
+  contentId,
+  isExpanded,
+  onToggle,
+  title,
+}: {
+  action?: ReactNode;
+  contentId: string;
+  isExpanded: boolean;
+  onToggle: () => void;
+  title: string;
+}) {
+  return (
+    <CardHeader className="p-0">
+      <div className="flex items-start gap-2 p-3">
+        <AuthServiceToggleButton
+          contentId={contentId}
+          isExpanded={isExpanded}
+          onToggle={onToggle}
+          title={title}
+        />
+        {action}
+      </div>
+    </CardHeader>
+  );
+}
+
+function AuthServiceToggleButton({
+  contentId,
+  isExpanded,
+  onToggle,
+  title,
+}: {
+  contentId: string;
+  isExpanded: boolean;
+  onToggle: () => void;
+  title: string;
+}) {
+  return (
+    <button
+      aria-controls={contentId}
+      aria-expanded={isExpanded}
+      className={cn(
+        "flex min-w-0 flex-1 cursor-pointer items-start gap-3 rounded-xl text-left transition-colors duration-200",
+        "hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+      )}
+      onClick={onToggle}
+      type="button"
+    >
+      <AuthentikServiceLogo />
+      <AuthServiceDetails title={title} />
+      <AuthServiceExpandIcon isExpanded={isExpanded} />
+    </button>
+  );
+}
+
+function AuthentikServiceLogo() {
+  return (
+    <img
+      alt=""
+      aria-hidden="true"
+      className="size-10 shrink-0 object-contain"
+      src={AUTHENTIK_LOGO_SRC}
+    />
+  );
+}
+
+function AuthServiceDetails({ title }: { title: string }) {
+  return (
+    <div className="min-w-0 flex-1 py-2.5">
+      <CardTitle className="text-sm leading-5 sm:text-base">{title}</CardTitle>
+    </div>
+  );
+}
+
+function AuthServiceExpandIcon({ isExpanded }: { isExpanded: boolean }) {
+  return (
+    <CaretDownIcon
+      aria-hidden="true"
+      className={cn(
+        "mt-3 size-4 shrink-0 text-muted-foreground transition-transform duration-200",
+        isExpanded && "rotate-180",
+      )}
+    />
+  );
+}
+
+function AuthServiceCardBody({
+  children,
+  contentId,
+  isExpanded,
+}: {
+  children: ReactNode;
+  contentId: string;
+  isExpanded: boolean;
+}) {
+  if (!isExpanded) {
+    return null;
+  }
+
+  return (
+    <>
+      <Separator />
+      <CardContent className="p-2.5" id={contentId}>
+        {children}
+      </CardContent>
+    </>
+  );
+}
+
+function LinkedIdentityBadge({ count }: { count: number }) {
+  return (
+    <Badge variant={count > 0 ? "default" : "secondary"}>
+      {count > 0 ? "Connected" : "Not linked"}
+    </Badge>
   );
 }
 

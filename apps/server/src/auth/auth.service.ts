@@ -60,7 +60,11 @@ import {
 } from "../db/schema";
 import { hashPassword, verifyPassword } from "./password";
 import { generatePublicUserId } from "./public-user-id";
-import { LoginRateLimiter } from "./rate-limit";
+import {
+  createOAuthRouteRateLimitKey,
+  LoginRateLimiter,
+  type OAuthRouteRateLimitInput,
+} from "./rate-limit";
 import { createSessionExpiresAt, generateSessionToken, hashSessionToken } from "./session-token";
 
 export type AuthRequestContext = {
@@ -82,6 +86,10 @@ export type LoginFailure = {
 };
 
 export type LoginResult = LoginSuccess | LoginFailure;
+
+type OAuthRouteRateLimitResult =
+  | { ok: true; key: string }
+  | { ok: false; status: 429; body: ApiErrorResponse };
 
 export type CreateAdminSuccess = {
   ok: true;
@@ -279,6 +287,12 @@ type OAuthIdentityInput = {
   email?: string;
 };
 
+type OAuthSessionToken = {
+  provider: AuthProviderSlug;
+  idTokenEncrypted: string;
+  masterKeyId: string;
+};
+
 type OAuthLoginResult =
   | LoginSuccess
   | {
@@ -332,6 +346,13 @@ const rateLimitedError: ApiErrorResponse = {
   error: {
     code: "RATE_LIMITED",
     message: "Too many failed login attempts. Try again later.",
+  },
+};
+
+const oauthRouteRateLimitedError: ApiErrorResponse = {
+  error: {
+    code: "RATE_LIMITED",
+    message: "Too many OAuth requests. Try again later.",
   },
 };
 
@@ -815,7 +836,46 @@ export class AuthService {
     };
   }
 
-  completeOAuthLogin(input: OAuthIdentityInput, context: AuthRequestContext): OAuthLoginResult {
+  checkOAuthRouteRateLimit(
+    input: Omit<OAuthRouteRateLimitInput, "ipAddress"> & { context: AuthRequestContext },
+  ): OAuthRouteRateLimitResult {
+    const key = createOAuthRouteRateLimitKey({
+      provider: input.provider,
+      route: input.route,
+      ...(input.mode ? { mode: input.mode } : {}),
+      ipAddress: input.context.ipAddress,
+    });
+
+    if (!this.rateLimiter.isBlocked(key)) {
+      return { ok: true, key };
+    }
+
+    this.writeAuditLog({
+      action: "auth.oauth.route_rate_limited",
+      metadata: {
+        provider: input.provider,
+        route: input.route,
+        mode: input.mode ?? null,
+      },
+      ipAddress: input.context.ipAddress,
+    });
+
+    return { ok: false, status: 429, body: oauthRouteRateLimitedError };
+  }
+
+  recordOAuthRouteAttempt(key: string): void {
+    this.rateLimiter.recordFailure(key);
+  }
+
+  clearOAuthRouteRateLimit(key: string): void {
+    this.rateLimiter.clear(key);
+  }
+
+  completeOAuthLogin(
+    input: OAuthIdentityInput,
+    context: AuthRequestContext,
+    oauthSessionToken?: OAuthSessionToken,
+  ): OAuthLoginResult {
     const now = new Date();
     const nowIso = now.toISOString();
 
@@ -839,7 +899,7 @@ export class AuthService {
           .run();
 
         const updatedUser = { ...existingUser, lastLoginAt: nowIso, updatedAt: nowIso };
-        const session = this.createSession(updatedUser, context, now, tx);
+        const session = this.createSession(updatedUser, context, now, tx, oauthSessionToken);
 
         writeOAuthAuditLog(tx, {
           action: "auth.oauth.login.success",
@@ -906,7 +966,7 @@ export class AuthService {
           .run();
       }
 
-      const session = this.createSession(user, context, now, tx);
+      const session = this.createSession(user, context, now, tx, oauthSessionToken);
 
       writeOAuthAuditLog(tx, {
         action: "auth.oauth.user_created",
@@ -1038,6 +1098,21 @@ export class AuthService {
       currentSession.user,
       readEffectivePermissions(this.database.db, currentSession.user),
     );
+  }
+
+  getOAuthLogoutToken(sessionToken: string | null): OAuthSessionToken | null {
+    const currentSession = this.findSession(sessionToken);
+    const session = currentSession?.session;
+
+    if (!session?.oauthProvider || !session.oauthIdTokenEncrypted || !session.oauthMasterKeyId) {
+      return null;
+    }
+
+    return {
+      provider: session.oauthProvider,
+      idTokenEncrypted: session.oauthIdTokenEncrypted,
+      masterKeyId: session.oauthMasterKeyId,
+    };
   }
 
   getUserProfile(sessionToken: string | null): UserProfileResult {
@@ -1613,6 +1688,7 @@ export class AuthService {
     context: AuthRequestContext,
     now = new Date(),
     tx: DatabaseReader = this.database.db,
+    oauthSessionToken?: OAuthSessionToken,
   ): { sessionId: string; sessionToken: string; expiresAt: Date } {
     const expiresAt = createSessionExpiresAt(now);
     const sessionToken = generateSessionToken();
@@ -1626,6 +1702,13 @@ export class AuthService {
         expiresAt: expiresAt.toISOString(),
         ipAddress: context.ipAddress,
         userAgent: context.userAgent,
+        ...(oauthSessionToken
+          ? {
+              oauthProvider: oauthSessionToken.provider,
+              oauthIdTokenEncrypted: oauthSessionToken.idTokenEncrypted,
+              oauthMasterKeyId: oauthSessionToken.masterKeyId,
+            }
+          : {}),
         createdAt: now.toISOString(),
       })
       .run();

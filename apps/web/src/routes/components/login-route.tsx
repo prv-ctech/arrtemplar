@@ -15,6 +15,7 @@ const loginMediaAssets = {
 
 export function LoginRoute() {
   const { signedOut } = useSearch({ from: "/login" });
+  const shouldForceProviderLogin = signedOut === true;
   const userQuery = useCurrentUserQuery();
   const setupQuery = useAuthSetupQuery();
   const providersQuery = useAuthProvidersQuery();
@@ -49,7 +50,7 @@ export function LoginRoute() {
   }
 
   if (isAuthentikEnabled(providersQuery.data)) {
-    return <AuthentikPrimaryRedirect forceLogin={signedOut === true} />;
+    return <AuthentikPrimaryRedirect forceProviderLogin={shouldForceProviderLogin} />;
   }
 
   return (
@@ -64,10 +65,10 @@ function isAuthentikEnabled(providers: ReturnType<typeof useAuthProvidersQuery>[
   return providers?.some((provider) => provider.slug === "authentik" && provider.enabled) ?? false;
 }
 
-function AuthentikPrimaryRedirect({ forceLogin }: { forceLogin: boolean }) {
+function AuthentikPrimaryRedirect({ forceProviderLogin }: { forceProviderLogin: boolean }) {
   useEffect(() => {
-    window.location.assign(getAuthentikStartPath(forceLogin));
-  }, [forceLogin]);
+    window.location.assign(getAuthentikStartPath(forceProviderLogin));
+  }, [forceProviderLogin]);
 
   return (
     <LoginRouteStatus
@@ -77,8 +78,8 @@ function AuthentikPrimaryRedirect({ forceLogin }: { forceLogin: boolean }) {
   );
 }
 
-function getAuthentikStartPath(forceLogin: boolean): string {
-  return forceLogin ? `${authentikStartPath}?prompt=login` : authentikStartPath;
+function getAuthentikStartPath(forceProviderLogin: boolean): string {
+  return forceProviderLogin ? `${authentikStartPath}?prompt=login` : authentikStartPath;
 }
 
 function LoginRouteStatus({

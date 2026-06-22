@@ -36,6 +36,13 @@
       "when": 1781934976183,
       "tag": "0005_oauth_auth_providers_and_identities",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1782015237453,
+      "tag": "0006_oauth_session_logout",
+      "breakpoints": true
     }
   ]
 }

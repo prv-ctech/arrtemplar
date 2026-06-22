@@ -51,6 +51,7 @@ type BackendRootResponse = {
 export type CreateAppOptions = {
   database?: DatabaseClient;
   loginRateLimiter?: LoginRateLimiter;
+  oauthClientSecretEncryptionKey?: string | null;
   sessionCookieSecure?: boolean;
 };
 
@@ -58,6 +59,10 @@ export function createApp(options: CreateAppOptions = {}) {
   const database = options.database ?? createDatabase();
   const authRoutesOptions = {
     database,
+    oauthClientSecretEncryptionKey:
+      "oauthClientSecretEncryptionKey" in options
+        ? options.oauthClientSecretEncryptionKey
+        : env.oauthClientSecretEncryptionKey,
     sessionCookieSecure: options.sessionCookieSecure ?? env.sessionCookieSecure,
     ...(options.loginRateLimiter ? { rateLimiter: options.loginRateLimiter } : {}),
   };
