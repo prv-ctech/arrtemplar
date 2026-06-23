@@ -64,6 +64,13 @@
       "when": 1782217300000,
       "tag": "0009_widen_notification_history_auth_events",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1782231373848,
+      "tag": "0009_daily_gargoyle",
+      "breakpoints": true
     }
   ]
 }

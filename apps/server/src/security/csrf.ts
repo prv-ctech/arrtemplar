@@ -1,4 +1,10 @@
-import { type ApiErrorResponse, CSRF_HEADER_NAME, CSRF_HEADER_VALUE } from "@arrtemplar/shared";
+import {
+  API_KEY_BEARER_CSRF_EXEMPT_PATHS,
+  API_KEY_MANAGEMENT_PATH_PREFIX,
+  type ApiErrorResponse,
+  CSRF_HEADER_NAME,
+  CSRF_HEADER_VALUE,
+} from "@arrtemplar/shared";
 
 const unsafeMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const csrfExemptApiPaths = new Set(["/api/auth/oauth/backchannel-logout"]);
@@ -44,11 +50,32 @@ export function enforceCsrfPolicy(allowedOrigin: string) {
 function requiresCsrfProtection(request: Request): boolean {
   const pathname = new URL(request.url).pathname;
 
+  if (pathname.startsWith(API_KEY_MANAGEMENT_PATH_PREFIX)) {
+    return unsafeMethods.has(request.method.toUpperCase());
+  }
+
+  if (isBearerCsrfExemptRequest(pathname, request.headers)) {
+    return false;
+  }
+
   return (
     unsafeMethods.has(request.method.toUpperCase()) &&
     pathname.startsWith("/api/") &&
     !csrfExemptApiPaths.has(pathname)
   );
+}
+
+function isBearerCsrfExemptRequest(pathname: string, headers: Headers): boolean {
+  return (
+    API_KEY_BEARER_CSRF_EXEMPT_PATHS.some((path) => path === pathname) &&
+    hasBearerAuthorization(headers)
+  );
+}
+
+function hasBearerAuthorization(headers: Headers): boolean {
+  const authorization = headers.get("authorization");
+
+  return typeof authorization === "string" && /^Bearer\s+\S+$/i.test(authorization);
 }
 
 function hasTrustedSourceOrigin(headers: Headers, allowedOrigin: string): boolean {

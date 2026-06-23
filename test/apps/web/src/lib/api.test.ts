@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createApiRequestHeaders,
+  normalizeApiKeyListResponse,
   normalizeNotificationHistoryListResponse,
 } from "../../../../../apps/web/src/lib/api";
 import { CSRF_HEADER_NAME, CSRF_HEADER_VALUE } from "../../../../../packages/shared/src";
@@ -146,6 +147,75 @@ describe("permission api client", () => {
     );
   });
 });
+
+describe("api key api client", () => {
+  it("exposes typed client functions and response normalizers", async () => {
+    const source = await Bun.file(apiSourcePath).text();
+
+    expect(source).toContain("ApiKeySummary");
+    expect(source).toContain("CreateApiKeyRequest");
+    expect(source).toContain("UpdateApiKeyRequest");
+    expect(source).toContain("export async function listApiKeys");
+    expect(source).toContain('path: "/api/api-keys"');
+    expect(source).toContain("export async function createApiKey");
+    expect(source).toContain("export async function updateApiKey");
+    expect(source).toContain("export async function revokeApiKey");
+    expect(source).toContain("export async function deleteApiKey");
+    expect(source).toContain("normalizeApiKeyListResponse");
+    expect(source).toContain("normalizeApiKeyReveal");
+    expect(source).toContain("API_KEY_STATUS_VALUES");
+  });
+
+  it("rejects malformed API key statuses", () => {
+    expect(() =>
+      normalizeApiKeyListResponse(createApiKeyListResponse({ status: "pending" })),
+    ).toThrow("API key response was invalid.");
+  });
+
+  it("accepts valid API key Date payloads", () => {
+    const createdAt = "2026-06-23T12:00:00.000Z";
+    const updatedAt = "2026-06-23T12:01:00.000Z";
+    const lastUsedAt = "2026-06-23T12:02:00.000Z";
+    const response = normalizeApiKeyListResponse(
+      createApiKeyListResponse({
+        createdAt: new Date(createdAt),
+        lastUsedAt: new Date(lastUsedAt),
+        updatedAt: new Date(updatedAt),
+      }),
+    );
+
+    expect(response.apiKeys[0]?.createdAt).toBe(createdAt);
+    expect(response.apiKeys[0]?.updatedAt).toBe(updatedAt);
+    expect(response.apiKeys[0]?.lastUsedAt).toBe(lastUsedAt);
+  });
+});
+
+function createApiKeyListResponse(overrides: Record<string, unknown> = {}) {
+  return {
+    apiKeys: [
+      {
+        id: "api-key-test",
+        name: "Test key",
+        description: null,
+        prefix: "artk_abc12345",
+        maskedKey: "artk_abc12345••••wxyz",
+        status: "active",
+        permissions: ["settings:services"],
+        permissionCount: 1,
+        expiresAt: null,
+        ipAllowlist: [],
+        lastUsedAt: null,
+        lastUsedIpAddress: null,
+        lastUsedUserAgent: null,
+        createdBy: { id: "Abc123xyz", username: "admin" },
+        createdAt: "2026-06-23T12:00:00.000Z",
+        updatedAt: "2026-06-23T12:01:00.000Z",
+        revokedAt: null,
+        ...overrides,
+      },
+    ],
+  };
+}
 
 describe("users api client", () => {
   it("uses typed managed-user endpoints with public user ids", async () => {

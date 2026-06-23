@@ -539,17 +539,11 @@ export class AuthService {
       return actorResult;
     }
 
-    const userRows = this.database.db.select().from(users).all();
-    const permissionsByUserId = readEffectivePermissionsByUserId(this.database.db, userRows);
-    const summaries = userRows
-      .map((user) =>
-        toManagedUserSummary(user, permissionsByUserId.get(user.id) ?? [], {
-          includeAuthMethod: true,
-        }),
-      )
-      .sort((left, right) => left.username.localeCompare(right.username));
+    return { ok: true, users: this.readManagedUserSummaries() };
+  }
 
-    return { ok: true, users: summaries };
+  listUsersForApiKey(): ManagedUsersListResult {
+    return { ok: true, users: this.readManagedUserSummaries() };
   }
 
   getManagedUserProfile(targetUserId: string, actor: PublicUser): ManagedUserProfileResult {
@@ -559,6 +553,27 @@ export class AuthService {
       return actorResult;
     }
 
+    return this.readManagedUserProfileByPublicId(targetUserId);
+  }
+
+  getManagedUserProfileForApiKey(targetUserId: string): ManagedUserProfileResult {
+    return this.readManagedUserProfileByPublicId(targetUserId);
+  }
+
+  private readManagedUserSummaries(): ManagedUserSummary[] {
+    const userRows = this.database.db.select().from(users).all();
+    const permissionsByUserId = readEffectivePermissionsByUserId(this.database.db, userRows);
+
+    return userRows
+      .map((user) =>
+        toManagedUserSummary(user, permissionsByUserId.get(user.id) ?? [], {
+          includeAuthMethod: true,
+        }),
+      )
+      .sort((left, right) => left.username.localeCompare(right.username));
+  }
+
+  private readManagedUserProfileByPublicId(targetUserId: string): ManagedUserProfileResult {
     const targetUser = this.findUserByPublicId(targetUserId);
 
     if (!targetUser) {

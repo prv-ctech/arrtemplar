@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { Buffer } from "node:buffer";
+import { ApiKeyService } from "../../../../../apps/server/src/auth/api-key.service";
 import { hashPassword } from "../../../../../apps/server/src/auth/password";
 import { generatePublicUserId } from "../../../../../apps/server/src/auth/public-user-id";
 import { LoginRateLimiter } from "../../../../../apps/server/src/auth/rate-limit";
@@ -12,11 +13,14 @@ import {
 } from "../../../../../apps/server/src/auth/session-token";
 import type { DatabaseClient } from "../../../../../apps/server/src/db/client";
 import {
+  apiKeyPermissionGrants,
+  apiKeys,
   auditLogs,
   authIdentities,
   authProviders,
   notificationHistory,
   sessions,
+  type User,
   userPermissionGrants,
   users,
 } from "../../../../../apps/server/src/db/schema";
@@ -34,6 +38,7 @@ import {
   DEFAULT_SIGNED_IN_USER_PERMISSIONS,
   PROFILE_AVATAR_IDS,
   PROFILE_BANNER_IDS,
+  type PublicUser,
   SYSTEM_ADMIN_PERMISSION,
   TOAST_NOTIFICATION_EVENTS,
   USER_PERMISSION_VALUES,
@@ -1563,6 +1568,409 @@ describe("auth routes", () => {
 
     expect(invalidResponse.status).toBe(422);
   });
+
+  it("creates API keys with hash-only storage, explicit grants, and redacted audits", async () => {
+    const { database, admin } = await createAuthTestApp();
+    const service = new ApiKeyService(database);
+    const actor = toTestPublicUser(admin, [SYSTEM_ADMIN_PERMISSION]);
+    const result = service.createApiKey(
+      {
+        name: "Directory automation",
+        description: "External app key",
+        permissions: ["users:manage"],
+      },
+      actor,
+      testRequestContext(),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error("Expected API key creation to succeed.");
+    }
+
+    const [storedKey] = database.db.select().from(apiKeys).all();
+    const [storedGrant] = database.db.select().from(apiKeyPermissionGrants).all();
+    const [auditLog] = database.db
+      .select()
+      .from(auditLogs)
+      .all()
+      .filter((log) => log.action === "api_keys.created");
+
+    expect(result.body.secret).toStartWith("artk_");
+    expect(result.body.apiKey.maskedKey).not.toBe(result.body.secret);
+    expect(storedKey?.secretHash).toBe(hashSessionToken(result.body.secret));
+    expect(JSON.stringify(storedKey)).not.toContain(result.body.secret);
+    expect(storedGrant).toMatchObject({
+      apiKeyId: storedKey?.id,
+      permission: "users:manage",
+      grantedByUserId: admin.id,
+    });
+    expect(auditLog?.metadataJson).toBe(
+      JSON.stringify({ permissionCount: 1, prefix: result.body.apiKey.prefix }),
+    );
+    expect(auditLog?.metadataJson).not.toContain(result.body.secret);
+
+    const principalResult = service.resolveBearerApiKey(result.body.secret, testRequestContext());
+
+    expect(principalResult.ok).toBe(true);
+    if (principalResult.ok) {
+      expect(principalResult.principal.permissions).toEqual(["users:manage"]);
+      expect(principalResult.principal.apiKey.lastUsedAt).toEqual(expect.any(String));
+    }
+  });
+
+  it("allows every non-system permission as an explicit API key grant", async () => {
+    const { database, admin } = await createAuthTestApp();
+    const service = new ApiKeyService(database);
+    const apiKeyPermissions = USER_PERMISSION_VALUES.filter(
+      (permission) => permission !== SYSTEM_ADMIN_PERMISSION,
+    );
+    const result = service.createApiKey(
+      {
+        name: "Scoped automation",
+        permissions: apiKeyPermissions,
+      },
+      toTestPublicUser(admin, [SYSTEM_ADMIN_PERMISSION]),
+      testRequestContext(),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error("Expected API key creation to succeed.");
+    }
+    expect(result.body.apiKey.permissions).toEqual(apiKeyPermissions);
+
+    const storedGrants = database.db.select().from(apiKeyPermissionGrants).all();
+
+    expect(storedGrants.map((grant) => grant.permission)).toEqual(apiKeyPermissions);
+  });
+
+  it("rejects system:admin grants for API keys", async () => {
+    const { database, admin } = await createAuthTestApp();
+    const service = new ApiKeyService(database);
+    const result = service.createApiKey(
+      {
+        name: "Too broad",
+        permissions: [SYSTEM_ADMIN_PERMISSION],
+      },
+      toTestPublicUser(admin, [SYSTEM_ADMIN_PERMISSION]),
+      testRequestContext(),
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(422);
+    }
+    expect(database.db.select().from(apiKeys).all()).toHaveLength(0);
+  });
+
+  it("enforces optional API key expiry and IP allowlists", async () => {
+    const { database, admin } = await createAuthTestApp();
+    const service = new ApiKeyService(database);
+    const actor = toTestPublicUser(admin, [SYSTEM_ADMIN_PERMISSION]);
+    const unrestricted = service.createApiKey(
+      { name: "No expiry", permissions: ["users:manage"] },
+      actor,
+      testRequestContext(),
+    );
+    const restricted = service.createApiKey(
+      {
+        name: "CIDR key",
+        permissions: ["users:manage"],
+        ipAllowlist: ["198.51.100.0/24"],
+      },
+      actor,
+      testRequestContext(),
+    );
+    const expired = service.createApiKey(
+      {
+        name: "Expired key",
+        expiresAt: "2026-01-01T00:00:00.000Z",
+        permissions: ["users:manage"],
+      },
+      actor,
+      testRequestContext(),
+    );
+
+    expect(unrestricted.ok).toBe(true);
+    expect(restricted.ok).toBe(true);
+    expect(expired.ok).toBe(true);
+    if (!unrestricted.ok || !restricted.ok || !expired.ok) {
+      throw new Error("Expected API key setup to succeed.");
+    }
+
+    expect(service.resolveBearerApiKey(unrestricted.body.secret, testRequestContext()).ok).toBe(
+      true,
+    );
+    expect(
+      service.resolveBearerApiKey(
+        restricted.body.secret,
+        testRequestContext({ ipAddress: "198.51.100.22" }),
+      ).ok,
+    ).toBe(true);
+    expect(
+      service.resolveBearerApiKey(
+        restricted.body.secret,
+        testRequestContext({ ipAddress: "203.0.113.22" }),
+      ).ok,
+    ).toBe(false);
+    expect(service.resolveBearerApiKey(expired.body.secret, testRequestContext()).ok).toBe(false);
+  });
+
+  it("rate-limits repeated invalid API key attempts without logging raw keys", async () => {
+    const { database } = await createAuthTestApp();
+    const service = new ApiKeyService(database, new LoginRateLimiter(1));
+    const invalidSecret = "artk_invalid-secret-material";
+    const secondInvalidSecret = "artk_second-invalid-secret-material";
+
+    const firstAttempt = service.resolveBearerApiKey(invalidSecret, testRequestContext());
+    const secondAttempt = service.resolveBearerApiKey(secondInvalidSecret, testRequestContext());
+    const auditLogText = JSON.stringify(database.db.select().from(auditLogs).all());
+
+    expect(firstAttempt.ok).toBe(false);
+    expect(secondAttempt.ok).toBe(false);
+    if (!firstAttempt.ok && !secondAttempt.ok) {
+      expect(firstAttempt.status).toBe(401);
+      expect(secondAttempt.status).toBe(429);
+    }
+    expect(auditLogText).toContain("api_keys.auth.invalid");
+    expect(auditLogText).toContain("api_keys.auth.rate_limited");
+    expect(auditLogText).not.toContain(invalidSecret);
+    expect(auditLogText).not.toContain(secondInvalidSecret);
+  });
+
+  it("revokes and rotates API keys without exposing raw secrets in audit logs", async () => {
+    const { database, admin } = await createAuthTestApp();
+    const service = new ApiKeyService(database);
+    const actor = toTestPublicUser(admin, [SYSTEM_ADMIN_PERMISSION]);
+    const created = service.createApiKey(
+      { name: "Rotating key", permissions: ["users:manage"] },
+      actor,
+      testRequestContext(),
+    );
+
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      throw new Error("Expected API key creation to succeed.");
+    }
+
+    const rotated = service.rotateApiKey(created.body.apiKey.id, actor, testRequestContext());
+
+    expect(rotated.ok).toBe(true);
+    if (!rotated.ok) {
+      throw new Error("Expected API key rotation to succeed.");
+    }
+    expect(rotated.body.secret).not.toBe(created.body.secret);
+    expect(service.resolveBearerApiKey(created.body.secret, testRequestContext()).ok).toBe(false);
+    expect(service.resolveBearerApiKey(rotated.body.secret, testRequestContext()).ok).toBe(true);
+
+    const revoked = service.revokeApiKey(rotated.body.apiKey.id, actor, testRequestContext());
+
+    expect(revoked.ok).toBe(true);
+    expect(service.resolveBearerApiKey(rotated.body.secret, testRequestContext()).ok).toBe(false);
+
+    const auditLogText = JSON.stringify(database.db.select().from(auditLogs).all());
+
+    expect(auditLogText).not.toContain(created.body.secret);
+    expect(auditLogText).not.toContain(rotated.body.secret);
+  });
+
+  it("deletes API keys and their grants from storage", async () => {
+    const { database, admin } = await createAuthTestApp();
+    const service = new ApiKeyService(database);
+    const actor = toTestPublicUser(admin, [SYSTEM_ADMIN_PERMISSION]);
+    const created = service.createApiKey(
+      { name: "Disposable key", permissions: ["users:manage", "settings:services"] },
+      actor,
+      testRequestContext(),
+    );
+
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      throw new Error("Expected API key creation to succeed.");
+    }
+
+    const deleted = service.deleteApiKey(created.body.apiKey.id, actor, testRequestContext());
+
+    expect(deleted.ok).toBe(true);
+    expect(database.db.select().from(apiKeys).all()).toHaveLength(0);
+    expect(database.db.select().from(apiKeyPermissionGrants).all()).toHaveLength(0);
+    expect(
+      database.db
+        .select()
+        .from(auditLogs)
+        .all()
+        .some(
+          (log) => log.action === "api_keys.deleted" && log.targetId === created.body.apiKey.id,
+        ),
+    ).toBe(true);
+  });
+
+  it("exposes API key management routes only to session settings administrators", async () => {
+    const { app } = await createAuthTestApp();
+    const adminCookie = await loginAndReadCookie(app, "admin@example.local");
+    const createResponse = await app.handle(
+      csrfJsonRequest(
+        "/api/api-keys",
+        {
+          name: "External client",
+          description: "Webhook runner",
+          permissions: ["users:manage"],
+        },
+        { cookie: adminCookie },
+      ),
+    );
+    const createBody = await createResponse.json();
+
+    expect(createResponse.status).toBe(200);
+    expect(createBody.secret).toStartWith("artk_");
+    expect(createBody.apiKey).toMatchObject({
+      name: "External client",
+      description: "Webhook runner",
+      permissions: ["users:manage"],
+      status: "active",
+    });
+    expect(JSON.stringify(createBody.apiKey)).not.toContain(createBody.secret);
+
+    const listResponse = await app.handle(
+      new Request("http://localhost/api/api-keys", { headers: { cookie: adminCookie } }),
+    );
+    const listBody = await listResponse.json();
+    const meResponse = await app.handle(
+      new Request("http://localhost/api/api-keys/me", {
+        headers: { authorization: `Bearer ${createBody.secret}` },
+      }),
+    );
+    const meBody = await meResponse.json();
+    const queryParamResponse = await app.handle(
+      new Request(`http://localhost/api/api-keys/me?apiKey=${createBody.secret}`),
+    );
+    const managementByKeyResponse = await app.handle(
+      csrfJsonRequest(
+        "/api/api-keys",
+        { name: "Blocked", permissions: ["users:manage"] },
+        { authorization: `Bearer ${createBody.secret}` },
+      ),
+    );
+
+    expect(listResponse.status).toBe(200);
+    expect(listBody.apiKeys).toHaveLength(1);
+    expect(JSON.stringify(listBody)).not.toContain(createBody.secret);
+    expect(meResponse.status).toBe(200);
+    expect(meBody.apiKey).toMatchObject({
+      id: createBody.apiKey.id,
+      permissions: ["users:manage"],
+      status: "active",
+    });
+    expect(queryParamResponse.status).toBe(401);
+    expect(managementByKeyResponse.status).toBe(401);
+
+    const updateResponse = await app.handle(
+      csrfJsonPutRequest(
+        `/api/api-keys/${createBody.apiKey.id}`,
+        { permissions: ["users:manage"] },
+        { cookie: adminCookie },
+      ),
+    );
+    const updateBody = await updateResponse.json();
+    const forbiddenGrantResponse = await app.handle(
+      csrfJsonPutRequest(
+        `/api/api-keys/${createBody.apiKey.id}`,
+        { permissions: [SYSTEM_ADMIN_PERMISSION] },
+        { cookie: adminCookie },
+      ),
+    );
+
+    expect(updateResponse.status).toBe(200);
+    expect(updateBody.apiKey.permissions).toEqual(["users:manage"]);
+    expect(forbiddenGrantResponse.status).toBe(422);
+
+    const rotateResponse = await app.handle(
+      csrfJsonRequest(`/api/api-keys/${createBody.apiKey.id}/rotate`, {}, { cookie: adminCookie }),
+    );
+    const rotateBody = await rotateResponse.json();
+
+    expect(rotateResponse.status).toBe(200);
+    expect(rotateBody.secret).toStartWith("artk_");
+    expect(rotateBody.secret).not.toBe(createBody.secret);
+    expect(
+      await app.handle(
+        new Request("http://localhost/api/api-keys/me", {
+          headers: { authorization: `Bearer ${createBody.secret}` },
+        }),
+      ),
+    ).toHaveProperty("status", 401);
+    expect(
+      await app.handle(
+        new Request("http://localhost/api/api-keys/me", {
+          headers: { authorization: `Bearer ${rotateBody.secret}` },
+        }),
+      ),
+    ).toHaveProperty("status", 200);
+
+    const deleteResponse = await app.handle(
+      csrfJsonDeleteRequest(`/api/api-keys/${rotateBody.apiKey.id}`, { cookie: adminCookie }),
+    );
+
+    expect(deleteResponse.status).toBe(200);
+    expect(
+      await app.handle(
+        new Request("http://localhost/api/api-keys/me", {
+          headers: { authorization: `Bearer ${rotateBody.secret}` },
+        }),
+      ),
+    ).toHaveProperty("status", 401);
+  });
+
+  it("allows API keys with users:manage to read catalog and user-directory routes only", async () => {
+    const { app, viewer } = await createAuthTestApp();
+    const adminCookie = await loginAndReadCookie(app, "admin@example.local");
+    const createResponse = await app.handle(
+      csrfJsonRequest(
+        "/api/api-keys",
+        { name: "Directory reader", permissions: ["users:manage"] },
+        { cookie: adminCookie },
+      ),
+    );
+    const createBody = await createResponse.json();
+
+    expect(createResponse.status).toBe(200);
+
+    const bearerHeaders = { authorization: `Bearer ${createBody.secret}` };
+    const catalogResponse = await app.handle(
+      new Request("http://localhost/api/permissions/catalog", { headers: bearerHeaders }),
+    );
+    const usersResponse = await app.handle(
+      new Request("http://localhost/api/users", { headers: bearerHeaders }),
+    );
+    const userProfileResponse = await app.handle(
+      new Request(`http://localhost/api/users/${viewer.publicId}`, { headers: bearerHeaders }),
+    );
+    const createUserResponse = await app.handle(
+      csrfJsonRequest(
+        "/api/users",
+        {
+          username: "blocked-by-key",
+          email: "blocked-by-key@example.local",
+          password: DEFAULT_PASSWORD,
+        },
+        bearerHeaders,
+      ),
+    );
+    const catalogBody = await catalogResponse.json();
+    const usersBody = await usersResponse.json();
+    const userProfileBody = await userProfileResponse.json();
+
+    expect(catalogResponse.status).toBe(200);
+    expect(
+      catalogBody.permissions.map((entry: { permission: string }) => entry.permission),
+    ).toContain("users:manage");
+    expect(usersResponse.status).toBe(200);
+    expect(usersBody.users.map((user: { id: string }) => user.id)).toContain(viewer.publicId);
+    expect(userProfileResponse.status).toBe(200);
+    expect(userProfileBody.user.id).toBe(viewer.publicId);
+    expect(createUserResponse.status).toBe(401);
+  });
 });
 
 async function createAuthTestApp(
@@ -1931,6 +2339,30 @@ function requireStoredUserByEmail(database: DatabaseClient, email: string) {
   }
 
   return user;
+}
+
+function toTestPublicUser(user: User, permissions: UserPermission[]): PublicUser {
+  return {
+    id: user.publicId,
+    username: user.username,
+    email: user.email,
+    avatarId: DEFAULT_PROFILE_AVATAR_ID,
+    bannerId: DEFAULT_PROFILE_BANNER_ID,
+    notificationPreferences: DEFAULT_NOTIFICATION_PREFERENCES,
+    permissions,
+    createdAt: user.createdAt,
+    lastLoginAt: user.lastLoginAt,
+  };
+}
+
+function testRequestContext(
+  overrides: Partial<ReturnType<typeof createRequestContext>> = {},
+): ReturnType<typeof createRequestContext> {
+  return {
+    ipAddress: "127.0.0.1",
+    userAgent: "api-key-test",
+    ...overrides,
+  };
 }
 
 function csrfJsonPutRequest(

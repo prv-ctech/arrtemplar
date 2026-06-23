@@ -5,6 +5,11 @@ import type {
   AdminUpdateUserPermissionsRequest,
   AdminUpdateUserStatusRequest,
   AdminUserSummary,
+  ApiKeyListResponse,
+  ApiKeyMutationResponse,
+  ApiKeyReveal,
+  ApiKeyStatus,
+  ApiKeySummary,
   AuthIdentity,
   AuthMethod,
   AuthProviderKind,
@@ -18,6 +23,7 @@ import type {
   ClearNotificationHistoryResponse,
   CreateAdminRequest,
   CreateAdminResponse,
+  CreateApiKeyRequest,
   CreateLocalUserRequest,
   CreateNotificationHistoryRequest,
   CreateNotificationHistoryResponse,
@@ -33,12 +39,14 @@ import type {
   NotificationPreferences,
   PermissionCatalogEntry,
   PublicUser,
+  UpdateApiKeyRequest,
   UpdateManagedUserProfileRequest,
   UpdateNotificationPreferencesRequest,
   UpdateUserProfileRequest,
   UserPermission,
 } from "@arrtemplar/shared";
 import {
+  API_KEY_STATUS_VALUES,
   AUTH_PROVIDER_KIND_VALUES,
   AUTH_PROVIDER_SLUGS,
   CSRF_HEADER_NAME,
@@ -293,6 +301,62 @@ export async function getPermissionCatalog(): Promise<readonly PermissionCatalog
     .filter((entry): entry is PermissionCatalogEntry => Boolean(entry));
 }
 
+export async function listApiKeys(): Promise<ApiKeySummary[]> {
+  const response = await requestApiJson({
+    fallback: "API keys request failed.",
+    method: "GET",
+    path: "/api/api-keys",
+  });
+
+  return normalizeApiKeyListResponse(response).apiKeys;
+}
+
+export async function createApiKey(input: CreateApiKeyRequest): Promise<ApiKeyReveal> {
+  const response = await requestApiJson({
+    body: input,
+    fallback: "API key creation failed.",
+    method: "POST",
+    path: "/api/api-keys",
+  });
+
+  return normalizeApiKeyReveal(response);
+}
+
+export async function updateApiKey(
+  apiKeyId: string,
+  input: UpdateApiKeyRequest,
+): Promise<ApiKeySummary> {
+  const response = await requestApiJson({
+    body: input,
+    fallback: "API key update failed.",
+    method: "PUT",
+    path: `/api/api-keys/${encodeURIComponent(apiKeyId)}`,
+  });
+
+  return normalizeApiKeyMutationResponse(response).apiKey;
+}
+
+export async function revokeApiKey(apiKeyId: string): Promise<ApiKeySummary> {
+  const response = await requestApiJson({
+    body: {},
+    fallback: "API key revoke failed.",
+    method: "POST",
+    path: `/api/api-keys/${encodeURIComponent(apiKeyId)}/revoke`,
+  });
+
+  return normalizeApiKeyMutationResponse(response).apiKey;
+}
+
+export async function deleteApiKey(apiKeyId: string): Promise<ApiKeySummary> {
+  const response = await requestApiJson({
+    fallback: "API key delete failed.",
+    method: "DELETE",
+    path: `/api/api-keys/${encodeURIComponent(apiKeyId)}`,
+  });
+
+  return normalizeApiKeyMutationResponse(response).apiKey;
+}
+
 export async function createUser(input: CreateLocalUserRequest): Promise<AdminUserSummary> {
   const response = unwrapData(await api.api.users.post(input), "User creation failed.");
 
@@ -369,6 +433,35 @@ export function createApiRequestHeaders(
   }
 
   return { [CSRF_HEADER_NAME]: CSRF_HEADER_VALUE };
+}
+
+type ApiJsonRequest = {
+  body?: unknown;
+  fallback: string;
+  method: "DELETE" | "GET" | "POST" | "PUT";
+  path: string;
+};
+
+async function requestApiJson({ body, fallback, method, path }: ApiJsonRequest): Promise<unknown> {
+  const csrfHeaders = createApiRequestHeaders(method);
+  const headers = new Headers(csrfHeaders);
+
+  if (body !== undefined) {
+    headers.set("content-type", "application/json");
+  }
+
+  const response = await fetch(resolveApiRequestUrl(path), {
+    method,
+    credentials: "include",
+    headers,
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  });
+
+  if (!response.ok) {
+    throw await createApiClientErrorFromResponse(response, fallback);
+  }
+
+  return readJsonResponse(response);
 }
 
 function resolveApiRequestUrl(path: string): string {
@@ -638,6 +731,94 @@ export function normalizeNotificationHistoryListResponse(
       totalPages: readNonNegativeNumber(value.pagination.totalPages),
     },
   };
+}
+
+export function normalizeApiKeyListResponse(value: unknown): ApiKeyListResponse {
+  if (!isRecord(value) || !Array.isArray(value.apiKeys)) {
+    throwInvalidApiKeyResponse();
+  }
+
+  return { apiKeys: value.apiKeys.map(normalizeApiKeySummary) };
+}
+
+function normalizeApiKeyReveal(value: unknown): ApiKeyReveal {
+  if (!isRecord(value) || typeof value.secret !== "string") {
+    throwInvalidApiKeyResponse();
+  }
+
+  return { apiKey: normalizeApiKeySummary(value.apiKey), secret: value.secret };
+}
+
+function normalizeApiKeyMutationResponse(value: unknown): ApiKeyMutationResponse {
+  if (!isRecord(value) || value.status !== "ok") {
+    throwInvalidApiKeyResponse();
+  }
+
+  return { status: "ok", apiKey: normalizeApiKeySummary(value.apiKey) };
+}
+
+function normalizeApiKeySummary(value: unknown): ApiKeySummary {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== "string" ||
+    typeof value.name !== "string" ||
+    !isNullableString(value.description) ||
+    typeof value.prefix !== "string" ||
+    typeof value.maskedKey !== "string" ||
+    !isApiKeyStatus(value.status) ||
+    !Array.isArray(value.permissions) ||
+    typeof value.permissionCount !== "number" ||
+    !isNullableDateTime(value.expiresAt) ||
+    !isStringArray(value.ipAllowlist) ||
+    !isNullableDateTime(value.lastUsedAt) ||
+    !isNullableString(value.lastUsedIpAddress) ||
+    !isNullableString(value.lastUsedUserAgent) ||
+    !isApiKeyCreatedBy(value.createdBy) ||
+    !isDateTime(value.createdAt) ||
+    !isDateTime(value.updatedAt) ||
+    !isNullableDateTime(value.revokedAt)
+  ) {
+    throwInvalidApiKeyResponse();
+  }
+
+  return {
+    id: value.id,
+    name: value.name,
+    description: value.description,
+    prefix: value.prefix,
+    maskedKey: value.maskedKey,
+    status: value.status,
+    permissions: normalizePermissions(value.permissions),
+    permissionCount: value.permissionCount,
+    expiresAt: normalizeNullableDateTime(value.expiresAt),
+    ipAllowlist: value.ipAllowlist,
+    lastUsedAt: normalizeNullableDateTime(value.lastUsedAt),
+    lastUsedIpAddress: value.lastUsedIpAddress,
+    lastUsedUserAgent: value.lastUsedUserAgent,
+    createdBy: value.createdBy,
+    createdAt: normalizeDateTime(value.createdAt),
+    updatedAt: normalizeDateTime(value.updatedAt),
+    revokedAt: normalizeNullableDateTime(value.revokedAt),
+  };
+}
+
+function isApiKeyCreatedBy(value: unknown): value is ApiKeySummary["createdBy"] {
+  return (
+    value === null ||
+    (isRecord(value) && typeof value.id === "string" && typeof value.username === "string")
+  );
+}
+
+function isApiKeyStatus(value: unknown): value is ApiKeyStatus {
+  return API_KEY_STATUS_VALUES.some((status) => status === value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === "string");
+}
+
+function throwInvalidApiKeyResponse(): never {
+  throw new ApiClientError("API key response was invalid.", 0, "INVALID_API_KEY_RESPONSE");
 }
 
 function normalizeNotificationHistoryItem(value: unknown): NotificationHistoryItem {

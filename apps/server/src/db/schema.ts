@@ -231,6 +231,59 @@ export const sessions = sqliteTable(
   ],
 );
 
+export const apiKeys = sqliteTable(
+  "api_keys",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    description: text("description"),
+    secretHash: text("secret_hash").notNull(),
+    prefix: text("prefix").notNull(),
+    maskedKey: text("masked_key").notNull(),
+    createdByUserId: text("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    expiresAt: text("expires_at"),
+    ipAllowlistJson: text("ip_allowlist_json"),
+    lastUsedAt: text("last_used_at"),
+    lastUsedIpAddress: text("last_used_ip_address"),
+    lastUsedUserAgent: text("last_used_user_agent"),
+    revokedAt: text("revoked_at"),
+    createdAt: text("created_at").notNull().default(timestampNow),
+    updatedAt: text("updated_at").notNull().default(timestampNow),
+  },
+  (table) => [
+    uniqueIndex("api_keys_secret_hash_unique").on(table.secretHash),
+    index("api_keys_created_by_user_id_idx").on(table.createdByUserId),
+    index("api_keys_expires_at_idx").on(table.expiresAt),
+    index("api_keys_revoked_at_idx").on(table.revokedAt),
+  ],
+);
+
+export const apiKeyPermissionGrants = sqliteTable(
+  "api_key_permission_grants",
+  {
+    id: text("id").primaryKey(),
+    apiKeyId: text("api_key_id")
+      .notNull()
+      .references(() => apiKeys.id, { onDelete: "cascade" }),
+    permission: text("permission", { enum: userPermissionEnum }).notNull(),
+    grantedByUserId: text("granted_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: text("created_at").notNull().default(timestampNow),
+    updatedAt: text("updated_at").notNull().default(timestampNow),
+  },
+  (table) => [
+    uniqueIndex("api_key_permission_grants_key_permission_unique").on(
+      table.apiKeyId,
+      table.permission,
+    ),
+    index("api_key_permission_grants_api_key_id_idx").on(table.apiKeyId),
+    index("api_key_permission_grants_permission_idx").on(table.permission),
+  ],
+);
+
 export const auditLogs = sqliteTable(
   "audit_logs",
   {
@@ -263,5 +316,9 @@ export type UserPermissionGrant = InferSelectModel<typeof userPermissionGrants>;
 export type NewUserPermissionGrant = InferInsertModel<typeof userPermissionGrants>;
 export type Session = InferSelectModel<typeof sessions>;
 export type NewSession = InferInsertModel<typeof sessions>;
+export type ApiKey = InferSelectModel<typeof apiKeys>;
+export type NewApiKey = InferInsertModel<typeof apiKeys>;
+export type ApiKeyPermissionGrant = InferSelectModel<typeof apiKeyPermissionGrants>;
+export type NewApiKeyPermissionGrant = InferInsertModel<typeof apiKeyPermissionGrants>;
 export type AuditLog = InferSelectModel<typeof auditLogs>;
 export type NewAuditLog = InferInsertModel<typeof auditLogs>;

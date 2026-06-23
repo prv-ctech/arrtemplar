@@ -1,5 +1,9 @@
 import type {
   ApiErrorResponse,
+  ApiKeyListResponse,
+  ApiKeyMeResponse,
+  ApiKeyMutationResponse,
+  ApiKeyResponse,
   AuthPatchProviderRequest,
   AuthProviderSlug,
   AuthProvidersListResponse,
@@ -10,9 +14,12 @@ import type {
   ChangePasswordResponse,
   ClearNotificationHistoryResponse,
   CreateAdminResponse,
+  CreateApiKeyRequest,
+  CreateApiKeyResponse,
   CreateLocalUserResponse,
   CreateNotificationHistoryRequest,
   CreateNotificationHistoryResponse,
+  DeleteApiKeyResponse,
   DeleteManagedUserResponse,
   LoginResponse,
   LogoutResponse,
@@ -23,15 +30,22 @@ import type {
   NotificationPreferencesResponse,
   PermissionCatalogResponse,
   PublicUser,
+  RefreshApiKeyResponse,
+  RevokeApiKeyResponse,
+  RotateApiKeyResponse,
+  UpdateApiKeyRequest,
   UpdateNotificationPreferencesResponse,
   UpdateUserProfileRequest,
   UpdateUserProfileResponse,
+  UserPermission,
   UserProfileResponse,
 } from "@arrtemplar/shared";
 import {
+  API_KEY_STATUS_VALUES,
   AUTH_METHOD_VALUES,
   AUTH_PROVIDER_KIND_VALUES,
   AUTH_PROVIDER_SLUGS,
+  hasPermissionGrant,
   isProfileAvatarId,
   isProfileBannerId,
   isToastNotificationId,
@@ -60,6 +74,7 @@ import {
   OAUTH_STATE_COOKIE_MAX_AGE_SECONDS,
   OAUTH_STATE_COOKIE_NAME,
 } from "../security/oauth-state";
+import { ApiKeyService } from "./api-key.service";
 import { AuthService } from "./auth.service";
 import { OAuthService } from "./oauth/oauth.service";
 import { MIN_PASSWORD_LENGTH } from "./password";
@@ -105,6 +120,12 @@ const oidcProfileSigningAlgorithmSchema = t.Union(
 );
 const userPermissionSchema = t.Union(
   USER_PERMISSION_VALUES.map((permission) => t.Literal(permission)) as [
+    ReturnType<typeof t.Literal>,
+    ...ReturnType<typeof t.Literal>[],
+  ],
+);
+const apiKeyStatusSchema = t.Union(
+  API_KEY_STATUS_VALUES.map((status) => t.Literal(status)) as [
     ReturnType<typeof t.Literal>,
     ...ReturnType<typeof t.Literal>[],
   ],
@@ -216,6 +237,31 @@ const managedUserSummarySchema = t.Object({
   createdAt: t.String({ format: "date-time" }),
   updatedAt: t.String({ format: "date-time" }),
   permissions: t.Array(userPermissionSchema),
+});
+
+const apiKeyCreatedBySchema = t.Object({
+  id: publicUserIdSchema,
+  username: t.String(),
+});
+
+const apiKeySummarySchema = t.Object({
+  id: t.String({ minLength: 1, maxLength: 80 }),
+  name: t.String(),
+  description: t.Union([t.String(), t.Null()]),
+  prefix: t.String(),
+  maskedKey: t.String(),
+  status: apiKeyStatusSchema,
+  permissions: t.Array(userPermissionSchema),
+  permissionCount: t.Number({ minimum: 0 }),
+  expiresAt: t.Union([t.String({ format: "date-time" }), t.Null()]),
+  ipAllowlist: t.Array(t.String()),
+  lastUsedAt: t.Union([t.String({ format: "date-time" }), t.Null()]),
+  lastUsedIpAddress: t.Union([t.String(), t.Null()]),
+  lastUsedUserAgent: t.Union([t.String(), t.Null()]),
+  createdBy: t.Union([apiKeyCreatedBySchema, t.Null()]),
+  createdAt: t.String({ format: "date-time" }),
+  updatedAt: t.String({ format: "date-time" }),
+  revokedAt: t.Union([t.String({ format: "date-time" }), t.Null()]),
 });
 
 const authProviderSummarySchema = t.Object({
@@ -391,6 +437,31 @@ const managedUserPermissionsRequestSchema = t.Object({
   permissions: t.Array(userPermissionSchema),
 });
 
+const apiKeyIdParamsSchema = t.Object({
+  apiKeyId: t.String({ minLength: 1, maxLength: 80 }),
+});
+
+const apiKeyNameSchema = t.String({ minLength: 1, maxLength: 80, pattern: ".*\\S.*" });
+const apiKeyDescriptionSchema = t.Optional(t.Union([t.String({ maxLength: 500 }), t.Null()]));
+const apiKeyExpiresAtSchema = t.Optional(t.Union([t.String({ format: "date-time" }), t.Null()]));
+const apiKeyIpAllowlistSchema = t.Optional(t.Array(t.String({ minLength: 1, maxLength: 80 })));
+
+const createApiKeyRequestSchema = t.Object({
+  name: apiKeyNameSchema,
+  description: apiKeyDescriptionSchema,
+  permissions: t.Array(userPermissionSchema, { minItems: 1 }),
+  expiresAt: apiKeyExpiresAtSchema,
+  ipAllowlist: apiKeyIpAllowlistSchema,
+});
+
+const updateApiKeyRequestSchema = t.Object({
+  name: t.Optional(apiKeyNameSchema),
+  description: apiKeyDescriptionSchema,
+  permissions: t.Optional(t.Array(userPermissionSchema, { minItems: 1 })),
+  expiresAt: apiKeyExpiresAtSchema,
+  ipAllowlist: apiKeyIpAllowlistSchema,
+});
+
 const managedUserStatusRequestSchema = t.Object({
   disabled: t.Boolean(),
 });
@@ -407,6 +478,28 @@ const deleteManagedUserResponseSchema = t.Object({
 const managedUserProfileResponseSchema = t.Object({ user: managedUserProfileSchema });
 const permissionCatalogResponseSchema = t.Object({
   permissions: t.Array(permissionCatalogEntrySchema),
+});
+const apiKeyListResponseSchema = t.Object({ apiKeys: t.Array(apiKeySummarySchema) });
+const apiKeyResponseSchema = t.Object({ apiKey: apiKeySummarySchema });
+const apiKeyRevealResponseSchema = t.Object({
+  apiKey: apiKeySummarySchema,
+  secret: t.String({ minLength: 1 }),
+});
+const apiKeyMutationResponseSchema = t.Object({
+  status: t.Literal("ok"),
+  apiKey: apiKeySummarySchema,
+});
+const apiKeyMeResponseSchema = t.Object({
+  apiKey: t.Object({
+    id: t.String({ minLength: 1, maxLength: 80 }),
+    name: t.String(),
+    prefix: t.String(),
+    maskedKey: t.String(),
+    status: apiKeyStatusSchema,
+    permissions: t.Array(userPermissionSchema),
+    expiresAt: t.Union([t.String({ format: "date-time" }), t.Null()]),
+    lastUsedAt: t.Union([t.String({ format: "date-time" }), t.Null()]),
+  }),
 });
 const authSetupStatusResponseSchema = t.Object({ required: t.Boolean() });
 const authUserResponseSchema = t.Object({ user: t.Union([publicUserSchema, t.Null()]) });
@@ -489,6 +582,13 @@ const authProviderDeleteResponseSchema = {
   403: apiErrorResponseSchema,
   404: apiErrorResponseSchema,
 };
+const apiKeyErrorResponseSchemas = {
+  401: apiErrorResponseSchema,
+  403: apiErrorResponseSchema,
+  404: apiErrorResponseSchema,
+  422: apiErrorResponseSchema,
+  429: apiErrorResponseSchema,
+};
 
 export type AuthRoutesOptions = {
   database: DatabaseClient;
@@ -518,6 +618,7 @@ type ProviderMutationContext = {
 
 export function createAuthRoutes(options: AuthRoutesOptions) {
   const authService = new AuthService(options.database, options.rateLimiter);
+  const apiKeyService = new ApiKeyService(options.database);
   const oauthService = new OAuthService(options.database, authService, {
     encryptionKey: options.oauthClientSecretEncryptionKey,
     webOrigin: env.webOrigin,
@@ -527,9 +628,10 @@ export function createAuthRoutes(options: AuthRoutesOptions) {
     .use(createOAuthRoutes(authService, oauthService, options))
     .use(createSetupRoutes(authService, options))
     .use(createSessionRoutes(authService, oauthService, options))
+    .use(createApiKeyRoutes(authService, apiKeyService))
     .use(createProfileRoutes(authService))
-    .use(createPermissionRoutes(authService))
-    .use(createUsersRoutes(authService));
+    .use(createPermissionRoutes(authService, apiKeyService))
+    .use(createUsersRoutes(authService, apiKeyService));
 }
 
 function createOAuthRoutes(
@@ -1002,6 +1104,263 @@ function createSessionRoutes(
     );
 }
 
+function createApiKeyRoutes(authService: AuthService, apiKeyService: ApiKeyService) {
+  return new Elysia()
+    .get(
+      "/api-keys/me",
+      ({ request, server, status }) => {
+        const result = apiKeyService.resolveBearerApiKey(
+          readBearerApiKey(request.headers),
+          createRequestContext(request, server),
+        );
+
+        return result.ok
+          ? (apiKeyService.toMeResponse(result.principal) satisfies ApiKeyMeResponse)
+          : status(result.status, result.body);
+      },
+      {
+        response: {
+          200: apiKeyMeResponseSchema,
+          ...apiKeyErrorResponseSchemas,
+        },
+        detail: {
+          summary: "Inspect current API key",
+          description: "Returns safe metadata for the bearer API key used on this request.",
+          tags: ["Auth"],
+        },
+      },
+    )
+    .get(
+      "/api-keys",
+      ({ cookie, status }) =>
+        withSettingsGeneral(authService, cookie[SESSION_COOKIE_NAME].value, status, (user) => {
+          const result = apiKeyService.listApiKeys(user);
+
+          return result.ok
+            ? ({ apiKeys: result.apiKeys } satisfies ApiKeyListResponse)
+            : status(result.status, result.body);
+        }),
+      {
+        cookie: sessionCookieSchema,
+        response: {
+          200: apiKeyListResponseSchema,
+          ...apiKeyErrorResponseSchemas,
+        },
+        detail: {
+          summary: "List API keys",
+          description: "Returns masked API key metadata for settings administrators.",
+          tags: ["Auth"],
+        },
+      },
+    )
+    .post(
+      "/api-keys",
+      ({ body, cookie, request, server, status }) =>
+        withSettingsGeneral(authService, cookie[SESSION_COOKIE_NAME].value, status, (user) => {
+          const input = normalizeCreateApiKeyRouteRequest(body);
+
+          if (!input) {
+            return status(422, invalidApiKeyInputResponse());
+          }
+
+          const result = apiKeyService.createApiKey(
+            input,
+            user,
+            createRequestContext(request, server),
+          );
+
+          return result.ok
+            ? (result.body satisfies CreateApiKeyResponse)
+            : status(result.status, result.body);
+        }),
+      {
+        body: createApiKeyRequestSchema,
+        cookie: sessionCookieSchema,
+        response: {
+          200: apiKeyRevealResponseSchema,
+          ...apiKeyErrorResponseSchemas,
+        },
+        detail: {
+          summary: "Create API key",
+          description: "Creates a least-privilege API key and reveals the secret once.",
+          tags: ["Auth"],
+        },
+      },
+    )
+    .get(
+      "/api-keys/:apiKeyId",
+      ({ cookie, params, status }) =>
+        withSettingsGeneral(authService, cookie[SESSION_COOKIE_NAME].value, status, (user) => {
+          const result = apiKeyService.getApiKey(params.apiKeyId, user);
+
+          return result.ok
+            ? ({ apiKey: result.apiKey } satisfies ApiKeyResponse)
+            : status(result.status, result.body);
+        }),
+      {
+        params: apiKeyIdParamsSchema,
+        cookie: sessionCookieSchema,
+        response: {
+          200: apiKeyResponseSchema,
+          ...apiKeyErrorResponseSchemas,
+        },
+        detail: {
+          summary: "Get API key",
+          description: "Returns one masked API key record without exposing the secret.",
+          tags: ["Auth"],
+        },
+      },
+    )
+    .put(
+      "/api-keys/:apiKeyId",
+      ({ body, cookie, params, request, server, status }) =>
+        withSettingsGeneral(authService, cookie[SESSION_COOKIE_NAME].value, status, (user) => {
+          const input = normalizeUpdateApiKeyRouteRequest(body);
+
+          if (!input) {
+            return status(422, invalidApiKeyInputResponse());
+          }
+
+          const result = apiKeyService.updateApiKey(
+            params.apiKeyId,
+            input,
+            user,
+            createRequestContext(request, server),
+          );
+
+          return result.ok
+            ? (result.body satisfies ApiKeyMutationResponse)
+            : status(result.status, result.body);
+        }),
+      {
+        params: apiKeyIdParamsSchema,
+        body: updateApiKeyRequestSchema,
+        cookie: sessionCookieSchema,
+        response: {
+          200: apiKeyMutationResponseSchema,
+          ...apiKeyErrorResponseSchemas,
+        },
+        detail: {
+          summary: "Update API key",
+          description: "Updates API key metadata and explicit grants without returning the secret.",
+          tags: ["Auth"],
+        },
+      },
+    )
+    .post(
+      "/api-keys/:apiKeyId/revoke",
+      ({ cookie, params, request, server, status }) =>
+        withSettingsGeneral(authService, cookie[SESSION_COOKIE_NAME].value, status, (user) => {
+          const result = apiKeyService.revokeApiKey(
+            params.apiKeyId,
+            user,
+            createRequestContext(request, server),
+          );
+
+          return result.ok
+            ? (result.body satisfies RevokeApiKeyResponse)
+            : status(result.status, result.body);
+        }),
+      {
+        params: apiKeyIdParamsSchema,
+        cookie: sessionCookieSchema,
+        response: {
+          200: apiKeyMutationResponseSchema,
+          ...apiKeyErrorResponseSchemas,
+        },
+        detail: {
+          summary: "Revoke API key",
+          description: "Soft-revokes an API key so external apps lose access.",
+          tags: ["Auth"],
+        },
+      },
+    )
+    .post(
+      "/api-keys/:apiKeyId/rotate",
+      ({ cookie, params, request, server, status }) =>
+        withSettingsGeneral(authService, cookie[SESSION_COOKIE_NAME].value, status, (user) => {
+          const result = apiKeyService.rotateApiKey(
+            params.apiKeyId,
+            user,
+            createRequestContext(request, server),
+          );
+
+          return result.ok
+            ? (result.body satisfies RotateApiKeyResponse)
+            : status(result.status, result.body);
+        }),
+      {
+        params: apiKeyIdParamsSchema,
+        cookie: sessionCookieSchema,
+        response: {
+          200: apiKeyRevealResponseSchema,
+          ...apiKeyErrorResponseSchemas,
+        },
+        detail: {
+          summary: "Rotate API key",
+          description: "Revokes the old API key and reveals a replacement secret once.",
+          tags: ["Auth"],
+        },
+      },
+    )
+    .post(
+      "/api-keys/:apiKeyId/refresh",
+      ({ cookie, params, request, server, status }) =>
+        withSettingsGeneral(authService, cookie[SESSION_COOKIE_NAME].value, status, (user) => {
+          const result = apiKeyService.refreshApiKey(
+            params.apiKeyId,
+            user,
+            createRequestContext(request, server),
+          );
+
+          return result.ok
+            ? (result.body satisfies RefreshApiKeyResponse)
+            : status(result.status, result.body);
+        }),
+      {
+        params: apiKeyIdParamsSchema,
+        cookie: sessionCookieSchema,
+        response: {
+          200: apiKeyRevealResponseSchema,
+          ...apiKeyErrorResponseSchemas,
+        },
+        detail: {
+          summary: "Refresh API key",
+          description: "Creates a replacement API key with the same grants and metadata.",
+          tags: ["Auth"],
+        },
+      },
+    )
+    .delete(
+      "/api-keys/:apiKeyId",
+      ({ cookie, params, request, server, status }) =>
+        withSettingsGeneral(authService, cookie[SESSION_COOKIE_NAME].value, status, (user) => {
+          const result = apiKeyService.deleteApiKey(
+            params.apiKeyId,
+            user,
+            createRequestContext(request, server),
+          );
+
+          return result.ok
+            ? (result.body satisfies DeleteApiKeyResponse)
+            : status(result.status, result.body);
+        }),
+      {
+        params: apiKeyIdParamsSchema,
+        cookie: sessionCookieSchema,
+        response: {
+          200: apiKeyMutationResponseSchema,
+          ...apiKeyErrorResponseSchemas,
+        },
+        detail: {
+          summary: "Delete API key",
+          description: "Soft-deletes an API key while preserving audit history.",
+          tags: ["Auth"],
+        },
+      },
+    );
+}
+
 function createProfileRoutes(authService: AuthService) {
   return new Elysia()
     .get(
@@ -1276,14 +1635,21 @@ function createProfileRoutes(authService: AuthService) {
     );
 }
 
-function createPermissionRoutes(authService: AuthService) {
+function createPermissionRoutes(authService: AuthService, apiKeyService: ApiKeyService) {
   return new Elysia().get(
     "/permissions/catalog",
-    ({ cookie, status }) => {
-      return withUsersManage(
-        authService,
-        cookie[SESSION_COOKIE_NAME].value,
+    ({ cookie, request, server, status }) => {
+      return withSessionOrApiKeyPermission(
+        {
+          apiKeyService,
+          authService,
+          request,
+          requiredPermission: "users:manage",
+          server,
+          sessionCookieValue: cookie[SESSION_COOKIE_NAME].value,
+        },
         status,
+        () => ({ permissions: [...PERMISSION_CATALOG] }) satisfies PermissionCatalogResponse,
         () => ({ permissions: [...PERMISSION_CATALOG] }) satisfies PermissionCatalogResponse,
       );
     },
@@ -1304,18 +1670,36 @@ function createPermissionRoutes(authService: AuthService) {
   );
 }
 
-function createUsersRoutes(authService: AuthService) {
+function createUsersRoutes(authService: AuthService, apiKeyService: ApiKeyService) {
   return new Elysia()
     .get(
       "/users",
-      ({ cookie, status }) => {
-        return withUsersManage(authService, cookie[SESSION_COOKIE_NAME].value, status, (user) => {
-          const result = authService.listUsers(user);
+      ({ cookie, request, server, status }) => {
+        return withSessionOrApiKeyPermission(
+          {
+            apiKeyService,
+            authService,
+            request,
+            requiredPermission: "users:manage",
+            server,
+            sessionCookieValue: cookie[SESSION_COOKIE_NAME].value,
+          },
+          status,
+          (user) => {
+            const result = authService.listUsers(user);
 
-          return result.ok
-            ? ({ users: result.users } satisfies ManagedUsersListResponse)
-            : status(result.status, result.body);
-        });
+            return result.ok
+              ? ({ users: result.users } satisfies ManagedUsersListResponse)
+              : status(result.status, result.body);
+          },
+          () => {
+            const result = authService.listUsersForApiKey();
+
+            return result.ok
+              ? ({ users: result.users } satisfies ManagedUsersListResponse)
+              : status(result.status, result.body);
+          },
+        );
       },
       {
         cookie: sessionCookieSchema,
@@ -1370,14 +1754,32 @@ function createUsersRoutes(authService: AuthService) {
     )
     .get(
       "/users/:publicUserId",
-      ({ cookie, params, status }) => {
-        return withUsersManage(authService, cookie[SESSION_COOKIE_NAME].value, status, (user) => {
-          const result = authService.getManagedUserProfile(params.publicUserId, user);
+      ({ cookie, params, request, server, status }) => {
+        return withSessionOrApiKeyPermission(
+          {
+            apiKeyService,
+            authService,
+            request,
+            requiredPermission: "users:manage",
+            server,
+            sessionCookieValue: cookie[SESSION_COOKIE_NAME].value,
+          },
+          status,
+          (user) => {
+            const result = authService.getManagedUserProfile(params.publicUserId, user);
 
-          return result.ok
-            ? ({ user: result.user } satisfies ManagedUserProfileResponse)
-            : status(result.status, result.body);
-        });
+            return result.ok
+              ? ({ user: result.user } satisfies ManagedUserProfileResponse)
+              : status(result.status, result.body);
+          },
+          () => {
+            const result = authService.getManagedUserProfileForApiKey(params.publicUserId);
+
+            return result.ok
+              ? ({ user: result.user } satisfies ManagedUserProfileResponse)
+              : status(result.status, result.body);
+          },
+        );
       },
       {
         params: managedUserParamsSchema,
@@ -1652,6 +2054,10 @@ function requireUsersManage(authService: AuthService, sessionCookieValue: unknow
   return authService.requirePermission(readSessionToken(sessionCookieValue), "users:manage");
 }
 
+function requireSettingsGeneral(authService: AuthService, sessionCookieValue: unknown) {
+  return authService.requirePermission(readSessionToken(sessionCookieValue), "settings:general");
+}
+
 function requireSystemAdmin(authService: AuthService, sessionCookieValue: unknown) {
   return authService.requirePermission(
     readSessionToken(sessionCookieValue),
@@ -1715,6 +2121,76 @@ function withUsersManage<T>(
   }
 
   return onAllowed(permissionResult.user);
+}
+
+function withSettingsGeneral<T>(
+  authService: AuthService,
+  sessionCookieValue: unknown,
+  status: StatusHandler,
+  onAllowed: (user: PublicUser) => T,
+): T | ReturnType<StatusHandler> {
+  const permissionResult = requireSettingsGeneral(authService, sessionCookieValue);
+
+  if (!permissionResult.ok) {
+    return status(permissionResult.status, permissionResult.body);
+  }
+
+  return onAllowed(permissionResult.user);
+}
+
+type SessionOrApiKeyPermissionInput = {
+  apiKeyService: ApiKeyService;
+  authService: AuthService;
+  request: Request;
+  requiredPermission: UserPermission;
+  server: RequestIpReader | null;
+  sessionCookieValue: unknown;
+};
+
+function withSessionOrApiKeyPermission<T>(
+  input: SessionOrApiKeyPermissionInput,
+  status: StatusHandler,
+  onSessionAllowed: (user: PublicUser) => T,
+  onApiKeyAllowed: () => T,
+): T | ReturnType<StatusHandler> {
+  const bearerApiKey = readBearerApiKey(input.request.headers);
+
+  if (bearerApiKey) {
+    const principalResult = input.apiKeyService.resolveBearerApiKey(
+      bearerApiKey,
+      createRequestContext(input.request, input.server),
+    );
+
+    if (!principalResult.ok) {
+      return status(principalResult.status, principalResult.body);
+    }
+
+    if (!hasPermissionGrant(principalResult.principal.permissions, input.requiredPermission)) {
+      return status(403, forbiddenPermissionResponse(input.requiredPermission));
+    }
+
+    return onApiKeyAllowed();
+  }
+
+  const permissionResult = input.authService.requirePermission(
+    readSessionToken(input.sessionCookieValue),
+    input.requiredPermission,
+  );
+
+  if (!permissionResult.ok) {
+    return status(permissionResult.status, permissionResult.body);
+  }
+
+  return onSessionAllowed(permissionResult.user);
+}
+
+function forbiddenPermissionResponse(permission: UserPermission): ApiErrorResponse {
+  return {
+    error: {
+      code: "FORBIDDEN",
+      message: `${permission} permission is required.`,
+    },
+  };
 }
 
 function withSystemAdmin<T>(
@@ -2014,6 +2490,146 @@ function normalizeUpdateUserProfileRequest(input: {
     ...(isProfileBannerId(input.bannerId) ? { bannerId: input.bannerId } : {}),
     ...(input.email ? { email: input.email } : {}),
     ...(input.username ? { username: input.username } : {}),
+  };
+}
+
+function readBearerApiKey(headers: Headers): string | null {
+  const authorization = headers.get("authorization");
+
+  if (!authorization) {
+    return null;
+  }
+
+  const match = /^Bearer\s+(\S+)$/i.exec(authorization.trim());
+
+  return match?.[1] ?? null;
+}
+
+function normalizeCreateApiKeyRouteRequest(input: unknown): CreateApiKeyRequest | null {
+  if (!isRecord(input)) {
+    return null;
+  }
+
+  const name = readRequiredString(input.name);
+  const permissions = readRoutePermissions(input.permissions);
+
+  if (!name || !permissions) {
+    return null;
+  }
+
+  const request: CreateApiKeyRequest = { name, permissions };
+
+  if (!applyOptionalApiKeyFields(request, input)) {
+    return null;
+  }
+
+  return request;
+}
+
+function normalizeUpdateApiKeyRouteRequest(input: unknown): UpdateApiKeyRequest | null {
+  if (!isRecord(input)) {
+    return null;
+  }
+
+  const request: UpdateApiKeyRequest = {};
+
+  if ("name" in input) {
+    const name = readRequiredString(input.name);
+
+    if (!name) {
+      return null;
+    }
+
+    request.name = name;
+  }
+
+  if ("permissions" in input) {
+    const permissions = readRoutePermissions(input.permissions);
+
+    if (!permissions) {
+      return null;
+    }
+
+    request.permissions = permissions;
+  }
+
+  if (!applyOptionalApiKeyFields(request, input)) {
+    return null;
+  }
+
+  return request;
+}
+
+function applyOptionalApiKeyFields(
+  output: UpdateApiKeyRequest,
+  input: Record<string, unknown>,
+): boolean {
+  if ("description" in input) {
+    const description = readNullableString(input.description);
+
+    if (description === undefined) {
+      return false;
+    }
+
+    output.description = description;
+  }
+
+  if ("expiresAt" in input) {
+    const expiresAt = readNullableString(input.expiresAt);
+
+    if (expiresAt === undefined) {
+      return false;
+    }
+
+    output.expiresAt = expiresAt;
+  }
+
+  if ("ipAllowlist" in input) {
+    if (!isStringArray(input.ipAllowlist)) {
+      return false;
+    }
+
+    output.ipAllowlist = input.ipAllowlist;
+  }
+
+  return true;
+}
+
+function readRequiredString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function readNullableString(value: unknown): string | null | undefined {
+  if (value === null) {
+    return null;
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  return undefined;
+}
+
+function readRoutePermissions(value: unknown): UserPermission[] | null {
+  if (!Array.isArray(value) || value.length === 0) {
+    return null;
+  }
+
+  const permissions = value.filter(
+    (permission): permission is UserPermission =>
+      typeof permission === "string" && isUserPermission(permission),
+  );
+
+  return permissions.length === value.length ? permissions : null;
+}
+
+function invalidApiKeyInputResponse(): ApiErrorResponse {
+  return {
+    error: {
+      code: "INVALID_API_KEY_INPUT",
+      message: "API key input is invalid.",
+    },
   };
 }
 

@@ -86,6 +86,38 @@ describe("CSRF request policy", () => {
     expect(response.status).toBe(403);
   });
 
+  it("rejects session-cookie unsafe requests with bearer auth when CSRF is missing", async () => {
+    const app = await createCsrfTestApp();
+
+    const response = await app.handle(
+      unsafeJsonRequest(
+        "/api/profile/notifications/history",
+        { eventId: "profile.noop", title: "Noop" },
+        {
+          authorization: "Bearer artk_invalid",
+          cookie: "arrtemplar_session=bogus",
+          csrfHeader: false,
+        },
+      ),
+    );
+
+    expect(response.status).toBe(403);
+  });
+
+  it("keeps API-key management endpoints CSRF-protected even with bearer auth", async () => {
+    const app = await createCsrfTestApp();
+
+    const response = await app.handle(
+      unsafeJsonRequest(
+        "/api/api-keys",
+        { name: "Blocked", permissions: ["settings:services"] },
+        { authorization: "Bearer artk_invalid", csrfHeader: false },
+      ),
+    );
+
+    expect(response.status).toBe(403);
+  });
+
   it("rejects unsafe API requests from an unexpected Origin", async () => {
     const app = await createCsrfTestApp();
 
@@ -147,6 +179,8 @@ function unsafeJsonRequest(
   path: string,
   body: unknown,
   options: {
+    authorization?: string;
+    cookie?: string;
     origin?: string | null;
     referer?: string;
     secFetchSite?: string;
@@ -170,6 +204,14 @@ function unsafeJsonRequest(
 
   if (options.csrfHeader !== false) {
     headers.set(CSRF_HEADER_NAME, CSRF_HEADER_VALUE);
+  }
+
+  if (options.authorization) {
+    headers.set("authorization", options.authorization);
+  }
+
+  if (options.cookie) {
+    headers.set("cookie", options.cookie);
   }
 
   return new Request(`http://localhost${path}`, {

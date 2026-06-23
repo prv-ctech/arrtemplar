@@ -14,6 +14,7 @@ import { useNavigate } from "@tanstack/react-router";
 import type { ReactElement } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ThemeSettings } from "@/features/account/AccountSettings";
+import { ApiKeysSettings } from "@/features/admin/api-keys/ApiKeysSettings";
 import { canManageUsers, hasRequiredPermission } from "@/features/auth/auth-state";
 import { AuthSettings } from "@/features/auth-settings/AuthSettings";
 import { useAuthenticatedRouteUser } from "@/routes/authenticated-route-user";
@@ -163,12 +164,7 @@ function ActiveSettingsPage({ activePage }: { activePage: AdminSettingsPage }) {
     case "theme":
       return <ThemeSettings />;
     case "general":
-      return (
-        <SettingsPlaceholder
-          description="Application settings and display preferences."
-          title="General"
-        />
-      );
+      return <ApiKeysSettings />;
     case "library":
       return (
         <SettingsPlaceholder description="Metadata import and library curation." title="Library" />

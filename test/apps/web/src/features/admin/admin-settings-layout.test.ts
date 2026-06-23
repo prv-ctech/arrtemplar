@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { readWorkspaceSource, readWorkspaceSources } from "./admin-settings-test-sources";
 
 const settingsSourcePath = "apps/web/src/features/admin/AdminSettings.tsx";
+const apiKeysSettingsSourcePath = "apps/web/src/features/admin/api-keys/ApiKeysSettings.tsx";
 const authSettingsSourcePath = "apps/web/src/features/auth-settings/AuthSettings.tsx";
 const settingsPrimitivesSourcePath = "apps/web/src/features/settings/SettingsPrimitives.tsx";
 const usersSourcePaths = [
@@ -12,6 +13,7 @@ const usersSourcePaths = [
   "apps/web/src/features/admin/delete-user-dialog-content.tsx",
   "apps/web/src/features/admin/delete-user-dialog.tsx",
   "apps/web/src/features/admin/edit-user-permissions-dialog.tsx",
+  "apps/web/src/features/admin/permission-grant-grid.tsx",
   "apps/web/src/features/admin/user-permission-summary.tsx",
   "apps/web/src/features/admin/user-row-actions.tsx",
 ] as const;
@@ -140,6 +142,43 @@ describe("app settings layout", () => {
     expect(source).not.toContain("py-1 pr-4 pl-0");
     expect(source).not.toContain('className="w-max min-w-full"');
     expect(source).not.toContain("data-[state=active]:bg-background");
+  });
+
+  it("uses API Keys as the real General settings surface", async () => {
+    const settingsSource = await readWorkspaceSource(settingsSourcePath);
+    const apiKeysSource = await readWorkspaceSource(apiKeysSettingsSourcePath);
+
+    expect(settingsSource).toContain("ApiKeysSettings");
+    expect(settingsSource).toContain('case "general":');
+    expect(settingsSource).not.toContain('title="General"');
+    expect(settingsSource).not.toContain("Application settings and display preferences.");
+    expect(apiKeysSource).toContain("API Keys");
+    expect(apiKeysSource).toContain("ApiKeyServiceCard");
+    expect(apiKeysSource).toContain("aria-expanded={isExpanded}");
+    expect(apiKeysSource).toContain('aria-label="Create API key"');
+    expect(apiKeysSource).toContain("KeyIcon");
+    expect(apiKeysSource).toContain("PlusIcon");
+    expect(apiKeysSource).toContain("Open API key actions");
+    expect(apiKeysSource).toContain("DropdownMenuItem");
+    expect(apiKeysSource).toContain("PermissionCategoryGrid");
+    expect(apiKeysSource).toContain("permissionsDialogContentClassName");
+    expect(apiKeysSource).toContain("Copy API Key");
+    expect(apiKeysSource).toContain("External apps using this key will lose access immediately.");
+    expect(apiKeysSource).toContain("Key name");
+    expect(apiKeysSource).toContain("readDateTimeLocalIso");
+    expect(apiKeysSource).toContain("isApiKeyEligiblePermission");
+    expect(apiKeysSource).not.toContain("Refresh key");
+    expect(apiKeysSource).not.toContain("Rotate key");
+    expect(apiKeysSource).not.toContain("useRefreshApiKeyMutation");
+    expect(apiKeysSource).not.toContain("useRotateApiKeyMutation");
+    expect(apiKeysSource).not.toContain('containerClassName="max-w-full bg-card pt-12"');
+    expect(apiKeysSource).not.toContain("absolute top-3 left-3");
+    expect(apiKeysSource).not.toContain("Create scoped credentials for external apps.");
+    expect(apiKeysSource).not.toContain("External app credentials");
+    expect(apiKeysSource).not.toContain("Secrets are shown once after creation.");
+    expect(apiKeysSource).not.toContain("IconButton");
+    expect(apiKeysSource).not.toContain("<TableHead>Actions</TableHead>");
+    expect(apiKeysSource).not.toContain("Import");
   });
 
   it("uses an opaque selected settings tab surface across Catppuccin flavors", async () => {
