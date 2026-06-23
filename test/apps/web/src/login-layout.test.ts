@@ -22,29 +22,26 @@ describe("login route layout", () => {
     expect(authPanelClass).not.toContain("overflow-hidden");
   });
 
-  it("uses Authentik as primary login when the provider is enabled", async () => {
+  it("shows an explicit OIDC sign-in action when the provider is enabled", async () => {
     const loginRouteSource = await Bun.file(loginRouteSourcePath).text();
     const loginFormSource = await Bun.file(loginFormSourcePath).text();
 
-    expect(loginRouteSource).toContain(
-      'const authentikStartPath = "/api/auth/oauth/authentik/start"',
-    );
+    expect(loginRouteSource).toContain('const oidcStartPath = "/api/auth/oauth/oidc/start"');
     expect(loginRouteSource).toContain("useAuthProvidersQuery");
-    expect(loginRouteSource).toContain("isAuthentikEnabled(providersQuery.data)");
-    expect(loginRouteSource).toContain(
-      "window.location.assign(getAuthentikStartPath(forceProviderLogin))",
-    );
-    expect(loginRouteSource).toContain("Redirecting to Authentik");
-    expect(loginFormSource).not.toContain("Continue with Authentik");
-    expect(loginFormSource).not.toContain("AuthentikSignInButton");
+    expect(loginRouteSource).toContain("findEnabledOidcProvider(providersQuery.data)");
+    expect(loginRouteSource).toContain("buttonText={oidcProvider.buttonText}");
+    expect(loginRouteSource).toContain("href={oidcStartPath}");
+    expect(loginRouteSource).not.toContain("window.location.assign");
+    expect(loginRouteSource).not.toContain("Redirecting to Authentik");
+    expect(loginFormSource).not.toContain("Continue with SSO");
+    expect(loginFormSource).not.toContain("OidcSignInButton");
   });
 
-  it("forces Authentik to show its login prompt after app sign-out", async () => {
+  it("does not keep the removed post-sign-out prompt fallback", async () => {
     const loginRouteSource = await Bun.file(loginRouteSourcePath).text();
 
-    expect(loginRouteSource).toContain('useSearch({ from: "/login" })');
-    expect(loginRouteSource).toContain("shouldForceProviderLogin = signedOut === true");
-    expect(loginRouteSource).toContain("forceProviderLogin={shouldForceProviderLogin}");
-    expect(loginRouteSource).toContain("?prompt=login");
+    expect(loginRouteSource).not.toContain('useSearch({ from: "/login" })');
+    expect(loginRouteSource).not.toContain("signedOut");
+    expect(loginRouteSource).not.toContain("prompt=login");
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { migrateDatabase } from "../../../../../apps/server/src/db/migrate";
+import { TOAST_NOTIFICATION_EVENTS } from "../../../../../packages/shared/src";
 import {
   openTestDatabase,
   removeTestDatabaseFiles,
@@ -100,4 +101,37 @@ function expectNotificationHistorySchema(database: ReturnType<typeof openTestDat
     expect.objectContaining({ desc: 0, name: "user_id" }),
     expect.objectContaining({ desc: 1, name: "created_at" }),
   ]);
+
+  expectNotificationHistoryAcceptsAllToastEvents(database);
+}
+
+function expectNotificationHistoryAcceptsAllToastEvents(
+  database: ReturnType<typeof openTestDatabase>,
+): void {
+  database.sqlite
+    .query(
+      "insert into users (id, public_id, username, email, password_hash) values ($id, $publicId, $username, $email, $passwordHash)",
+    )
+    .run({
+      email: "notification-events@example.com",
+      id: "notification-events-user",
+      passwordHash: "test-password-hash",
+      publicId: "notification-events-public-user",
+      username: "notification-events-user",
+    });
+
+  const insertNotification = database.sqlite.query(
+    "insert into notification_history (id, user_id, event_id, title, severity, importance) values ($id, $userId, $eventId, $title, $severity, $importance)",
+  );
+
+  for (const [eventId, classification] of Object.entries(TOAST_NOTIFICATION_EVENTS)) {
+    insertNotification.run({
+      eventId,
+      id: `notification-${eventId}`,
+      importance: classification.importance,
+      severity: classification.severity,
+      title: eventId,
+      userId: "notification-events-user",
+    });
+  }
 }

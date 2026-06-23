@@ -1,6 +1,12 @@
 import type { AuthProviderSlug, AuthUpsertProviderRequest } from "@arrtemplar/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { listAuthIdentities, listAuthProviders, upsertAuthProvider } from "@/lib/api";
+import { authQueryKey } from "@/features/auth/auth-state";
+import {
+  listAuthIdentities,
+  listAuthProviders,
+  unlinkAllAuthIdentities,
+  upsertAuthProvider,
+} from "@/lib/api";
 
 const authProviderQueryKeys = {
   all: ["auth", "providers"] as const,
@@ -31,6 +37,21 @@ export function useUpsertAuthProviderMutation() {
       upsertAuthProvider(slug, input),
     async onSuccess() {
       await queryClient.invalidateQueries({ queryKey: authProviderQueryKeys.all });
+    },
+  });
+}
+
+export function useUnlinkAllAuthIdentitiesMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: unlinkAllAuthIdentities,
+    async onSuccess() {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: authProviderQueryKeys.all }),
+        queryClient.invalidateQueries({ queryKey: authProviderQueryKeys.identities() }),
+        queryClient.invalidateQueries({ queryKey: authQueryKey }),
+      ]);
     },
   });
 }

@@ -8,6 +8,8 @@ export type OidcDiscoveryDocument = {
   userinfoEndpoint: string | null;
   jwksUri: string;
   endSessionEndpoint: string | null;
+  backchannelLogoutSupported: boolean;
+  backchannelLogoutSessionSupported: boolean;
   idTokenSigningAlgValuesSupported: string[];
   tokenEndpointAuthMethodsSupported: string[];
 };
@@ -19,7 +21,10 @@ type DiscoveryCacheEntry = {
 
 const discoveryCache = new Map<string, DiscoveryCacheEntry>();
 
-export async function fetchOidcDiscovery(issuer: string): Promise<OidcDiscoveryDocument> {
+export async function fetchOidcDiscovery(
+  issuer: string,
+  options: { timeoutMs?: number } = {},
+): Promise<OidcDiscoveryDocument> {
   const normalizedIssuer = normalizeIssuerUrl(issuer);
   const cached = discoveryCache.get(normalizedIssuer);
 
@@ -31,7 +36,7 @@ export async function fetchOidcDiscovery(issuer: string): Promise<OidcDiscoveryD
   const response = await fetch(discoveryUrl, {
     headers: { accept: "application/json" },
     redirect: "error",
-    signal: AbortSignal.timeout(10_000),
+    signal: AbortSignal.timeout(options.timeoutMs ?? 10_000),
   });
 
   if (!response.ok) {
@@ -91,23 +96,19 @@ function validateDiscoveryDocument(value: unknown, expectedIssuer: string): Oidc
     throw new Error("OIDC discovery issuer does not match the configured issuer.");
   }
 
-  const expectedOrigin = new URL(expectedIssuer).origin;
-  const authorizationEndpoint = readSameOriginUrl(
+  const authorizationEndpoint = readDiscoveryEndpoint(
     record.authorization_endpoint,
     "authorization_endpoint",
-    expectedOrigin,
   );
-  const tokenEndpoint = readSameOriginUrl(record.token_endpoint, "token_endpoint", expectedOrigin);
-  const jwksUri = readSameOriginUrl(record.jwks_uri, "jwks_uri", expectedOrigin);
-  const userinfoEndpoint = readOptionalSameOriginUrl(
+  const tokenEndpoint = readDiscoveryEndpoint(record.token_endpoint, "token_endpoint");
+  const jwksUri = readDiscoveryEndpoint(record.jwks_uri, "jwks_uri");
+  const userinfoEndpoint = readOptionalDiscoveryEndpoint(
     record.userinfo_endpoint,
     "userinfo_endpoint",
-    expectedOrigin,
   );
-  const endSessionEndpoint = readOptionalSameOriginUrl(
+  const endSessionEndpoint = readOptionalDiscoveryEndpoint(
     record.end_session_endpoint,
     "end_session_endpoint",
-    expectedOrigin,
   );
   const idTokenSigningAlgValuesSupported = readStringArray(
     record.id_token_signing_alg_values_supported,
@@ -125,6 +126,10 @@ function validateDiscoveryDocument(value: unknown, expectedIssuer: string): Oidc
     userinfoEndpoint,
     jwksUri,
     endSessionEndpoint,
+    backchannelLogoutSupported: readOptionalBoolean(record.backchannel_logout_supported),
+    backchannelLogoutSessionSupported: readOptionalBoolean(
+      record.backchannel_logout_session_supported,
+    ),
     idTokenSigningAlgValuesSupported,
     tokenEndpointAuthMethodsSupported: readOptionalStringArray(
       record.token_endpoint_auth_methods_supported,
@@ -162,26 +167,22 @@ function readOptionalStringArray(value: unknown): string[] {
   return value.filter((entry): entry is string => typeof entry === "string" && !!entry);
 }
 
-function readSameOriginUrl(value: unknown, field: string, expectedOrigin: string): string {
-  const url = parseHttpIntegrationUrl(readRequiredString(value, field), `OIDC discovery ${field}`);
+function readOptionalBoolean(value: unknown): boolean {
+  return typeof value === "boolean" ? value : false;
+}
 
-  if (url.origin !== expectedOrigin) {
-    throw new Error(`OIDC discovery field ${field} must share the issuer origin.`);
-  }
+function readDiscoveryEndpoint(value: unknown, field: string): string {
+  const url = parseHttpIntegrationUrl(readRequiredString(value, field), `OIDC discovery ${field}`);
 
   return url.toString();
 }
 
-function readOptionalSameOriginUrl(
-  value: unknown,
-  field: string,
-  expectedOrigin: string,
-): string | null {
+function readOptionalDiscoveryEndpoint(value: unknown, field: string): string | null {
   if (value === undefined || value === null) {
     return null;
   }
 
-  return readSameOriginUrl(value, field, expectedOrigin);
+  return readDiscoveryEndpoint(value, field);
 }
 
 function isLocalhost(hostname: string): boolean {

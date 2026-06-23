@@ -1,6 +1,7 @@
 import { type ApiErrorResponse, CSRF_HEADER_NAME, CSRF_HEADER_VALUE } from "@arrtemplar/shared";
 
 const unsafeMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+const csrfExemptApiPaths = new Set(["/api/auth/oauth/backchannel-logout"]);
 const csrfVaryHeaders = ["Sec-Fetch-Site", "Origin"];
 
 const csrfRejectedError: ApiErrorResponse = {
@@ -41,9 +42,12 @@ export function enforceCsrfPolicy(allowedOrigin: string) {
 }
 
 function requiresCsrfProtection(request: Request): boolean {
+  const pathname = new URL(request.url).pathname;
+
   return (
     unsafeMethods.has(request.method.toUpperCase()) &&
-    new URL(request.url).pathname.startsWith("/api/")
+    pathname.startsWith("/api/") &&
+    !csrfExemptApiPaths.has(pathname)
   );
 }
 

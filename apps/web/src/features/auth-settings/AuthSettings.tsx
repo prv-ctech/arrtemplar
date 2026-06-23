@@ -1,8 +1,13 @@
 import {
+  AUTH_PROVIDER_KIND_VALUES,
   AUTH_PROVIDER_SLUGS,
   type AuthIdentity,
+  type AuthProviderKind,
   type AuthProviderSummary,
   type AuthUpsertProviderRequest,
+  OIDC_PROFILE_SIGNING_ALGORITHM_VALUES,
+  OIDC_SIGNING_ALGORITHM_VALUES,
+  TOKEN_ENDPOINT_AUTH_METHOD_VALUES,
 } from "@arrtemplar/shared";
 import { CaretDownIcon } from "@phosphor-icons/react";
 import { type FormEvent, type ReactNode, useId, useState } from "react";
@@ -11,15 +16,19 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { notify } from "@/features/notifications/notification-gateway";
 import { SettingsRow, SettingsStatus } from "@/features/settings/SettingsPrimitives";
 import { cn } from "@/lib/utils";
+import { useAuthenticatedRouteUser } from "@/routes/authenticated-route-user";
 import {
   useAuthIdentitiesQuery,
   useAuthProvidersQuery,
+  useUnlinkAllAuthIdentitiesMutation,
   useUpsertAuthProviderMutation,
 } from "./auth-settings";
 
 type AuthProviderFormState = {
+  providerKind: AuthProviderKind;
   label: string;
   issuer: string;
   clientId: string;
@@ -27,10 +36,47 @@ type AuthProviderFormState = {
   scopes: string;
   redirectUris: string;
   enabled: boolean;
+  buttonText: string;
+  autoRegister: boolean;
+  tokenEndpointAuthMethod: AuthProviderSummary["tokenEndpointAuthMethod"];
+  timeoutMs: string;
+  prompt: string;
+  endSessionEndpoint: string;
+  idTokenSigningAlgorithm: AuthProviderSummary["idTokenSigningAlgorithm"];
+  profileSigningAlgorithm: AuthProviderSummary["profileSigningAlgorithm"];
+  mobileRedirectEnabled: boolean;
+  mobileRedirectUri: string;
 };
 
 const authProviderSlug = AUTH_PROVIDER_SLUGS[0];
-const AUTHENTIK_LOGO_SRC = "/brand/authentik.svg";
+const providerKindLabels: Record<AuthProviderKind, string> = {
+  authentik: "Authentik",
+  authelia: "Authelia",
+  google: "Google",
+  keycloak: "Keycloak",
+  okta: "Okta",
+  custom: "Custom / generic",
+};
+const defaultProviderFormState: AuthProviderFormState = {
+  providerKind: "custom",
+  label: "OIDC",
+  issuer: "",
+  clientId: "",
+  clientSecret: "",
+  scopes: "",
+  redirectUris: "",
+  enabled: false,
+  buttonText: "Continue with SSO",
+  autoRegister: true,
+  tokenEndpointAuthMethod: "client_secret_basic",
+  timeoutMs: "10000",
+  prompt: "",
+  endSessionEndpoint: "",
+  idTokenSigningAlgorithm: "RS256",
+  profileSigningAlgorithm: "none",
+  mobileRedirectEnabled: false,
+  mobileRedirectUri: "",
+};
 
 export function AuthSettings() {
   const providersQuery = useAuthProvidersQuery();
@@ -70,13 +116,16 @@ function useAuthSettingsController({
   provider: AuthProviderSummary | undefined;
   providerError: unknown;
 }) {
+  const actor = useAuthenticatedRouteUser();
   const [form, setForm] = useState(() => createFormState(provider));
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const saveMutation = useUpsertAuthProviderMutation();
+  const unlinkAllMutation = useUnlinkAllAuthIdentitiesMutation();
   const statusId = useId();
-  const isSaving = saveMutation.isPending;
-  const errorMessage = formError ?? getErrorMessage(providerError ?? saveMutation.error);
+  const isSaving = saveMutation.isPending || unlinkAllMutation.isPending;
+  const errorMessage =
+    formError ?? getErrorMessage(providerError ?? saveMutation.error ?? unlinkAllMutation.error);
 
   function updateForm(next: Partial<AuthProviderFormState>) {
     setStatusMessage(null);
@@ -92,12 +141,16 @@ function useAuthSettingsController({
     const request = createProviderRequest(form);
 
     if (!request) {
-      setFormError("Complete issuer, client ID, scopes, and redirect URI.");
+      setFormError("Complete provider kind, issuer, client ID, scopes, and redirect URI.");
       return;
     }
 
-    if (!provider?.hasClientSecret && !request.clientSecret) {
-      setFormError("Enter the Authentik client secret before saving.");
+    if (
+      request.tokenEndpointAuthMethod !== "none" &&
+      !provider?.hasClientSecret &&
+      !request.clientSecret
+    ) {
+      setFormError("Enter the OIDC client secret before saving.");
       return;
     }
 
@@ -106,21 +159,59 @@ function useAuthSettingsController({
       {
         onSuccess: () => {
           setForm((current) => ({ ...current, clientSecret: "" }));
-          setStatusMessage("Auth provider saved.");
+          setStatusMessage("OIDC provider saved.");
+          notify(
+            {
+              id: "auth.provider.saved",
+              title: "OAuth settings saved.",
+            },
+            actor.notificationPreferences,
+          );
+        },
+        onError: (error) => {
+          notify(
+            {
+              id: "auth.provider.save.failed",
+              title: error instanceof Error ? error.message : "OAuth settings save failed.",
+            },
+            actor.notificationPreferences,
+          );
         },
       },
     );
+  }
+
+  function handleUnlinkAll() {
+    setFormError(null);
+    setStatusMessage(null);
+
+    const confirmed = window.confirm(
+      "Unlink all OAuth accounts? Users stay in Arrtemplar, but OAuth links and OAuth sessions are removed.",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    unlinkAllMutation.mutate(undefined, {
+      onSuccess: ({ deletedIdentityCount, revokedOAuthSessionCount }) => {
+        setStatusMessage(
+          `Unlinked ${deletedIdentityCount} OAuth account${deletedIdentityCount === 1 ? "" : "s"} and revoked ${revokedOAuthSessionCount} OAuth session${revokedOAuthSessionCount === 1 ? "" : "s"}.`,
+        );
+      },
+    });
   }
 
   return {
     errorMessage,
     form,
     handleSubmit,
+    handleUnlinkAll,
     identities,
     isSaving,
     provider,
     statusId,
-    statusMessage: isSaving ? "Saving auth provider" : statusMessage,
+    statusMessage: isSaving ? "Saving OAuth settings" : statusMessage,
     updateForm,
   };
 }
@@ -130,12 +221,12 @@ type AuthSettingsController = ReturnType<typeof useAuthSettingsController>;
 function AuthMethodGrid({ controls }: { controls: AuthSettingsController }) {
   return (
     <div className="grid items-start gap-4 grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))]">
-      <AuthentikMethodCard controls={controls} />
+      <OidcMethodCard controls={controls} />
     </div>
   );
 }
 
-function AuthentikMethodCard({ controls }: { controls: AuthSettingsController }) {
+function OidcMethodCard({ controls }: { controls: AuthSettingsController }) {
   const [isExpanded, setIsExpanded] = useState(true);
   const providerContentId = useId();
 
@@ -152,11 +243,12 @@ function AuthentikMethodCard({ controls }: { controls: AuthSettingsController })
       contentId={providerContentId}
       isExpanded={isExpanded}
       onToggle={() => setIsExpanded((current) => !current)}
-      title="Authentik"
+      title="OAuth/OIDC"
     >
-      <AuthentikAccountLinking
+      <OidcAccountLinking
         identities={controls.identities}
         isProviderEnabled={Boolean(controls.provider?.enabled)}
+        onUnlinkAll={controls.handleUnlinkAll}
       />
       <Separator className="my-3" />
       <AuthProviderForm controls={controls} />
@@ -189,7 +281,7 @@ function AuthProviderFields({ controls }: { controls: AuthSettingsController }) 
         />
       ) : (
         <p className="px-3 py-2.5 text-sm text-muted-foreground sm:px-4">
-          Turn on the provider to edit Authentik OAuth settings.
+          Turn on the provider to edit OAuth/OIDC settings.
         </p>
       )}
     </div>
@@ -204,7 +296,7 @@ function AuthProviderSaveButton({ controls }: { controls: AuthSettingsController
   return (
     <div className="flex justify-end">
       <Button className="rounded-xl" disabled={controls.isSaving} size="sm" type="submit">
-        {controls.isSaving ? "Saving" : "Save Authentik"}
+        {controls.isSaving ? "Saving" : "Save OAuth"}
       </Button>
     </div>
   );
@@ -230,7 +322,7 @@ function ProviderEnabledSwitch({
     >
       <input
         aria-describedby={statusId}
-        aria-label="Enable Authentik provider"
+        aria-label="Enable OIDC provider"
         checked={enabled}
         className="peer sr-only"
         disabled={disabled}
@@ -257,9 +349,42 @@ function ProviderConfigRows({
   onChange: (next: Partial<AuthProviderFormState>) => void;
 }) {
   const fieldClassName = "h-9 rounded-xl px-3 text-sm";
+  const selectClassName =
+    "h-9 rounded-xl border border-input bg-background/50 px-3 text-sm text-foreground outline-none transition-[border-color,box-shadow] focus-visible:border-primary/70 focus-visible:ring-2 focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50";
 
   return (
     <>
+      <SettingsRow controlId="auth-provider-kind" density="compact" label="Provider">
+        <select
+          className={selectClassName}
+          disabled={disabled}
+          id="auth-provider-kind"
+          onChange={(event) => {
+            const providerKind = readAuthProviderKind(event.currentTarget.value);
+
+            if (providerKind) {
+              onChange({ providerKind });
+            }
+          }}
+          value={form.providerKind}
+        >
+          {AUTH_PROVIDER_KIND_VALUES.map((providerKind) => (
+            <option key={providerKind} value={providerKind}>
+              {providerKindLabels[providerKind]}
+            </option>
+          ))}
+        </select>
+      </SettingsRow>
+      <SettingsRow controlId="auth-provider-button-text" density="compact" label="Button text">
+        <Input
+          className={fieldClassName}
+          disabled={disabled}
+          id="auth-provider-button-text"
+          onChange={(event) => onChange({ buttonText: event.currentTarget.value })}
+          placeholder="Continue with SSO"
+          value={form.buttonText}
+        />
+      </SettingsRow>
       <SettingsRow controlId="auth-provider-issuer" density="compact" label="Issuer">
         <Input
           className={fieldClassName}
@@ -291,6 +416,31 @@ function ProviderConfigRows({
           value={form.clientSecret}
         />
       </SettingsRow>
+      <SettingsRow
+        controlId="auth-provider-token-auth-method"
+        density="compact"
+        label="Token auth method"
+      >
+        <select
+          className={selectClassName}
+          disabled={disabled}
+          id="auth-provider-token-auth-method"
+          onChange={(event) => {
+            const tokenEndpointAuthMethod = readTokenEndpointAuthMethod(event.currentTarget.value);
+
+            if (tokenEndpointAuthMethod) {
+              onChange({ tokenEndpointAuthMethod });
+            }
+          }}
+          value={form.tokenEndpointAuthMethod}
+        >
+          {TOKEN_ENDPOINT_AUTH_METHOD_VALUES.map((method) => (
+            <option key={method} value={method}>
+              {method}
+            </option>
+          ))}
+        </select>
+      </SettingsRow>
       <SettingsRow controlId="auth-provider-scopes" density="compact" label="Scopes">
         <Input
           className={fieldClassName}
@@ -312,22 +462,169 @@ function ProviderConfigRows({
           value={form.redirectUris}
         />
       </SettingsRow>
+      <SettingsRow controlId="auth-provider-timeout" density="compact" label="Timeout (ms)">
+        <Input
+          className={fieldClassName}
+          disabled={disabled}
+          id="auth-provider-timeout"
+          min={1}
+          onChange={(event) => onChange({ timeoutMs: event.currentTarget.value })}
+          type="number"
+          value={form.timeoutMs}
+        />
+      </SettingsRow>
+      <SettingsRow controlId="auth-provider-prompt" density="compact" label="Prompt">
+        <Input
+          className={fieldClassName}
+          disabled={disabled}
+          id="auth-provider-prompt"
+          onChange={(event) => onChange({ prompt: event.currentTarget.value })}
+          placeholder="Optional OIDC prompt"
+          value={form.prompt}
+        />
+      </SettingsRow>
+      <SettingsRow
+        controlId="auth-provider-id-token-algorithm"
+        density="compact"
+        label="ID token algorithm"
+      >
+        <select
+          className={selectClassName}
+          disabled={disabled}
+          id="auth-provider-id-token-algorithm"
+          onChange={(event) => {
+            const idTokenSigningAlgorithm = readOidcSigningAlgorithm(event.currentTarget.value);
+
+            if (idTokenSigningAlgorithm) {
+              onChange({ idTokenSigningAlgorithm });
+            }
+          }}
+          value={form.idTokenSigningAlgorithm}
+        >
+          {OIDC_SIGNING_ALGORITHM_VALUES.map((algorithm) => (
+            <option key={algorithm} value={algorithm}>
+              {algorithm}
+            </option>
+          ))}
+        </select>
+      </SettingsRow>
+      <SettingsRow
+        controlId="auth-provider-profile-algorithm"
+        density="compact"
+        label="Profile algorithm"
+      >
+        <select
+          className={selectClassName}
+          disabled={disabled}
+          id="auth-provider-profile-algorithm"
+          onChange={(event) => {
+            const profileSigningAlgorithm = readOidcProfileSigningAlgorithm(
+              event.currentTarget.value,
+            );
+
+            if (profileSigningAlgorithm) {
+              onChange({ profileSigningAlgorithm });
+            }
+          }}
+          value={form.profileSigningAlgorithm}
+        >
+          {OIDC_PROFILE_SIGNING_ALGORITHM_VALUES.map((algorithm) => (
+            <option key={algorithm} value={algorithm}>
+              {algorithm}
+            </option>
+          ))}
+        </select>
+      </SettingsRow>
+      <SettingsRow controlId="auth-provider-end-session" density="compact" label="End session URL">
+        <Input
+          className={fieldClassName}
+          disabled={disabled}
+          id="auth-provider-end-session"
+          onChange={(event) => onChange({ endSessionEndpoint: event.currentTarget.value })}
+          placeholder="Optional provider logout endpoint"
+          value={form.endSessionEndpoint}
+        />
+      </SettingsRow>
+      <SettingsRow controlId="auth-provider-auto-register" density="compact" label="Auto register">
+        <input
+          aria-label="Enable automatic OAuth registration"
+          checked={form.autoRegister}
+          className="size-4 rounded border-border accent-primary"
+          disabled={disabled}
+          id="auth-provider-auto-register"
+          onChange={(event) => onChange({ autoRegister: event.currentTarget.checked })}
+          type="checkbox"
+        />
+      </SettingsRow>
+      <SettingsRow
+        controlId="auth-provider-mobile-redirect"
+        density="compact"
+        label="Mobile redirect"
+      >
+        <input
+          aria-label="Enable mobile OAuth redirect"
+          checked={form.mobileRedirectEnabled}
+          className="size-4 rounded border-border accent-primary"
+          disabled={disabled}
+          id="auth-provider-mobile-redirect"
+          onChange={(event) => onChange({ mobileRedirectEnabled: event.currentTarget.checked })}
+          type="checkbox"
+        />
+      </SettingsRow>
+      {form.mobileRedirectEnabled ? (
+        <SettingsRow
+          controlId="auth-provider-mobile-redirect-uri"
+          density="compact"
+          label="Mobile redirect URI"
+        >
+          <Input
+            className={fieldClassName}
+            disabled={disabled}
+            id="auth-provider-mobile-redirect-uri"
+            onChange={(event) => onChange({ mobileRedirectUri: event.currentTarget.value })}
+            placeholder="Optional mobile redirect URI"
+            value={form.mobileRedirectUri}
+          />
+        </SettingsRow>
+      ) : null}
     </>
   );
 }
 
-function AuthentikAccountLinking({
+function LinkedIdentityList({ identities }: { identities: readonly AuthIdentity[] }) {
+  if (identities.length === 0) {
+    return null;
+  }
+
+  return (
+    <ul className="mt-3 space-y-1.5 text-sm text-muted-foreground">
+      {identities.map((identity) => (
+        <li
+          className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-border bg-background/45 px-3 py-2"
+          key={identity.id}
+        >
+          <span className="min-w-0 truncate text-foreground">{identity.displayName}</span>
+          <span className="shrink-0 text-xs">{providerKindLabels[identity.providerKind]}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function OidcAccountLinking({
   identities,
   isProviderEnabled,
+  onUnlinkAll,
 }: {
   identities: readonly AuthIdentity[];
   isProviderEnabled: boolean;
+  onUnlinkAll: () => void;
 }) {
   const isConnected = identities.length > 0;
 
   return (
     <section
-      aria-label="Authentik account linking"
+      aria-label="OAuth account linking"
       className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-6"
     >
       <div className="min-w-0 space-y-1">
@@ -337,20 +634,31 @@ function AuthentikAccountLinking({
         </div>
         <p className="text-sm text-muted-foreground">
           {isConnected
-            ? "This admin account is connected to Authentik."
-            : "Connect this admin account to Authentik."}
+            ? "This admin account has linked OAuth accounts."
+            : "Link this admin account to an OAuth identity."}
         </p>
+        <LinkedIdentityList identities={identities} />
       </div>
-      <Button
-        className="w-fit rounded-xl"
-        disabled={!isProviderEnabled}
-        onClick={startAuthentikLinkFlow}
-        type="button"
-        variant="secondary"
-      >
-        <img alt="" aria-hidden="true" className="size-4 shrink-0" src={AUTHENTIK_LOGO_SRC} />
-        Link Authentik account
-      </Button>
+      <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+        <Button
+          className="w-fit rounded-xl"
+          disabled={!isProviderEnabled}
+          onClick={startOidcLinkFlow}
+          type="button"
+          variant="secondary"
+        >
+          Link Accounts
+        </Button>
+        <Button
+          className="rounded-xl"
+          disabled={!isConnected}
+          onClick={onUnlinkAll}
+          type="button"
+          variant="destructive"
+        >
+          Unlink all
+        </Button>
+      </div>
     </section>
   );
 }
@@ -437,25 +745,25 @@ function AuthServiceToggleButton({
       onClick={onToggle}
       type="button"
     >
-      <AuthentikServiceLogo />
+      <OidcServiceLogo />
       <AuthServiceDetails title={title} />
       <AuthServiceExpandIcon isExpanded={isExpanded} />
     </button>
   );
 }
 
-function startAuthentikLinkFlow() {
-  window.location.assign("/api/auth/oauth/authentik/start?mode=link&returnTo=/settings/auth");
+function startOidcLinkFlow() {
+  window.location.assign("/api/auth/oauth/oidc/start?mode=link&returnTo=/settings/auth");
 }
 
-function AuthentikServiceLogo() {
+function OidcServiceLogo() {
   return (
-    <img
-      alt=""
+    <div
       aria-hidden="true"
-      className="size-10 shrink-0 object-contain"
-      src={AUTHENTIK_LOGO_SRC}
-    />
+      className="grid size-10 shrink-0 place-items-center rounded-xl border border-border bg-secondary text-xs font-black tracking-[-0.08em] text-secondary-foreground"
+    >
+      ID
+    </div>
   );
 }
 
@@ -511,14 +819,29 @@ function LinkedIdentityBadge({ count }: { count: number }) {
 }
 
 function createFormState(provider: AuthProviderSummary | undefined): AuthProviderFormState {
+  if (!provider) {
+    return defaultProviderFormState;
+  }
+
   return {
-    label: provider?.label ?? "Authentik",
-    issuer: provider?.issuer ?? "",
-    clientId: provider?.clientId ?? "",
+    providerKind: provider.providerKind,
+    label: provider.label,
+    issuer: provider.issuer,
+    clientId: provider.clientId,
     clientSecret: "",
-    scopes: provider?.scopes ?? "",
-    redirectUris: provider?.redirectUris.join("\n") ?? "",
-    enabled: provider?.enabled ?? false,
+    scopes: provider.scopes,
+    redirectUris: provider.redirectUris.join("\n"),
+    enabled: provider.enabled,
+    buttonText: provider.buttonText,
+    autoRegister: provider.autoRegister,
+    tokenEndpointAuthMethod: provider.tokenEndpointAuthMethod,
+    timeoutMs: String(provider.timeoutMs),
+    prompt: provider.prompt ?? "",
+    endSessionEndpoint: provider.endSessionEndpoint ?? "",
+    idTokenSigningAlgorithm: provider.idTokenSigningAlgorithm,
+    profileSigningAlgorithm: provider.profileSigningAlgorithm,
+    mobileRedirectEnabled: provider.mobileRedirectEnabled,
+    mobileRedirectUri: provider.mobileRedirectUri ?? "",
   };
 }
 
@@ -536,20 +859,62 @@ function createProviderRequest(form: AuthProviderFormState): AuthUpsertProviderR
   const clientId = form.clientId.trim();
   const scopes = form.scopes.trim();
   const clientSecret = form.clientSecret.trim();
+  const buttonText = form.buttonText.trim();
+  const timeoutMs = Number.parseInt(form.timeoutMs, 10);
+  const prompt = form.prompt.trim();
+  const endSessionEndpoint = form.endSessionEndpoint.trim();
+  const mobileRedirectUri = form.mobileRedirectUri.trim();
 
-  if (!label || !issuer || !clientId || !scopes || redirectUris.length === 0) {
+  if (!label || !issuer || !clientId || !scopes || !buttonText || redirectUris.length === 0) {
+    return null;
+  }
+
+  if (!Number.isFinite(timeoutMs) || timeoutMs < 1) {
     return null;
   }
 
   return {
+    providerKind: form.providerKind,
     label,
     issuer,
     clientId,
     scopes,
     redirectUris,
     enabled: form.enabled,
+    buttonText,
+    autoRegister: form.autoRegister,
+    tokenEndpointAuthMethod: form.tokenEndpointAuthMethod,
+    timeoutMs,
+    ...(prompt ? { prompt } : { prompt: null }),
+    ...(endSessionEndpoint ? { endSessionEndpoint } : { endSessionEndpoint: null }),
+    idTokenSigningAlgorithm: form.idTokenSigningAlgorithm,
+    profileSigningAlgorithm: form.profileSigningAlgorithm,
+    mobileRedirectEnabled: form.mobileRedirectEnabled,
+    ...(mobileRedirectUri ? { mobileRedirectUri } : { mobileRedirectUri: null }),
     ...(clientSecret ? { clientSecret } : {}),
   };
+}
+
+function readAuthProviderKind(value: string): AuthProviderKind | null {
+  return AUTH_PROVIDER_KIND_VALUES.find((providerKind) => providerKind === value) ?? null;
+}
+
+function readTokenEndpointAuthMethod(
+  value: string,
+): AuthProviderSummary["tokenEndpointAuthMethod"] | null {
+  return TOKEN_ENDPOINT_AUTH_METHOD_VALUES.find((method) => method === value) ?? null;
+}
+
+function readOidcSigningAlgorithm(
+  value: string,
+): AuthProviderSummary["idTokenSigningAlgorithm"] | null {
+  return OIDC_SIGNING_ALGORITHM_VALUES.find((algorithm) => algorithm === value) ?? null;
+}
+
+function readOidcProfileSigningAlgorithm(
+  value: string,
+): AuthProviderSummary["profileSigningAlgorithm"] | null {
+  return OIDC_PROFILE_SIGNING_ALGORITHM_VALUES.find((algorithm) => algorithm === value) ?? null;
 }
 
 function getErrorMessage(error: unknown): string | null {

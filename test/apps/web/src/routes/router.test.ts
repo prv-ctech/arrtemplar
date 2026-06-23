@@ -68,4 +68,11 @@ describe("router route taxonomy", () => {
     expect(source).toContain("RootNotFoundRoute");
     expect(source).toContain("notFoundComponent: RootNotFoundRoute");
   });
+
+  it("does not keep the removed login signed-out fallback search param", async () => {
+    const source = await Bun.file(routerSourcePath).text();
+
+    expect(source).not.toContain("signedOut");
+    expect(source).not.toContain("validateLoginSearch");
+  });
 });

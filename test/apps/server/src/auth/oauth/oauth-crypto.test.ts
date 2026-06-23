@@ -7,7 +7,6 @@ import {
   encryptOAuthClientSecret,
   encryptOAuthIdToken,
   importOAuthSigningKey,
-  OAUTH_LOGOUT_STATE_PURPOSE,
   OAUTH_STATE_PURPOSE,
 } from "../../../../../../apps/server/src/security/oauth-crypto";
 
@@ -35,7 +34,7 @@ describe("OAuth crypto helpers", () => {
     await expect(decryptOAuthClientSecret(first.encrypted, wrongMasterKey)).rejects.toThrow();
   });
 
-  it("derives distinct keys per purpose from the same master key", async () => {
+  it("separates encryption purposes and derives an OAuth state signing key", async () => {
     const clientSecret = await encryptOAuthClientSecret("payload", masterKey);
     const idToken = await encryptOAuthIdToken("payload", masterKey);
 
@@ -44,16 +43,12 @@ describe("OAuth crypto helpers", () => {
     await expect(decryptOAuthClientSecret(idToken.encrypted, masterKey)).rejects.toThrow();
 
     const stateKey = await importOAuthSigningKey(masterKey, OAUTH_STATE_PURPOSE, ["sign"]);
-    const logoutKey = await importOAuthSigningKey(masterKey, OAUTH_LOGOUT_STATE_PURPOSE, ["sign"]);
     const message = textEncoder.encode("separation");
     const stateSignature = Buffer.from(
       await crypto.subtle.sign("HMAC", stateKey, message),
     ).toString("base64url");
-    const logoutSignature = Buffer.from(
-      await crypto.subtle.sign("HMAC", logoutKey, message),
-    ).toString("base64url");
 
-    expect(stateSignature).not.toBe(logoutSignature);
+    expect(stateSignature.length).toBeGreaterThan(0);
   });
 
   it("encrypts and decrypts ID tokens with a stable master key id", async () => {

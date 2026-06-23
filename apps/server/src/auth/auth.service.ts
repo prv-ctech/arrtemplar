@@ -6,7 +6,9 @@ import {
   type AdminUpdateUserStatusRequest,
   type ApiErrorResponse,
   type AuthIdentitiesResponse,
+  type AuthMethod,
   type AuthProviderSlug,
+  type AuthUnlinkAllIdentitiesResponse,
   type ChangePasswordRequest,
   type ChangePasswordResponse,
   type ClearNotificationHistoryResponse,
@@ -44,11 +46,12 @@ import {
   USER_PERMISSION_VALUES,
   type UserPermission,
 } from "@arrtemplar/shared";
-import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import type { DatabaseClient } from "../db/client";
 import {
   auditLogs,
   authIdentities,
+  authProviders,
   type NewNotificationHistory,
   type NotificationHistory,
   notificationHistory,
@@ -81,7 +84,7 @@ export type LoginSuccess = {
 
 export type LoginFailure = {
   ok: false;
-  status: 401 | 429;
+  status: 401 | 403 | 429;
   body: ApiErrorResponse;
 };
 
@@ -291,6 +294,7 @@ type OAuthSessionToken = {
   provider: AuthProviderSlug;
   idTokenEncrypted: string;
   masterKeyId: string;
+  sid?: string;
 };
 
 type OAuthLoginResult =
@@ -318,6 +322,20 @@ type OAuthIdentitiesResult =
       body: AuthIdentitiesResponse;
     }
   | UserProfileFailure;
+
+type OAuthUnlinkAllIdentitiesResult =
+  | {
+      ok: true;
+      body: AuthUnlinkAllIdentitiesResponse;
+    }
+  | {
+      ok: false;
+      status: 401 | 403 | 409;
+      body: ApiErrorResponse;
+    };
+type ActiveSystemAdminActorResult =
+  | { ok: true; user: User }
+  | { ok: false; status: 401 | 403; body: ApiErrorResponse };
 
 type DatabaseTransaction = Parameters<Parameters<DatabaseClient["db"]["transaction"]>[0]>[0];
 type DatabaseReader = DatabaseClient["db"] | DatabaseTransaction;
@@ -353,6 +371,13 @@ const oauthRouteRateLimitedError: ApiErrorResponse = {
   error: {
     code: "RATE_LIMITED",
     message: "Too many OAuth requests. Try again later.",
+  },
+};
+
+const passwordLoginDisabledError: ApiErrorResponse = {
+  error: {
+    code: "AUTH_MODE_PASSWORD_DISABLED",
+    message: "Password login is disabled while OAuth/OIDC is enabled.",
   },
 };
 
@@ -430,6 +455,13 @@ const oauthUserUnavailableError: ApiErrorResponse = {
   error: {
     code: "OAUTH_USER_UNAVAILABLE",
     message: "The linked user account is unavailable.",
+  },
+};
+
+const oauthAutoRegisterDisabledError: ApiErrorResponse = {
+  error: {
+    code: "OAUTH_AUTO_REGISTER_DISABLED",
+    message: "OAuth auto-registration is disabled.",
   },
 };
 
@@ -776,6 +808,16 @@ export class AuthService {
     const email = normalizeEmail(input.email);
     const rateLimitKey = createRateLimitKey(email);
 
+    if (this.isOAuthLoginEnabled()) {
+      this.writeAuditLog({
+        action: "auth.login.password_disabled",
+        metadata: { email },
+        ipAddress: context.ipAddress,
+      });
+
+      return { ok: false, status: 403, body: passwordLoginDisabledError };
+    }
+
     if (this.rateLimiter.isBlocked(rateLimitKey)) {
       this.writeAuditLog({
         action: "auth.login.rate_limited",
@@ -871,10 +913,66 @@ export class AuthService {
     this.rateLimiter.clear(key);
   }
 
+  invalidateOAuthSessions(input: {
+    context: AuthRequestContext;
+    issuer: string;
+    provider: AuthProviderSlug;
+    sid?: string;
+    subject?: string;
+  }): { deletedCount: number } {
+    const deletedCount = this.database.db.transaction((tx) => {
+      const identityUserIds = input.subject
+        ? readOAuthIdentityUserIds(tx, {
+            issuer: input.issuer,
+            provider: input.provider,
+            subject: input.subject,
+          })
+        : null;
+
+      if (identityUserIds?.length === 0) {
+        return 0;
+      }
+
+      const rows = tx
+        .select({ id: sessions.id })
+        .from(sessions)
+        .where(
+          and(
+            eq(sessions.oauthProvider, input.provider),
+            ...(input.sid ? [eq(sessions.oauthSid, input.sid)] : []),
+            ...(identityUserIds ? [inArray(sessions.userId, identityUserIds)] : []),
+          ),
+        )
+        .all();
+      const sessionIds = rows.map((row) => row.id);
+
+      if (sessionIds.length > 0) {
+        tx.delete(sessions).where(inArray(sessions.id, sessionIds)).run();
+      }
+
+      return sessionIds.length;
+    });
+
+    this.writeAuditLog({
+      action: "auth.oauth.backchannel_logout",
+      metadata: {
+        provider: input.provider,
+        issuer: input.issuer,
+        hasSubject: Boolean(input.subject),
+        hasSid: Boolean(input.sid),
+        deletedCount,
+      },
+      ipAddress: input.context.ipAddress,
+    });
+
+    return { deletedCount };
+  }
+
   completeOAuthLogin(
     input: OAuthIdentityInput,
     context: AuthRequestContext,
     oauthSessionToken?: OAuthSessionToken,
+    options: { autoRegister?: boolean } = {},
   ): OAuthLoginResult {
     const now = new Date();
     const nowIso = now.toISOString();
@@ -897,6 +995,7 @@ export class AuthService {
           .set({ lastLoginAt: nowIso, updatedAt: nowIso })
           .where(eq(users.id, existingUser.id))
           .run();
+        updateOAuthIdentityDisplayMetadata(tx, existingIdentity.id, input);
 
         const updatedUser = { ...existingUser, lastLoginAt: nowIso, updatedAt: nowIso };
         const session = this.createSession(updatedUser, context, now, tx, oauthSessionToken);
@@ -921,6 +1020,21 @@ export class AuthService {
         };
       }
 
+      if (options.autoRegister === false) {
+        writeOAuthAuditLog(tx, {
+          action: "auth.oauth.auto_register_disabled",
+          actorUserId: null,
+          context,
+          createdAt: nowIso,
+          metadata: {
+            provider: input.provider,
+            issuer: input.issuer,
+          },
+        });
+
+        return { ok: false, status: 401, body: oauthAutoRegisterDisabledError };
+      }
+
       const publicId = generatePublicUserId();
       const user = {
         id: Bun.randomUUIDv7(),
@@ -941,14 +1055,7 @@ export class AuthService {
 
       tx.insert(users).values(user).run();
       tx.insert(authIdentities)
-        .values({
-          id: Bun.randomUUIDv7(),
-          userId: user.id,
-          provider: input.provider,
-          issuer: input.issuer,
-          subject: input.subject,
-          createdAt: nowIso,
-        })
+        .values(createStoredOAuthIdentity(input, user.id, nowIso))
         .run();
 
       if (DEFAULT_SIGNED_IN_USER_PERMISSIONS.length > 0) {
@@ -997,51 +1104,42 @@ export class AuthService {
   ): OAuthIdentityLinkResult {
     const nowIso = new Date().toISOString();
 
-    return this.database.db.transaction((tx) => {
-      const actorUser = tx.select().from(users).where(eq(users.publicId, actor.id)).get();
+    return this.database.db.transaction((tx) =>
+      withActiveSystemAdminActor(tx, actor, (actorUser) => {
+        const existingIdentity = findOAuthIdentity(tx, input);
 
-      if (!actorUser || actorUser.disabledAt) {
-        return { ok: false, status: 401, body: unauthenticatedError };
-      }
+        if (existingIdentity) {
+          if (existingIdentity.userId !== actorUser.id) {
+            return { ok: false, status: 409, body: oauthIdentityAlreadyLinkedError };
+          }
 
-      if (!hasPermissionGrant(readEffectivePermissions(tx, actorUser), SYSTEM_ADMIN_PERMISSION)) {
-        return { ok: false, status: 403, body: forbiddenError(SYSTEM_ADMIN_PERMISSION) };
-      }
-
-      const existingIdentity = findOAuthIdentity(tx, input);
-
-      if (existingIdentity) {
-        if (existingIdentity.userId !== actorUser.id) {
-          return { ok: false, status: 409, body: oauthIdentityAlreadyLinkedError };
+          return {
+            ok: true,
+            identity: toSharedAuthIdentity(existingIdentity, readProviderKind(tx, input.provider)),
+          };
         }
 
-        return { ok: true, identity: toSharedAuthIdentity(existingIdentity) };
-      }
+        const identity = createStoredOAuthIdentity(input, actorUser.id, nowIso);
 
-      const identity = {
-        id: Bun.randomUUIDv7(),
-        userId: actorUser.id,
-        provider: input.provider,
-        issuer: input.issuer,
-        subject: input.subject,
-        createdAt: nowIso,
-      } satisfies StoredAuthIdentity;
+        tx.insert(authIdentities).values(identity).run();
+        writeOAuthAuditLog(tx, {
+          action: "auth.oauth.identity.linked",
+          actorUserId: actorUser.id,
+          context,
+          createdAt: nowIso,
+          metadata: {
+            provider: input.provider,
+            issuer: input.issuer,
+            subject: input.subject,
+          },
+        });
 
-      tx.insert(authIdentities).values(identity).run();
-      writeOAuthAuditLog(tx, {
-        action: "auth.oauth.identity.linked",
-        actorUserId: actorUser.id,
-        context,
-        createdAt: nowIso,
-        metadata: {
-          provider: input.provider,
-          issuer: input.issuer,
-          subject: input.subject,
-        },
-      });
-
-      return { ok: true, identity: toSharedAuthIdentity(identity) };
-    });
+        return {
+          ok: true,
+          identity: toSharedAuthIdentity(identity, readProviderKind(tx, input.provider)),
+        };
+      }),
+    );
   }
 
   listOAuthIdentities(sessionToken: string | null): OAuthIdentitiesResult {
@@ -1056,9 +1154,48 @@ export class AuthService {
       .from(authIdentities)
       .where(eq(authIdentities.userId, currentSession.user.id))
       .all()
-      .map(toSharedAuthIdentity);
+      .map((identity) =>
+        toSharedAuthIdentity(identity, readProviderKind(this.database.db, identity.provider)),
+      );
 
     return { ok: true, body: { identities } };
+  }
+
+  unlinkAllOAuthIdentities(
+    actor: PublicUser,
+    context: AuthRequestContext,
+  ): OAuthUnlinkAllIdentitiesResult {
+    const nowIso = new Date().toISOString();
+
+    return this.database.db.transaction((tx) =>
+      withActiveSystemAdminActor(tx, actor, (actorUser) => {
+        if (countActiveLocalSystemAdmins(tx) === 0) {
+          return { ok: false, status: 409, body: lastSystemAdminRequiredError };
+        }
+
+        const deletedIdentityCount = countOAuthIdentityRows(tx);
+        const revokedOAuthSessionCount = countOAuthSessionRows(tx);
+
+        tx.delete(authIdentities).run();
+        tx.delete(sessions).where(isNotNull(sessions.oauthProvider)).run();
+
+        writeOAuthAuditLog(tx, {
+          action: "auth.oauth.identities_unlinked_all",
+          actorUserId: actorUser.id,
+          context,
+          createdAt: nowIso,
+          metadata: {
+            deletedIdentityCount,
+            revokedOAuthSessionCount,
+          },
+        });
+
+        return {
+          ok: true,
+          body: { status: "ok", deletedIdentityCount, revokedOAuthSessionCount },
+        };
+      }),
+    );
   }
 
   logout(sessionToken: string | null, context: AuthRequestContext): void {
@@ -1100,19 +1237,10 @@ export class AuthService {
     );
   }
 
-  getOAuthLogoutToken(sessionToken: string | null): OAuthSessionToken | null {
+  getOAuthSessionProvider(sessionToken: string | null): AuthProviderSlug | null {
     const currentSession = this.findSession(sessionToken);
-    const session = currentSession?.session;
 
-    if (!session?.oauthProvider || !session.oauthIdTokenEncrypted || !session.oauthMasterKeyId) {
-      return null;
-    }
-
-    return {
-      provider: session.oauthProvider,
-      idTokenEncrypted: session.oauthIdTokenEncrypted,
-      masterKeyId: session.oauthMasterKeyId,
-    };
+    return currentSession?.session.oauthProvider ?? null;
   }
 
   getUserProfile(sessionToken: string | null): UserProfileResult {
@@ -1552,6 +1680,16 @@ export class AuthService {
     return count;
   }
 
+  private isOAuthLoginEnabled(): boolean {
+    const provider = this.database.db
+      .select({ id: authProviders.id })
+      .from(authProviders)
+      .where(eq(authProviders.enabled, true))
+      .get();
+
+    return Boolean(provider);
+  }
+
   private findUserByUsernameOrEmail(
     username: string | undefined,
     email: string | undefined,
@@ -1707,6 +1845,7 @@ export class AuthService {
               oauthProvider: oauthSessionToken.provider,
               oauthIdTokenEncrypted: oauthSessionToken.idTokenEncrypted,
               oauthMasterKeyId: oauthSessionToken.masterKeyId,
+              oauthSid: oauthSessionToken.sid ?? null,
             }
           : {}),
         createdAt: now.toISOString(),
@@ -1986,17 +2125,103 @@ function hasExplicitPermissionGrant(
   return Boolean(grant);
 }
 
-function countActiveSystemAdmins(tx: DatabaseTransaction): number {
-  const result = tx
-    .select({ count: sql<number>`count(*)`.mapWith(Number) })
-    .from(userPermissionGrants)
-    .innerJoin(users, eq(users.id, userPermissionGrants.userId))
-    .where(
-      and(eq(userPermissionGrants.permission, SYSTEM_ADMIN_PERMISSION), isNull(users.disabledAt)),
-    )
-    .get();
+function readActiveSystemAdminActor(
+  tx: DatabaseTransaction,
+  actor: PublicUser,
+): ActiveSystemAdminActorResult {
+  const user = tx.select().from(users).where(eq(users.publicId, actor.id)).get();
 
+  if (!user || user.disabledAt) {
+    return { ok: false, status: 401, body: unauthenticatedError };
+  }
+
+  if (!hasPermissionGrant(readEffectivePermissions(tx, user), SYSTEM_ADMIN_PERMISSION)) {
+    return { ok: false, status: 403, body: forbiddenError(SYSTEM_ADMIN_PERMISSION) };
+  }
+
+  return { ok: true, user };
+}
+
+function withActiveSystemAdminActor<TResult>(
+  tx: DatabaseTransaction,
+  actor: PublicUser,
+  callback: (actorUser: User) => TResult,
+): TResult | Extract<ActiveSystemAdminActorResult, { ok: false }> {
+  const actorResult = readActiveSystemAdminActor(tx, actor);
+
+  return actorResult.ok ? callback(actorResult.user) : actorResult;
+}
+
+function countActiveSystemAdmins(tx: DatabaseTransaction): number {
+  return countActiveSystemAdminGrants(tx);
+}
+
+function countActiveLocalSystemAdmins(tx: DatabaseTransaction): number {
+  return countActiveSystemAdminGrants(tx, { authMethod: "local" });
+}
+
+function countActiveSystemAdminGrants(
+  tx: DatabaseTransaction,
+  input: { authMethod?: AuthMethod } = {},
+): number {
+  const userFilters = [
+    eq(userPermissionGrants.permission, SYSTEM_ADMIN_PERMISSION),
+    isNull(users.disabledAt),
+  ];
+
+  if (input.authMethod) {
+    userFilters.push(eq(users.authMethod, input.authMethod));
+  }
+
+  return readCountResult(
+    tx
+      .select({ count: sql<number>`count(*)`.mapWith(Number) })
+      .from(userPermissionGrants)
+      .innerJoin(users, eq(users.id, userPermissionGrants.userId))
+      .where(and(...userFilters))
+      .get(),
+  );
+}
+
+function countOAuthIdentityRows(tx: DatabaseTransaction): number {
+  return readCountResult(
+    tx
+      .select({ count: sql<number>`count(*)`.mapWith(Number) })
+      .from(authIdentities)
+      .get(),
+  );
+}
+
+function countOAuthSessionRows(tx: DatabaseTransaction): number {
+  return readCountResult(
+    tx
+      .select({ count: sql<number>`count(*)`.mapWith(Number) })
+      .from(sessions)
+      .where(isNotNull(sessions.oauthProvider))
+      .get(),
+  );
+}
+
+function readCountResult(result: { count: number } | undefined): number {
   return result?.count ?? 0;
+}
+
+function readOAuthIdentityUserIds(
+  tx: DatabaseTransaction,
+  input: { issuer: string; provider: AuthProviderSlug; subject: string },
+): string[] {
+  return tx
+    .select({ userId: authIdentities.userId })
+    .from(authIdentities)
+    .where(
+      and(
+        eq(authIdentities.provider, input.provider),
+        eq(authIdentities.issuer, input.issuer),
+        eq(authIdentities.subject, input.subject),
+      ),
+    )
+    .all()
+    .map((identity) => identity.userId);
 }
 
 function updateManagedUserAndRevokeSessions(
@@ -2065,19 +2290,92 @@ function findOAuthIdentity(
     .get();
 }
 
-function toSharedAuthIdentity(identity: StoredAuthIdentity): SharedAuthIdentity {
+function createStoredOAuthIdentity(
+  input: OAuthIdentityInput,
+  userId: string,
+  createdAt: string,
+): StoredAuthIdentity {
+  return {
+    id: Bun.randomUUIDv7(),
+    userId,
+    provider: input.provider,
+    issuer: input.issuer,
+    subject: input.subject,
+    preferredUsername: normalizeOptionalIdentityClaim(input.preferredUsername),
+    name: normalizeOptionalIdentityClaim(input.name),
+    email: normalizeOptionalIdentityClaim(input.email),
+    createdAt,
+  };
+}
+
+function updateOAuthIdentityDisplayMetadata(
+  tx: DatabaseTransaction,
+  identityId: string,
+  input: OAuthIdentityInput,
+): void {
+  tx.update(authIdentities)
+    .set({
+      preferredUsername: normalizeOptionalIdentityClaim(input.preferredUsername),
+      name: normalizeOptionalIdentityClaim(input.name),
+      email: normalizeOptionalIdentityClaim(input.email),
+    })
+    .where(eq(authIdentities.id, identityId))
+    .run();
+}
+
+function toSharedAuthIdentity(
+  identity: StoredAuthIdentity,
+  providerKind: SharedAuthIdentity["providerKind"] = "custom",
+): SharedAuthIdentity {
   return {
     id: identity.id,
     provider: identity.provider,
+    providerKind,
     issuer: identity.issuer,
-    subject: identity.subject,
+    subjectPreview: createShortSubject(identity.subject),
+    displayName: createIdentityDisplayName(identity),
+    preferredUsername: identity.preferredUsername,
+    name: identity.name,
+    email: identity.email,
     createdAt: identity.createdAt,
   };
 }
 
+function readProviderKind(
+  tx: DatabaseReader,
+  provider: AuthProviderSlug,
+): SharedAuthIdentity["providerKind"] {
+  return (
+    tx
+      .select({ providerKind: authProviders.providerKind })
+      .from(authProviders)
+      .where(eq(authProviders.slug, provider))
+      .get()?.providerKind ?? "custom"
+  );
+}
+
+function createIdentityDisplayName(identity: StoredAuthIdentity): string {
+  return (
+    identity.preferredUsername ??
+    identity.name ??
+    identity.email ??
+    createShortSubject(identity.subject)
+  );
+}
+
+function createShortSubject(subject: string): string {
+  return subject.length > 12 ? `${subject.slice(0, 6)}…${subject.slice(-4)}` : subject;
+}
+
+function normalizeOptionalIdentityClaim(value: string | undefined): string | null {
+  const normalized = value?.trim();
+
+  return normalized || null;
+}
+
 function createOAuthUsername(tx: DatabaseReader, input: OAuthIdentityInput): string {
   const subjectHash = createSubjectHash(input.subject);
-  const baseUsername = normalizeOAuthUsername(input.preferredUsername ?? input.name) ?? "authentik";
+  const baseUsername = normalizeOAuthUsername(input.preferredUsername ?? input.name) ?? "oidc";
   const baseCandidate = baseUsername.slice(0, 80);
 
   if (!findUserByUsername(tx, baseCandidate)) {
@@ -2091,7 +2389,7 @@ function createOAuthUsername(tx: DatabaseReader, input: OAuthIdentityInput): str
     return suffixedCandidate;
   }
 
-  const fallbackBase = `authentik-${subjectHash.slice(0, 16)}`;
+  const fallbackBase = `oidc-${subjectHash.slice(0, 16)}`;
 
   for (let attempt = 0; attempt < 20; attempt += 1) {
     const candidate = attempt === 0 ? fallbackBase : `${fallbackBase}-${attempt}`;
@@ -2143,7 +2441,7 @@ function writeOAuthAuditLog(
   tx: DatabaseReader,
   input: {
     action: string;
-    actorUserId: string;
+    actorUserId: string | null;
     context: AuthRequestContext;
     createdAt: string;
     metadata: Record<string, unknown>;

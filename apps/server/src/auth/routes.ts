@@ -4,6 +4,7 @@ import type {
   AuthProviderSlug,
   AuthProvidersListResponse,
   AuthSetupStatusResponse,
+  AuthUnlinkAllIdentitiesResponse,
   AuthUpsertProviderRequest,
   AuthUserResponse,
   ChangePasswordResponse,
@@ -29,12 +30,15 @@ import type {
 } from "@arrtemplar/shared";
 import {
   AUTH_METHOD_VALUES,
+  AUTH_PROVIDER_KIND_VALUES,
   AUTH_PROVIDER_SLUGS,
   isProfileAvatarId,
   isProfileBannerId,
   isToastNotificationId,
   isUserPermission,
   NOTIFICATION_FREQUENCY_VALUES,
+  OIDC_PROFILE_SIGNING_ALGORITHM_VALUES,
+  OIDC_SIGNING_ALGORITHM_VALUES,
   PERMISSION_CATALOG,
   PERMISSION_CATEGORIES,
   PERMISSION_DEFAULT_GRANTS,
@@ -46,14 +50,13 @@ import {
   TOAST_NOTIFICATION_EVENT_IDS,
   TOAST_NOTIFICATION_IMPORTANCE_VALUES,
   TOAST_NOTIFICATION_SEVERITY_VALUES,
+  TOKEN_ENDPOINT_AUTH_METHOD_VALUES,
   USER_PERMISSION_VALUES,
 } from "@arrtemplar/shared";
 import { Elysia, t } from "elysia";
 import { env } from "../config/env";
 import type { DatabaseClient } from "../db/client";
 import {
-  OAUTH_LOGOUT_STATE_COOKIE_MAX_AGE_SECONDS,
-  OAUTH_LOGOUT_STATE_COOKIE_NAME,
   OAUTH_STATE_COOKIE_MAX_AGE_SECONDS,
   OAUTH_STATE_COOKIE_NAME,
 } from "../security/oauth-state";
@@ -72,6 +75,30 @@ const authMethodSchema = t.Union(
 );
 const authProviderSlugSchema = t.Union(
   AUTH_PROVIDER_SLUGS.map((slug) => t.Literal(slug)) as [
+    ReturnType<typeof t.Literal>,
+    ...ReturnType<typeof t.Literal>[],
+  ],
+);
+const authProviderKindSchema = t.Union(
+  AUTH_PROVIDER_KIND_VALUES.map((providerKind) => t.Literal(providerKind)) as [
+    ReturnType<typeof t.Literal>,
+    ...ReturnType<typeof t.Literal>[],
+  ],
+);
+const tokenEndpointAuthMethodSchema = t.Union(
+  TOKEN_ENDPOINT_AUTH_METHOD_VALUES.map((method) => t.Literal(method)) as [
+    ReturnType<typeof t.Literal>,
+    ...ReturnType<typeof t.Literal>[],
+  ],
+);
+const oidcSigningAlgorithmSchema = t.Union(
+  OIDC_SIGNING_ALGORITHM_VALUES.map((algorithm) => t.Literal(algorithm)) as [
+    ReturnType<typeof t.Literal>,
+    ...ReturnType<typeof t.Literal>[],
+  ],
+);
+const oidcProfileSigningAlgorithmSchema = t.Union(
+  OIDC_PROFILE_SIGNING_ALGORITHM_VALUES.map((algorithm) => t.Literal(algorithm)) as [
     ReturnType<typeof t.Literal>,
     ...ReturnType<typeof t.Literal>[],
   ],
@@ -193,12 +220,23 @@ const managedUserSummarySchema = t.Object({
 
 const authProviderSummarySchema = t.Object({
   slug: authProviderSlugSchema,
+  providerKind: authProviderKindSchema,
   label: t.String(),
   issuer: t.String({ format: "uri" }),
   clientId: t.String(),
   scopes: t.String(),
   redirectUris: t.Array(t.String({ format: "uri" })),
   enabled: t.Boolean(),
+  buttonText: t.String(),
+  autoRegister: t.Boolean(),
+  tokenEndpointAuthMethod: tokenEndpointAuthMethodSchema,
+  timeoutMs: t.Number({ minimum: 1 }),
+  prompt: t.Union([t.String(), t.Null()]),
+  endSessionEndpoint: t.Union([t.String({ format: "uri" }), t.Null()]),
+  idTokenSigningAlgorithm: oidcSigningAlgorithmSchema,
+  profileSigningAlgorithm: oidcProfileSigningAlgorithmSchema,
+  mobileRedirectEnabled: t.Boolean(),
+  mobileRedirectUri: t.Union([t.String({ format: "uri" }), t.Null()]),
   hasClientSecret: t.Boolean(),
   createdAt: t.String({ format: "date-time" }),
   updatedAt: t.String({ format: "date-time" }),
@@ -207,8 +245,13 @@ const authProviderSummarySchema = t.Object({
 const authIdentitySchema = t.Object({
   id: t.String(),
   provider: authProviderSlugSchema,
+  providerKind: authProviderKindSchema,
   issuer: t.String({ format: "uri" }),
-  subject: t.String(),
+  subjectPreview: t.String(),
+  displayName: t.String(),
+  preferredUsername: t.Union([t.String(), t.Null()]),
+  name: t.Union([t.String(), t.Null()]),
+  email: t.Union([t.String({ format: "email" }), t.Null()]),
   createdAt: t.String({ format: "date-time" }),
 });
 
@@ -270,7 +313,6 @@ const markNotificationReadRequestSchema = t.Object({
 });
 const oauthStartQuerySchema = t.Object({
   mode: t.Optional(t.Union([t.Literal("login"), t.Literal("link")])),
-  prompt: t.Optional(t.Literal("login")),
   returnTo: t.Optional(t.String({ maxLength: 2048 })),
 });
 const oauthCallbackQuerySchema = t.Object({
@@ -285,7 +327,9 @@ const authProviderSlugParamsSchema = t.Object({
   slug: authProviderSlugSchema,
 });
 const redirectUrisSchema = t.Array(t.String({ format: "uri" }), { minItems: 1, maxItems: 10 });
+const nullableUriSchema = t.Union([t.String({ format: "uri", maxLength: 2048 }), t.Null()]);
 const upsertAuthProviderRequestSchema = t.Object({
+  providerKind: authProviderKindSchema,
   label: t.String({ minLength: 1, maxLength: 80, pattern: ".*\\S.*" }),
   issuer: t.String({ format: "uri", maxLength: 2048 }),
   clientId: t.String({ minLength: 1, maxLength: 512, pattern: ".*\\S.*" }),
@@ -293,8 +337,19 @@ const upsertAuthProviderRequestSchema = t.Object({
   scopes: t.String({ minLength: 1, maxLength: 500, pattern: ".*\\S.*" }),
   redirectUris: redirectUrisSchema,
   enabled: t.Boolean(),
+  buttonText: t.String({ minLength: 1, maxLength: 80, pattern: ".*\\S.*" }),
+  autoRegister: t.Boolean(),
+  tokenEndpointAuthMethod: tokenEndpointAuthMethodSchema,
+  timeoutMs: t.Number({ minimum: 1, maximum: 120_000 }),
+  prompt: t.Optional(t.Union([t.String({ maxLength: 200 }), t.Null()])),
+  endSessionEndpoint: t.Optional(nullableUriSchema),
+  idTokenSigningAlgorithm: oidcSigningAlgorithmSchema,
+  profileSigningAlgorithm: oidcProfileSigningAlgorithmSchema,
+  mobileRedirectEnabled: t.Boolean(),
+  mobileRedirectUri: t.Optional(nullableUriSchema),
 });
 const patchAuthProviderRequestSchema = t.Object({
+  providerKind: t.Optional(authProviderKindSchema),
   label: t.Optional(t.String({ minLength: 1, maxLength: 80, pattern: ".*\\S.*" })),
   issuer: t.Optional(t.String({ format: "uri", maxLength: 2048 })),
   clientId: t.Optional(t.String({ minLength: 1, maxLength: 512, pattern: ".*\\S.*" })),
@@ -302,6 +357,19 @@ const patchAuthProviderRequestSchema = t.Object({
   scopes: t.Optional(t.String({ minLength: 1, maxLength: 500, pattern: ".*\\S.*" })),
   redirectUris: t.Optional(redirectUrisSchema),
   enabled: t.Optional(t.Boolean()),
+  buttonText: t.Optional(t.String({ minLength: 1, maxLength: 80, pattern: ".*\\S.*" })),
+  autoRegister: t.Optional(t.Boolean()),
+  tokenEndpointAuthMethod: t.Optional(tokenEndpointAuthMethodSchema),
+  timeoutMs: t.Optional(t.Number({ minimum: 1, maximum: 120_000 })),
+  prompt: t.Optional(t.Union([t.String({ maxLength: 200 }), t.Null()])),
+  endSessionEndpoint: t.Optional(nullableUriSchema),
+  idTokenSigningAlgorithm: t.Optional(oidcSigningAlgorithmSchema),
+  profileSigningAlgorithm: t.Optional(oidcProfileSigningAlgorithmSchema),
+  mobileRedirectEnabled: t.Optional(t.Boolean()),
+  mobileRedirectUri: t.Optional(nullableUriSchema),
+});
+const oauthBackChannelLogoutBodySchema = t.Object({
+  logout_token: t.Optional(t.String({ minLength: 1, maxLength: 20_000 })),
 });
 const notificationHistoryQuerySchema = t.Object({
   page: t.Optional(t.Numeric({ minimum: 1 })),
@@ -345,6 +413,11 @@ const authUserResponseSchema = t.Object({ user: t.Union([publicUserSchema, t.Nul
 const authProvidersListResponseSchema = t.Object({ providers: t.Array(authProviderSummarySchema) });
 const authProviderResponseSchema = t.Object({ provider: authProviderSummarySchema });
 const authIdentitiesResponseSchema = t.Object({ identities: t.Array(authIdentitySchema) });
+const authUnlinkAllIdentitiesResponseSchema = t.Object({
+  status: t.Literal("ok"),
+  deletedIdentityCount: t.Number({ minimum: 0 }),
+  revokedOAuthSessionCount: t.Number({ minimum: 0 }),
+});
 const userProfileResponseSchema = t.Object({ user: publicUserSchema });
 const updateUserProfileResponseSchema = t.Object({ user: publicUserSchema });
 const notificationPreferencesResponseSchema = t.Object({
@@ -365,7 +438,10 @@ const clearNotificationHistoryResponseSchema = t.Object({
   status: t.Literal("ok"),
   deletedCount: t.Number({ minimum: 0 }),
 });
-const logoutResponseSchema = t.Object({ status: t.Literal("ok") });
+const logoutResponseSchema = t.Object({
+  status: t.Literal("ok"),
+  redirectUri: t.Optional(t.String({ format: "uri" })),
+});
 const changePasswordResponseSchema = t.Object({ status: t.Literal("ok") });
 const sessionCookieSchema = t.Cookie({
   [SESSION_COOKIE_NAME]: t.Optional(t.String()),
@@ -377,7 +453,6 @@ const oauthCookieSchema = t.Cookie({
 const logoutCookieSchema = t.Cookie({
   [SESSION_COOKIE_NAME]: t.Optional(t.String()),
   [OAUTH_STATE_COOKIE_NAME]: t.Optional(t.String()),
-  [OAUTH_LOGOUT_STATE_COOKIE_NAME]: t.Optional(t.String()),
 });
 const apiErrorResponseSchema = t.Object({
   error: t.Object({
@@ -398,13 +473,6 @@ const oauthRedirectResponseSchema = {
 const oauthCallbackResponseSchema = {
   ...oauthRedirectResponseSchema,
   409: apiErrorResponseSchema,
-};
-const logoutCallbackQuerySchema = t.Object({
-  state: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
-});
-const logoutCallbackResponseSchema = {
-  302: t.Void(),
-  400: apiErrorResponseSchema,
 };
 const authProviderMutationResponseSchema = {
   200: authProviderResponseSchema,
@@ -441,8 +509,8 @@ type AuthProviderParamResult =
 type ProviderMutationResult =
   | { ok: true; body: unknown }
   | { ok: false; status: number; body: ApiErrorResponse };
-type ProviderMutationContext<TInput> = {
-  body: TInput;
+type ProviderMutationContext = {
+  body: unknown;
   cookie: Record<string, { value?: unknown } | undefined>;
   params: { slug: unknown };
   status: StatusHandler;
@@ -473,11 +541,46 @@ function createOAuthRoutes(
     .use(createOAuthProviderListRoute(oauthService))
     .use(createOAuthStartRoute(authService, oauthService, options))
     .use(createOAuthCallbackRoute(authService, oauthService, options))
-    .use(createLogoutCallbackRoute(oauthService))
+    .use(createOAuthBackChannelLogoutRoute(oauthService))
     .use(createOAuthProviderUpsertRoute(authService, oauthService))
     .use(createOAuthProviderPatchRoute(authService, oauthService))
     .use(createOAuthProviderDeleteRoute(authService, oauthService))
-    .use(createOAuthIdentitiesRoute(authService));
+    .use(createOAuthIdentitiesRoute(authService))
+    .use(createOAuthUnlinkAllIdentitiesRoute(authService));
+}
+
+function createOAuthBackChannelLogoutRoute(oauthService: OAuthService) {
+  return new Elysia().post(
+    "/auth/oauth/backchannel-logout",
+    async ({ body, request, server }) => {
+      if (!body.logout_token) {
+        return noStoreJsonResponse(400, oauthLogoutTokenInvalidResponse());
+      }
+
+      const result = await oauthService.handleBackChannelLogout({
+        logoutToken: body.logout_token,
+        context: createRequestContext(request, server),
+      });
+
+      return result.ok
+        ? noStoreJsonResponse(200, { status: "ok" } satisfies LogoutResponse)
+        : noStoreJsonResponse(result.status, result.body);
+    },
+    {
+      body: oauthBackChannelLogoutBodySchema,
+      response: {
+        200: logoutResponseSchema,
+        400: apiErrorResponseSchema,
+        502: apiErrorResponseSchema,
+      },
+      detail: {
+        summary: "Accept OAuth back-channel logout",
+        description:
+          "Accepts an OIDC Back-Channel Logout logout_token form post and revokes matching local OAuth sessions.",
+        tags: ["Auth"],
+      },
+    },
+  );
 }
 
 function createOAuthProviderListRoute(oauthService: OAuthService) {
@@ -537,7 +640,6 @@ function createOAuthStartRoute(
         provider: providerResult.provider,
         mode: query.mode ?? "login",
         ...(linkActorResult.linkToUserId ? { linkToUserId: linkActorResult.linkToUserId } : {}),
-        ...(query.prompt ? { prompt: query.prompt } : {}),
         ...(query.returnTo ? { returnTo: query.returnTo } : {}),
         requestUrl: request.url,
       });
@@ -648,45 +750,13 @@ function createOAuthCallbackRoute(
   );
 }
 
-function createLogoutCallbackRoute(oauthService: OAuthService) {
-  return new Elysia().get(
-    "/auth/logout/callback",
-    async ({ cookie, query, status }) => {
-      if (!query.state) {
-        return status(400, oauthLogoutStateInvalidResponse());
-      }
-
-      const validState = await oauthService.verifyLogoutState({
-        state: query.state,
-        logoutStateCookieValue: cookie[OAUTH_LOGOUT_STATE_COOKIE_NAME].value,
-      });
-
-      cookie[OAUTH_LOGOUT_STATE_COOKIE_NAME].remove();
-
-      if (!validState) {
-        return status(400, oauthLogoutStateInvalidResponse());
-      }
-
-      return redirectResponse(new URL("/login", env.webOrigin).toString());
-    },
-    {
-      query: logoutCallbackQuerySchema,
-      cookie: logoutCookieSchema,
-      response: logoutCallbackResponseSchema,
-      detail: {
-        summary: "Complete OAuth logout",
-        description: "Validates OAuth logout state and redirects back to the login page.",
-        tags: ["Auth"],
-      },
-    },
-  );
-}
-
 function createOAuthProviderUpsertRoute(authService: AuthService, oauthService: OAuthService) {
   return new Elysia().put(
     "/auth/providers/:slug",
-    createOAuthProviderMutationHandler<AuthUpsertProviderRequest>(authService, (slug, input) =>
-      oauthService.upsertProvider(slug, input),
+    createOAuthProviderMutationHandler(
+      authService,
+      normalizeAuthUpsertProviderRequest,
+      (slug, input) => oauthService.upsertProvider(slug, input),
     ),
     {
       params: authProviderSlugParamsSchema,
@@ -705,8 +775,10 @@ function createOAuthProviderUpsertRoute(authService: AuthService, oauthService: 
 function createOAuthProviderPatchRoute(authService: AuthService, oauthService: OAuthService) {
   return new Elysia().patch(
     "/auth/providers/:slug",
-    createOAuthProviderMutationHandler<AuthPatchProviderRequest>(authService, (slug, input) =>
-      oauthService.patchProvider(slug, input),
+    createOAuthProviderMutationHandler(
+      authService,
+      normalizeAuthPatchProviderRequest,
+      (slug, input) => oauthService.patchProvider(slug, input),
     ),
     {
       params: authProviderSlugParamsSchema,
@@ -775,6 +847,38 @@ function createOAuthIdentitiesRoute(authService: AuthService) {
   );
 }
 
+function createOAuthUnlinkAllIdentitiesRoute(authService: AuthService) {
+  return new Elysia().delete(
+    "/auth/identities",
+    ({ cookie, request, server, status }) =>
+      withSystemAdmin(authService, cookie[SESSION_COOKIE_NAME].value, status, (user) => {
+        const result = authService.unlinkAllOAuthIdentities(
+          user,
+          createRequestContext(request, server),
+        );
+
+        return result.ok
+          ? (result.body satisfies AuthUnlinkAllIdentitiesResponse)
+          : status(result.status, result.body);
+      }),
+    {
+      cookie: sessionCookieSchema,
+      response: {
+        200: authUnlinkAllIdentitiesResponseSchema,
+        401: apiErrorResponseSchema,
+        403: apiErrorResponseSchema,
+        409: apiErrorResponseSchema,
+      },
+      detail: {
+        summary: "Unlink all OAuth identities",
+        description:
+          "Deletes all OAuth identity links and revokes OAuth sessions while preserving users.",
+        tags: ["Auth"],
+      },
+    },
+  );
+}
+
 function createSetupRoutes(authService: AuthService, options: AuthRoutesOptions) {
   return new Elysia()
     .get(
@@ -834,6 +938,7 @@ function createSessionRoutes(
         response: {
           200: loginResponseSchema,
           401: apiErrorResponseSchema,
+          403: apiErrorResponseSchema,
           429: apiErrorResponseSchema,
         },
         cookie: sessionCookieSchema,
@@ -851,7 +956,6 @@ function createSessionRoutes(
         const sessionToken = readSessionToken(sessionCookie.value);
         const logoutResult = await oauthService.buildLogout({
           sessionToken,
-          requestUrl: request.url,
         });
 
         authService.logout(sessionToken, createRequestContext(request, server));
@@ -859,24 +963,12 @@ function createSessionRoutes(
         sessionCookie.remove();
         cookie[OAUTH_STATE_COOKIE_NAME].remove();
 
-        if (logoutResult.kind === "sso") {
-          writeLogoutStateCookie(
-            cookie[OAUTH_LOGOUT_STATE_COOKIE_NAME],
-            logoutResult.logoutStateCookieValue,
-            options,
-          );
-
-          return new Response(logoutResult.html, {
-            status: 200,
-            headers: {
-              "content-type": "text/html; charset=utf-8",
-              "cache-control": "no-store",
-              "referrer-policy": "no-referrer",
-            },
-          });
-        }
-
-        return Response.json({ status: "ok" } satisfies LogoutResponse);
+        return noStoreJsonResponse(
+          200,
+          logoutResult.kind === "sso"
+            ? ({ status: "ok", redirectUri: logoutResult.redirectUri } satisfies LogoutResponse)
+            : ({ status: "ok" } satisfies LogoutResponse),
+        );
       },
       {
         cookie: logoutCookieSchema,
@@ -884,7 +976,7 @@ function createSessionRoutes(
         detail: {
           summary: "Log out",
           description:
-            "Deletes the current server-side session. OAuth sessions continue to provider-initiated SSO logout via an auto-submitting POST form.",
+            "Deletes the current server-side session. OAuth sessions return a discovered provider end-session redirect URI for top-level GET navigation.",
           tags: ["Auth"],
         },
       },
@@ -1547,11 +1639,11 @@ function oauthCallbackInvalidResponse(): ApiErrorResponse {
   };
 }
 
-function oauthLogoutStateInvalidResponse(): ApiErrorResponse {
+function oauthLogoutTokenInvalidResponse(): ApiErrorResponse {
   return {
     error: {
-      code: "OAUTH_LOGOUT_STATE_INVALID",
-      message: "OAuth logout state is invalid or expired.",
+      code: "OAUTH_LOGOUT_TOKEN_INVALID",
+      message: "OAuth logout token is invalid.",
     },
   };
 }
@@ -1686,20 +1778,163 @@ async function withSystemAdminProviderSlug<T>(
 
 function createOAuthProviderMutationHandler<TInput>(
   authService: AuthService,
+  normalizeInput: (input: unknown) => TInput | null,
   mutate: (slug: AuthProviderSlug, input: TInput) => Promise<ProviderMutationResult>,
 ) {
-  return ({ body, cookie, params, status }: ProviderMutationContext<TInput>) =>
-    withSystemAdminProviderSlug(
+  return ({ body, cookie, params, status }: ProviderMutationContext) => {
+    const input = normalizeInput(body);
+
+    if (!input) {
+      return status(400, invalidAuthProviderResponse());
+    }
+
+    return withSystemAdminProviderSlug(
       authService,
       cookie[SESSION_COOKIE_NAME]?.value,
       params.slug,
       status,
       async (slug) => {
-        const result = await mutate(slug, body);
+        const result = await mutate(slug, input);
 
         return result.ok ? result.body : status(result.status, result.body);
       },
     );
+  };
+}
+
+function normalizeAuthUpsertProviderRequest(input: unknown): AuthUpsertProviderRequest | null {
+  if (!isRecord(input) || !isCompleteProviderRequest(input)) {
+    return null;
+  }
+
+  return {
+    providerKind: input.providerKind,
+    label: input.label,
+    issuer: input.issuer,
+    clientId: input.clientId,
+    ...(typeof input.clientSecret === "string" ? { clientSecret: input.clientSecret } : {}),
+    scopes: input.scopes,
+    redirectUris: input.redirectUris,
+    enabled: input.enabled,
+    buttonText: input.buttonText,
+    autoRegister: input.autoRegister,
+    tokenEndpointAuthMethod: input.tokenEndpointAuthMethod,
+    timeoutMs: input.timeoutMs,
+    prompt: typeof input.prompt === "string" || input.prompt === null ? input.prompt : null,
+    endSessionEndpoint:
+      typeof input.endSessionEndpoint === "string" || input.endSessionEndpoint === null
+        ? input.endSessionEndpoint
+        : null,
+    idTokenSigningAlgorithm: input.idTokenSigningAlgorithm,
+    profileSigningAlgorithm: input.profileSigningAlgorithm,
+    mobileRedirectEnabled: input.mobileRedirectEnabled,
+    mobileRedirectUri:
+      typeof input.mobileRedirectUri === "string" || input.mobileRedirectUri === null
+        ? input.mobileRedirectUri
+        : null,
+  };
+}
+
+function normalizeAuthPatchProviderRequest(input: unknown): AuthPatchProviderRequest | null {
+  if (!isRecord(input)) {
+    return null;
+  }
+
+  return {
+    ...normalizeAuthPatchCore(input),
+    ...normalizeAuthPatchAdvanced(input),
+  };
+}
+
+function normalizeAuthPatchCore(input: Record<string, unknown>): AuthPatchProviderRequest {
+  return {
+    ...(isAuthProviderKind(input.providerKind) ? { providerKind: input.providerKind } : {}),
+    ...(typeof input.label === "string" ? { label: input.label } : {}),
+    ...(typeof input.issuer === "string" ? { issuer: input.issuer } : {}),
+    ...(typeof input.clientId === "string" ? { clientId: input.clientId } : {}),
+    ...(typeof input.clientSecret === "string" ? { clientSecret: input.clientSecret } : {}),
+    ...(typeof input.scopes === "string" ? { scopes: input.scopes } : {}),
+    ...(isStringArray(input.redirectUris) ? { redirectUris: input.redirectUris } : {}),
+    ...(typeof input.enabled === "boolean" ? { enabled: input.enabled } : {}),
+  };
+}
+
+function normalizeAuthPatchAdvanced(input: Record<string, unknown>): AuthPatchProviderRequest {
+  return {
+    ...(typeof input.buttonText === "string" ? { buttonText: input.buttonText } : {}),
+    ...(typeof input.autoRegister === "boolean" ? { autoRegister: input.autoRegister } : {}),
+    ...(isTokenEndpointAuthMethod(input.tokenEndpointAuthMethod)
+      ? { tokenEndpointAuthMethod: input.tokenEndpointAuthMethod }
+      : {}),
+    ...(typeof input.timeoutMs === "number" ? { timeoutMs: input.timeoutMs } : {}),
+    ...(typeof input.prompt === "string" || input.prompt === null ? { prompt: input.prompt } : {}),
+    ...(typeof input.endSessionEndpoint === "string" || input.endSessionEndpoint === null
+      ? { endSessionEndpoint: input.endSessionEndpoint }
+      : {}),
+    ...(isOidcSigningAlgorithm(input.idTokenSigningAlgorithm)
+      ? { idTokenSigningAlgorithm: input.idTokenSigningAlgorithm }
+      : {}),
+    ...(isOidcProfileSigningAlgorithm(input.profileSigningAlgorithm)
+      ? { profileSigningAlgorithm: input.profileSigningAlgorithm }
+      : {}),
+    ...(typeof input.mobileRedirectEnabled === "boolean"
+      ? { mobileRedirectEnabled: input.mobileRedirectEnabled }
+      : {}),
+    ...(typeof input.mobileRedirectUri === "string" || input.mobileRedirectUri === null
+      ? { mobileRedirectUri: input.mobileRedirectUri }
+      : {}),
+  };
+}
+
+function isCompleteProviderRequest(
+  input: Record<string, unknown>,
+): input is AuthUpsertProviderRequest {
+  return (
+    isAuthProviderKind(input.providerKind) &&
+    typeof input.label === "string" &&
+    typeof input.issuer === "string" &&
+    typeof input.clientId === "string" &&
+    typeof input.scopes === "string" &&
+    isStringArray(input.redirectUris) &&
+    typeof input.enabled === "boolean" &&
+    typeof input.buttonText === "string" &&
+    typeof input.autoRegister === "boolean" &&
+    isTokenEndpointAuthMethod(input.tokenEndpointAuthMethod) &&
+    typeof input.timeoutMs === "number" &&
+    isOidcSigningAlgorithm(input.idTokenSigningAlgorithm) &&
+    isOidcProfileSigningAlgorithm(input.profileSigningAlgorithm) &&
+    typeof input.mobileRedirectEnabled === "boolean"
+  );
+}
+
+function isAuthProviderKind(value: unknown): value is AuthUpsertProviderRequest["providerKind"] {
+  return AUTH_PROVIDER_KIND_VALUES.some((providerKind) => providerKind === value);
+}
+
+function isTokenEndpointAuthMethod(
+  value: unknown,
+): value is AuthUpsertProviderRequest["tokenEndpointAuthMethod"] {
+  return TOKEN_ENDPOINT_AUTH_METHOD_VALUES.some((method) => method === value);
+}
+
+function isOidcSigningAlgorithm(
+  value: unknown,
+): value is AuthUpsertProviderRequest["idTokenSigningAlgorithm"] {
+  return OIDC_SIGNING_ALGORITHM_VALUES.some((algorithm) => algorithm === value);
+}
+
+function isOidcProfileSigningAlgorithm(
+  value: unknown,
+): value is AuthUpsertProviderRequest["profileSigningAlgorithm"] {
+  return OIDC_PROFILE_SIGNING_ALGORITHM_VALUES.some((algorithm) => algorithm === value);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === "string");
 }
 
 function runManagedUserMutation<TBody>(
@@ -1821,14 +2056,6 @@ function writeOAuthStateCookie(
   writeOAuthFlowStateCookie(stateCookie, value, OAUTH_STATE_COOKIE_MAX_AGE_SECONDS, options);
 }
 
-function writeLogoutStateCookie(
-  stateCookie: WritableRouteCookie,
-  value: string,
-  options: AuthRoutesOptions,
-): void {
-  writeOAuthFlowStateCookie(stateCookie, value, OAUTH_LOGOUT_STATE_COOKIE_MAX_AGE_SECONDS, options);
-}
-
 function writeOAuthFlowStateCookie(
   stateCookie: WritableRouteCookie,
   value: string,
@@ -1848,6 +2075,16 @@ function redirectResponse(location: string): Response {
   return new Response(null, {
     status: 302,
     headers: { location },
+  });
+}
+
+function noStoreJsonResponse(statusCode: number, body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status: statusCode,
+    headers: {
+      "cache-control": "no-store",
+      "content-type": "application/json",
+    },
   });
 }
 

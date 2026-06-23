@@ -45,7 +45,7 @@ describe("LoginRateLimiter", () => {
   it("partitions OAuth route keys by IP, route, provider, and mode", () => {
     const baseKey = createOAuthRouteRateLimitKey({
       ipAddress: "198.51.100.10",
-      provider: "authentik",
+      provider: "oidc",
       route: "start",
       mode: "login",
     });
@@ -53,7 +53,7 @@ describe("LoginRateLimiter", () => {
     expect(
       createOAuthRouteRateLimitKey({
         ipAddress: "198.51.100.11",
-        provider: "authentik",
+        provider: "oidc",
         route: "start",
         mode: "login",
       }),
@@ -61,7 +61,7 @@ describe("LoginRateLimiter", () => {
     expect(
       createOAuthRouteRateLimitKey({
         ipAddress: "198.51.100.10",
-        provider: "authentik",
+        provider: "oidc",
         route: "callback",
         mode: "login",
       }),
@@ -69,7 +69,7 @@ describe("LoginRateLimiter", () => {
     expect(
       createOAuthRouteRateLimitKey({
         ipAddress: "198.51.100.10",
-        provider: "authentik",
+        provider: "oidc",
         route: "start",
         mode: "link",
       }),

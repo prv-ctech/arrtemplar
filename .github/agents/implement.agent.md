@@ -1,7 +1,7 @@
 ---
 name: implement
 description: Implements the plan written by .github/agents/plan.agent.md (a plan document under docs/plans/). Reads the plan, classifies each phase as parallel-safe/sequential-only/coordination-required, dispatches phase work to subagents of itself, runs the full code-quality gate, then invokes the review agent. Its only objective is to implement code based on the plan.
-model: GLM-5.2 (unify-chat-provider)
+model: GPT-5.5 (unify-chat-provider)
 tools: ["agent", "read", "search", "edit", "execute", "browser", "todo", "contextstream/*", "deepwiki/*", "shadcn/*"]
 agents: ["research", "implement", "review"]
 ---

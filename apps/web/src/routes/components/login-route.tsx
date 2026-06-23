@@ -1,12 +1,11 @@
-import { Navigate, useSearch } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { Navigate } from "@tanstack/react-router";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { Button } from "@/components/ui/button";
 import { getLandingPathForUser } from "@/features/auth/auth-navigation";
 import { useAuthSetupQuery, useCurrentUserQuery } from "@/features/auth/auth-state";
 import { useAuthProvidersQuery } from "@/features/auth-settings/auth-settings";
 
-const authentikStartPath = "/api/auth/oauth/authentik/start";
+const oidcStartPath = "/api/auth/oauth/oidc/start";
 
 const loginMediaAssets = {
   backdrop: "https://picsum.photos/seed/login-backdrop/1800/1200",
@@ -14,8 +13,6 @@ const loginMediaAssets = {
 } as const;
 
 export function LoginRoute() {
-  const { signedOut } = useSearch({ from: "/login" });
-  const shouldForceProviderLogin = signedOut === true;
   const userQuery = useCurrentUserQuery();
   const setupQuery = useAuthSetupQuery();
   const providersQuery = useAuthProvidersQuery();
@@ -38,19 +35,21 @@ export function LoginRoute() {
             Retry provider check
           </Button>
         }
-        description="The API could not confirm whether Authentik is enabled."
+        description="The API could not confirm whether single sign-on is enabled."
         title="Authentication check failed"
       />
     ) : (
       <LoginRouteStatus
-        description="Checking whether Authentik should handle sign-in."
+        description="Checking whether single sign-on should handle sign-in."
         title="Checking authentication"
       />
     );
   }
 
-  if (isAuthentikEnabled(providersQuery.data)) {
-    return <AuthentikPrimaryRedirect forceProviderLogin={shouldForceProviderLogin} />;
+  const oidcProvider = findEnabledOidcProvider(providersQuery.data);
+
+  if (oidcProvider) {
+    return <OidcPrimarySignIn buttonText={oidcProvider.buttonText} />;
   }
 
   return (
@@ -61,25 +60,22 @@ export function LoginRoute() {
   );
 }
 
-function isAuthentikEnabled(providers: ReturnType<typeof useAuthProvidersQuery>["data"]): boolean {
-  return providers?.some((provider) => provider.slug === "authentik" && provider.enabled) ?? false;
+function findEnabledOidcProvider(providers: ReturnType<typeof useAuthProvidersQuery>["data"]) {
+  return providers?.find((provider) => provider.slug === "oidc" && provider.enabled) ?? null;
 }
 
-function AuthentikPrimaryRedirect({ forceProviderLogin }: { forceProviderLogin: boolean }) {
-  useEffect(() => {
-    window.location.assign(getAuthentikStartPath(forceProviderLogin));
-  }, [forceProviderLogin]);
-
+function OidcPrimarySignIn({ buttonText }: { buttonText: string }) {
   return (
     <LoginRouteStatus
-      description="Authenticator is enabled, so local sign-in stays hidden."
-      title="Redirecting to Authentik"
+      action={
+        <Button asChild className="h-11 rounded-2xl px-5 font-semibold">
+          <a href={oidcStartPath}>{buttonText}</a>
+        </Button>
+      }
+      description="Single sign-on is enabled, so local sign-in stays hidden."
+      title="Sign in with SSO"
     />
   );
-}
-
-function getAuthentikStartPath(forceProviderLogin: boolean): string {
-  return forceProviderLogin ? `${authentikStartPath}?prompt=login` : authentikStartPath;
 }
 
 function LoginRouteStatus({

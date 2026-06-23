@@ -7,9 +7,11 @@ import type {
   AdminUserSummary,
   AuthIdentity,
   AuthMethod,
+  AuthProviderKind,
   AuthProviderSlug,
   AuthProviderSummary,
   AuthSetupStatusResponse,
+  AuthUnlinkAllIdentitiesResponse,
   AuthUpsertProviderRequest,
   ChangePasswordRequest,
   ChangePasswordResponse,
@@ -37,6 +39,8 @@ import type {
   UserPermission,
 } from "@arrtemplar/shared";
 import {
+  AUTH_PROVIDER_KIND_VALUES,
+  AUTH_PROVIDER_SLUGS,
   CSRF_HEADER_NAME,
   CSRF_HEADER_VALUE,
   DEFAULT_NOTIFICATION_PREFERENCES,
@@ -48,7 +52,10 @@ import {
   isToastNotificationImportance,
   isToastNotificationSeverity,
   isUserPermission,
+  OIDC_PROFILE_SIGNING_ALGORITHM_VALUES,
+  OIDC_SIGNING_ALGORITHM_VALUES,
   PERMISSION_CATALOG_BY_PERMISSION,
+  TOKEN_ENDPOINT_AUTH_METHOD_VALUES,
 } from "@arrtemplar/shared";
 import { treaty } from "@elysia/eden";
 import { resolveApiBaseUrl } from "./api-base-url";
@@ -76,7 +83,7 @@ type EdenResult<T> = {
 
 export type LogoutResult =
   | { kind: "local"; response: LogoutResponse }
-  | { kind: "sso"; html: string };
+  | { kind: "sso"; redirectUri: string; response: LogoutResponse };
 
 export type NotificationHistoryListParams = {
   page?: number;
@@ -115,16 +122,14 @@ export async function logout(): Promise<LogoutResult> {
     throw await createApiClientErrorFromResponse(response, "Logout failed.");
   }
 
-  const contentType = response.headers.get("content-type") ?? "";
-
-  if (contentType.includes("text/html")) {
-    return { kind: "sso", html: await response.text() };
-  }
-
   const body = await readJsonResponse(response);
 
   if (!isLogoutResponse(body)) {
     throw new ApiClientError("Logout failed.", response.status);
+  }
+
+  if (body.redirectUri) {
+    return { kind: "sso", redirectUri: body.redirectUri, response: body };
   }
 
   return { kind: "local", response: body };
@@ -161,6 +166,27 @@ export async function listAuthIdentities(): Promise<AuthIdentity[]> {
   );
 
   return response.identities.map(normalizeAuthIdentity);
+}
+
+export async function unlinkAllAuthIdentities(): Promise<AuthUnlinkAllIdentitiesResponse> {
+  const headers = createApiRequestHeaders("DELETE");
+  const response = await fetch(resolveApiRequestUrl("/api/auth/identities"), {
+    method: "DELETE",
+    credentials: "include",
+    ...(headers ? { headers } : {}),
+  });
+
+  if (!response.ok) {
+    throw await createApiClientErrorFromResponse(response, "OAuth unlink-all failed.");
+  }
+
+  const body = await readJsonResponse(response);
+
+  if (!isAuthUnlinkAllIdentitiesResponse(body)) {
+    throw new ApiClientError("OAuth unlink-all failed.", response.status);
+  }
+
+  return body;
 }
 
 export async function getUserProfile(): Promise<PublicUser> {
@@ -371,7 +397,12 @@ async function readJsonResponse(response: Response): Promise<unknown> {
 }
 
 function isLogoutResponse(value: unknown): value is LogoutResponse {
-  return isRecord(value) && value.status === "ok";
+  return (
+    isRecord(value) &&
+    value.status === "ok" &&
+    (value.redirectUri === undefined ||
+      (typeof value.redirectUri === "string" && value.redirectUri.length > 0))
+  );
 }
 
 function unwrapData<T>({ data, error, status }: EdenResult<T>, fallback: string): T {
@@ -398,25 +429,61 @@ function normalizePermissions(permissions: unknown): UserPermission[] {
 }
 
 function normalizeAuthProviderSummary(provider: {
+  autoRegister: boolean;
+  buttonText: string;
   clientId: string;
   createdAt: string;
+  endSessionEndpoint: string | null;
   enabled: boolean;
   hasClientSecret: boolean;
+  idTokenSigningAlgorithm: unknown;
   issuer: string;
   label: string;
+  mobileRedirectEnabled: boolean;
+  mobileRedirectUri: string | null;
+  profileSigningAlgorithm: unknown;
+  prompt: string | null;
+  providerKind: unknown;
   redirectUris: string[];
   scopes: string;
   slug: unknown;
+  timeoutMs: number;
+  tokenEndpointAuthMethod: unknown;
   updatedAt: string;
 }): AuthProviderSummary {
+  if (!isAuthProviderSlug(provider.slug)) {
+    throw new ApiClientError(
+      "Auth provider response was invalid.",
+      0,
+      "INVALID_AUTH_PROVIDER_RESPONSE",
+    );
+  }
+
   return {
-    slug: isAuthProviderSlug(provider.slug) ? provider.slug : "authentik",
+    slug: provider.slug,
+    providerKind: isAuthProviderKind(provider.providerKind) ? provider.providerKind : "custom",
     label: provider.label,
     issuer: provider.issuer,
     clientId: provider.clientId,
     scopes: provider.scopes,
     redirectUris: Array.isArray(provider.redirectUris) ? provider.redirectUris : [],
     enabled: Boolean(provider.enabled),
+    buttonText: provider.buttonText,
+    autoRegister: Boolean(provider.autoRegister),
+    tokenEndpointAuthMethod: isTokenEndpointAuthMethod(provider.tokenEndpointAuthMethod)
+      ? provider.tokenEndpointAuthMethod
+      : "client_secret_basic",
+    timeoutMs: readPositiveNumberOrDefault(provider.timeoutMs, 10_000),
+    prompt: normalizeNullableString(provider.prompt),
+    endSessionEndpoint: normalizeNullableString(provider.endSessionEndpoint),
+    idTokenSigningAlgorithm: isOidcSigningAlgorithm(provider.idTokenSigningAlgorithm)
+      ? provider.idTokenSigningAlgorithm
+      : "RS256",
+    profileSigningAlgorithm: isOidcProfileSigningAlgorithm(provider.profileSigningAlgorithm)
+      ? provider.profileSigningAlgorithm
+      : "none",
+    mobileRedirectEnabled: Boolean(provider.mobileRedirectEnabled),
+    mobileRedirectUri: normalizeNullableString(provider.mobileRedirectUri),
     hasClientSecret: Boolean(provider.hasClientSecret),
     createdAt: provider.createdAt,
     updatedAt: provider.updatedAt,
@@ -425,22 +492,81 @@ function normalizeAuthProviderSummary(provider: {
 
 function normalizeAuthIdentity(identity: {
   createdAt: string;
+  displayName: string;
+  email: string | null;
   id: string;
   issuer: string;
+  name: string | null;
+  preferredUsername: string | null;
   provider: unknown;
-  subject: string;
+  providerKind: unknown;
+  subjectPreview: string;
 }): AuthIdentity {
+  if (!isAuthProviderSlug(identity.provider)) {
+    throw new ApiClientError(
+      "Linked auth identity response was invalid.",
+      0,
+      "INVALID_AUTH_IDENTITY_RESPONSE",
+    );
+  }
+
   return {
     id: identity.id,
-    provider: isAuthProviderSlug(identity.provider) ? identity.provider : "authentik",
+    provider: identity.provider,
+    providerKind: isAuthProviderKind(identity.providerKind) ? identity.providerKind : "custom",
     issuer: identity.issuer,
-    subject: identity.subject,
+    subjectPreview: identity.subjectPreview,
+    displayName: identity.displayName,
+    preferredUsername: identity.preferredUsername,
+    name: identity.name,
+    email: identity.email,
     createdAt: identity.createdAt,
   };
 }
 
 function isAuthProviderSlug(value: unknown): value is AuthProviderSlug {
-  return value === "authentik";
+  return AUTH_PROVIDER_SLUGS.some((slug) => slug === value);
+}
+
+function isAuthProviderKind(value: unknown): value is AuthProviderKind {
+  return AUTH_PROVIDER_KIND_VALUES.some((providerKind) => providerKind === value);
+}
+
+function isTokenEndpointAuthMethod(
+  value: unknown,
+): value is AuthProviderSummary["tokenEndpointAuthMethod"] {
+  return TOKEN_ENDPOINT_AUTH_METHOD_VALUES.some((method) => method === value);
+}
+
+function isOidcSigningAlgorithm(
+  value: unknown,
+): value is AuthProviderSummary["idTokenSigningAlgorithm"] {
+  return OIDC_SIGNING_ALGORITHM_VALUES.some((algorithm) => algorithm === value);
+}
+
+function isOidcProfileSigningAlgorithm(
+  value: unknown,
+): value is AuthProviderSummary["profileSigningAlgorithm"] {
+  return OIDC_PROFILE_SIGNING_ALGORITHM_VALUES.some((algorithm) => algorithm === value);
+}
+
+function normalizeNullableString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function readPositiveNumberOrDefault(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function isAuthUnlinkAllIdentitiesResponse(
+  value: unknown,
+): value is AuthUnlinkAllIdentitiesResponse {
+  return (
+    isRecord(value) &&
+    value.status === "ok" &&
+    typeof value.deletedIdentityCount === "number" &&
+    typeof value.revokedOAuthSessionCount === "number"
+  );
 }
 
 function isAuthMethod(value: unknown): value is AuthMethod {

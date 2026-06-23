@@ -35,7 +35,6 @@ const indexRoute = createRoute({
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/login",
-  validateSearch: validateLoginSearch,
   component: LoginRoute,
 });
 
@@ -221,10 +220,6 @@ const routeTree = rootRoute.addChildren([
 ]);
 
 export const router = createRouter({ routeTree });
-
-function validateLoginSearch(search: Record<string, unknown>): { signedOut?: boolean } {
-  return search.signedOut === true || search.signedOut === "true" ? { signedOut: true } : {};
-}
 
 declare module "@tanstack/react-router" {
   interface Register {

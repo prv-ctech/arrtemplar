@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { Buffer } from "node:buffer";
 import type { OidcDiscoveryDocument } from "../../../../../../apps/server/src/auth/oauth/discovery";
-import { verifyOidcIdToken } from "../../../../../../apps/server/src/auth/oauth/jwks";
+import {
+  verifyOidcIdToken,
+  verifyOidcLogoutToken,
+} from "../../../../../../apps/server/src/auth/oauth/jwks";
 import { base64UrlEncode } from "../../../../../../apps/server/src/security/oauth-crypto";
 
 const originalFetch = globalThis.fetch;
@@ -30,6 +33,7 @@ describe("OIDC JWKS ID-token verification", () => {
       exp: nowSeconds() + 300,
       iat: nowSeconds(),
       nonce,
+      sid: "provider-session-id",
       preferred_username: "cnonajulca",
       email: "plex-user@example.test",
       email_verified: false,
@@ -42,6 +46,7 @@ describe("OIDC JWKS ID-token verification", () => {
     });
 
     expect(claims.sub).toBe("stable-subject");
+    expect(claims.sid).toBe("provider-session-id");
     expect(claims.preferred_username).toBe("cnonajulca");
     expect(claims.email_verified).toBe(false);
 
@@ -209,6 +214,150 @@ describe("OIDC JWKS ID-token verification", () => {
   });
 });
 
+describe("OIDC JWKS logout-token verification", () => {
+  it("verifies valid logout tokens with sid or subject", async () => {
+    const keys = await createRsaFixture();
+    const discovery = createDiscovery(keys.jwk);
+    globalThis.fetch = Object.assign(async () => jsonResponse({ keys: [keys.jwk] }), {
+      preconnect: originalFetch.preconnect,
+    });
+
+    const sidClaims = await verifyOidcLogoutToken({
+      clientId,
+      discovery,
+      logoutToken: await signJwt(
+        keys.privateKey,
+        keys.jwk.kid,
+        createLogoutClaims({ sid: "provider-session-id" }),
+        { typ: "logout+jwt" },
+      ),
+    });
+    const subjectClaims = await verifyOidcLogoutToken({
+      clientId,
+      discovery,
+      logoutToken: await signJwt(
+        keys.privateKey,
+        keys.jwk.kid,
+        createLogoutClaims({ sub: "logout-subject" }),
+      ),
+    });
+
+    expect(sidClaims.sid).toBe("provider-session-id");
+    expect(subjectClaims.sub).toBe("logout-subject");
+  });
+
+  it("rejects logout tokens that violate required OIDC claims", async () => {
+    const keys = await createRsaFixture();
+    const discovery = createDiscovery(keys.jwk);
+    globalThis.fetch = Object.assign(async () => jsonResponse({ keys: [keys.jwk] }), {
+      preconnect: originalFetch.preconnect,
+    });
+    const invalidClaims = [
+      { iss: undefined },
+      { aud: undefined },
+      { iat: undefined },
+      { exp: undefined },
+      { jti: undefined },
+      { events: undefined },
+      { events: { "http://schemas.openid.net/event/backchannel-logout": true } },
+      { sub: undefined, sid: undefined },
+      { nonce: "forbidden-nonce" },
+    ];
+
+    for (const patch of invalidClaims) {
+      const claims = createLogoutClaims({ sid: "provider-session-id", ...patch });
+
+      await expect(
+        verifyOidcLogoutToken({
+          clientId,
+          discovery,
+          logoutToken: await signJwt(keys.privateKey, keys.jwk.kid, claims),
+        }),
+      ).rejects.toThrow("logout token");
+    }
+  });
+
+  it("fails closed for bad logout-token issuer, audience, timing, algorithm, signature, and key", async () => {
+    const keys = await createRsaFixture();
+    const otherKeys = await createRsaFixture();
+    const discovery = createDiscovery(keys.jwk);
+    globalThis.fetch = Object.assign(async () => jsonResponse({ keys: [keys.jwk] }), {
+      preconnect: originalFetch.preconnect,
+    });
+
+    await expect(
+      verifyOidcLogoutToken({
+        clientId,
+        discovery,
+        logoutToken: await signJwt(
+          keys.privateKey,
+          keys.jwk.kid,
+          createLogoutClaims({ iss: "https://evil.example.test/", sid: "sid" }),
+        ),
+      }),
+    ).rejects.toThrow("issuer");
+    await expect(
+      verifyOidcLogoutToken({
+        clientId,
+        discovery,
+        logoutToken: await signJwt(
+          keys.privateKey,
+          keys.jwk.kid,
+          createLogoutClaims({ aud: "other-client", sid: "sid" }),
+        ),
+      }),
+    ).rejects.toThrow("audience");
+    await expect(
+      verifyOidcLogoutToken({
+        clientId,
+        discovery,
+        logoutToken: await signJwt(
+          keys.privateKey,
+          keys.jwk.kid,
+          createLogoutClaims({ exp: nowSeconds() - 120, sid: "sid" }),
+        ),
+      }),
+    ).rejects.toThrow("expired");
+    await expect(
+      verifyOidcLogoutToken({
+        clientId,
+        discovery,
+        logoutToken: await signJwt(
+          keys.privateKey,
+          keys.jwk.kid,
+          createLogoutClaims({ iat: nowSeconds() + 120, sid: "sid" }),
+        ),
+      }),
+    ).rejects.toThrow("issued-at");
+    await expect(
+      verifyOidcLogoutToken({
+        clientId,
+        discovery,
+        logoutToken: createUnsignedJwt(createLogoutClaims({ sid: "sid" })),
+      }),
+    ).rejects.toThrow("RS256 or ES256");
+    const signedWithWrongKey = await signJwt(
+      otherKeys.privateKey,
+      keys.jwk.kid,
+      createLogoutClaims({ sid: "sid" }),
+    );
+    await expect(
+      verifyOidcLogoutToken({ clientId, discovery, logoutToken: signedWithWrongKey }),
+    ).rejects.toThrow("signature");
+    await expect(
+      verifyOidcLogoutToken({
+        clientId,
+        discovery,
+        logoutToken: await signJwt(
+          keys.privateKey,
+          "missing-kid",
+          createLogoutClaims({ sid: "sid" }),
+        ),
+      }),
+    ).rejects.toThrow("verification key");
+  });
+});
+
 async function createRsaFixture(): Promise<{ jwk: TestJwk; privateKey: CryptoKey }> {
   const pair = await crypto.subtle.generateKey(
     {
@@ -241,6 +390,8 @@ function createDiscovery(jwk: TestJwk): OidcDiscoveryDocument {
     userinfoEndpoint: `${issuer}userinfo/`,
     jwksUri: `${issuer}jwks/${jwk.kid}`,
     endSessionEndpoint: null,
+    backchannelLogoutSupported: false,
+    backchannelLogoutSessionSupported: false,
     idTokenSigningAlgValuesSupported: ["RS256"],
     tokenEndpointAuthMethodsSupported: ["client_secret_basic"],
   };
@@ -250,8 +401,9 @@ async function signJwt(
   privateKey: CryptoKey,
   kid: string | undefined,
   claims: Record<string, unknown>,
+  header: Record<string, unknown> = {},
 ): Promise<string> {
-  const encodedHeader = encodeJson({ alg: "RS256", kid, typ: "JWT" });
+  const encodedHeader = encodeJson({ alg: "RS256", kid, typ: "JWT", ...header });
   const encodedPayload = encodeJson(claims);
   const signingInput = `${encodedHeader}.${encodedPayload}`;
   const signature = await crypto.subtle.sign(
@@ -261,6 +413,19 @@ async function signJwt(
   );
 
   return `${signingInput}.${base64UrlEncode(signature)}`;
+}
+
+function createLogoutClaims(patch: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    iss: issuer,
+    sub: "logout-subject",
+    aud: clientId,
+    exp: nowSeconds() + 300,
+    iat: nowSeconds(),
+    jti: `logout-${crypto.randomUUID()}`,
+    events: { "http://schemas.openid.net/event/backchannel-logout": {} },
+    ...patch,
+  };
 }
 
 function createUnsignedJwt(claims: Record<string, unknown>): string {

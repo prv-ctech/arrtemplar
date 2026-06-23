@@ -1,12 +1,16 @@
 import {
   AUTH_METHOD_VALUES,
+  AUTH_PROVIDER_KIND_VALUES,
   AUTH_PROVIDER_SLUGS,
   DEFAULT_PROFILE_AVATAR_ID,
   DEFAULT_PROFILE_BANNER_ID,
   NOTIFICATION_FREQUENCY_VALUES,
+  OIDC_PROFILE_SIGNING_ALGORITHM_VALUES,
+  OIDC_SIGNING_ALGORITHM_VALUES,
   TOAST_NOTIFICATION_EVENT_IDS,
   TOAST_NOTIFICATION_IMPORTANCE_VALUES,
   TOAST_NOTIFICATION_SEVERITY_VALUES,
+  TOKEN_ENDPOINT_AUTH_METHOD_VALUES,
   USER_PERMISSION_VALUES,
 } from "@arrtemplar/shared";
 import { type InferInsertModel, type InferSelectModel, sql } from "drizzle-orm";
@@ -26,6 +30,22 @@ const authMethodEnum = [...AUTH_METHOD_VALUES] as [
 const authProviderSlugEnum = [...AUTH_PROVIDER_SLUGS] as [
   (typeof AUTH_PROVIDER_SLUGS)[number],
   ...(typeof AUTH_PROVIDER_SLUGS)[number][],
+];
+const authProviderKindEnum = [...AUTH_PROVIDER_KIND_VALUES] as [
+  (typeof AUTH_PROVIDER_KIND_VALUES)[number],
+  ...(typeof AUTH_PROVIDER_KIND_VALUES)[number][],
+];
+const tokenEndpointAuthMethodEnum = [...TOKEN_ENDPOINT_AUTH_METHOD_VALUES] as [
+  (typeof TOKEN_ENDPOINT_AUTH_METHOD_VALUES)[number],
+  ...(typeof TOKEN_ENDPOINT_AUTH_METHOD_VALUES)[number][],
+];
+const oidcSigningAlgorithmEnum = [...OIDC_SIGNING_ALGORITHM_VALUES] as [
+  (typeof OIDC_SIGNING_ALGORITHM_VALUES)[number],
+  ...(typeof OIDC_SIGNING_ALGORITHM_VALUES)[number][],
+];
+const oidcProfileSigningAlgorithmEnum = [...OIDC_PROFILE_SIGNING_ALGORITHM_VALUES] as [
+  (typeof OIDC_PROFILE_SIGNING_ALGORITHM_VALUES)[number],
+  ...(typeof OIDC_PROFILE_SIGNING_ALGORITHM_VALUES)[number][],
 ];
 const notificationFrequencyEnum = [...NOTIFICATION_FREQUENCY_VALUES] as [
   (typeof NOTIFICATION_FREQUENCY_VALUES)[number],
@@ -80,6 +100,7 @@ export const authProviders = sqliteTable(
   {
     id: text("id").primaryKey(),
     slug: text("slug", { enum: authProviderSlugEnum }).notNull(),
+    providerKind: text("provider_kind", { enum: authProviderKindEnum }).notNull().default("custom"),
     label: text("label").notNull(),
     issuer: text("issuer").notNull(),
     clientId: text("client_id").notNull(),
@@ -88,6 +109,30 @@ export const authProviders = sqliteTable(
     scopes: text("scopes").notNull(),
     redirectUris: text("redirect_uris").notNull(),
     enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+    buttonText: text("button_text").notNull().default("Continue with OIDC"),
+    autoRegister: integer("auto_register", { mode: "boolean" }).notNull().default(true),
+    tokenEndpointAuthMethod: text("token_endpoint_auth_method", {
+      enum: tokenEndpointAuthMethodEnum,
+    })
+      .notNull()
+      .default("client_secret_basic"),
+    timeoutMs: integer("timeout_ms").notNull().default(10_000),
+    prompt: text("prompt"),
+    endSessionEndpoint: text("end_session_endpoint"),
+    idTokenSigningAlgorithm: text("id_token_signing_algorithm", {
+      enum: oidcSigningAlgorithmEnum,
+    })
+      .notNull()
+      .default("RS256"),
+    profileSigningAlgorithm: text("profile_signing_algorithm", {
+      enum: oidcProfileSigningAlgorithmEnum,
+    })
+      .notNull()
+      .default("none"),
+    mobileRedirectEnabled: integer("mobile_redirect_enabled", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    mobileRedirectUri: text("mobile_redirect_uri"),
     createdAt: text("created_at").notNull().default(timestampNow),
     updatedAt: text("updated_at").notNull().default(timestampNow),
   },
@@ -104,6 +149,9 @@ export const authIdentities = sqliteTable(
     provider: text("provider", { enum: authProviderSlugEnum }).notNull(),
     issuer: text("issuer").notNull(),
     subject: text("subject").notNull(),
+    preferredUsername: text("preferred_username"),
+    name: text("name"),
+    email: text("email"),
     createdAt: text("created_at").notNull().default(timestampNow),
   },
   (table) => [
@@ -172,12 +220,14 @@ export const sessions = sqliteTable(
     oauthProvider: text("oauth_provider", { enum: authProviderSlugEnum }),
     oauthIdTokenEncrypted: text("oauth_id_token_encrypted"),
     oauthMasterKeyId: text("oauth_master_key_id"),
+    oauthSid: text("oauth_sid"),
     createdAt: text("created_at").notNull().default(timestampNow),
   },
   (table) => [
     uniqueIndex("sessions_token_hash_unique").on(table.tokenHash),
     index("sessions_user_id_idx").on(table.userId),
     index("sessions_expires_at_idx").on(table.expiresAt),
+    index("sessions_oauth_provider_sid_idx").on(table.oauthProvider, table.oauthSid),
   ],
 );
 

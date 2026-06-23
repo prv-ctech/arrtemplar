@@ -121,6 +121,20 @@ describe("CSRF request policy", () => {
 
     expect(response.status).toBe(200);
   });
+
+  it("lets the OIDC back-channel logout endpoint validate its signed server-to-server token", async () => {
+    const app = await createCsrfTestApp();
+
+    const response = await app.handle(
+      new Request("http://localhost/api/auth/oauth/backchannel-logout", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ logout_token: "not-a-jwt" }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+  });
 });
 
 async function createCsrfTestApp(): Promise<TestAppContext["app"]> {

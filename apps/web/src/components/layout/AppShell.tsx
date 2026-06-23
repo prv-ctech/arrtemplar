@@ -167,7 +167,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Public
       queryClient.setQueryData(authQueryKey, null);
 
       if (logoutResult.kind === "sso") {
-        continueSsoLogoutDocument(logoutResult.html);
+        window.location.href = logoutResult.redirectUri;
         return;
       }
 
@@ -179,7 +179,6 @@ export function AppShell({ children, user }: { children: ReactNode; user: Public
         user.notificationPreferences,
       );
       navigate({
-        search: { signedOut: true },
         to: "/login",
       });
     },
@@ -216,52 +215,6 @@ export function AppShell({ children, user }: { children: ReactNode; user: Public
       </div>
     </main>
   );
-}
-
-const ssoLogoutFieldNames = [
-  "id_token_hint",
-  "post_logout_redirect_uri",
-  "client_id",
-  "state",
-] as const;
-
-function continueSsoLogoutDocument(html: string): void {
-  const parsedDocument = new DOMParser().parseFromString(html, "text/html");
-  const sourceForm = parsedDocument.querySelector<HTMLFormElement>("form");
-  const action = sourceForm?.getAttribute("action");
-
-  if (!sourceForm || !action || sourceForm.method.toLowerCase() !== "post") {
-    throw new Error("SSO logout response is invalid.");
-  }
-
-  const actionUrl = new URL(action, window.location.href);
-
-  if (actionUrl.searchParams.has("id_token_hint")) {
-    throw new Error("SSO logout response is invalid.");
-  }
-
-  const form = document.createElement("form");
-  form.action = actionUrl.toString();
-  form.method = "post";
-  form.setAttribute("referrerpolicy", "no-referrer");
-  form.hidden = true;
-
-  for (const fieldName of ssoLogoutFieldNames) {
-    const value = sourceForm.querySelector<HTMLInputElement>(`input[name="${fieldName}"]`)?.value;
-
-    if (!value) {
-      throw new Error("SSO logout response is invalid.");
-    }
-
-    const input = document.createElement("input");
-    input.type = "hidden";
-    input.name = fieldName;
-    input.value = value;
-    form.append(input);
-  }
-
-  document.body.append(form);
-  form.submit();
 }
 
 function ShellSidebar({

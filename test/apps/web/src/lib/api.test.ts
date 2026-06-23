@@ -22,14 +22,15 @@ describe("api client CSRF headers", () => {
     expect(createApiRequestHeaders(undefined)).toBeUndefined();
   });
 
-  it("handles logout as raw JSON or HTML instead of forcing Eden JSON parsing", async () => {
+  it("handles logout as JSON with optional OAuth redirect URI", async () => {
     const source = await Bun.file(apiSourcePath).text();
 
     expect(source).toContain("export type LogoutResult");
     expect(source).toContain('fetch(resolveApiRequestUrl("/api/auth/logout")');
-    expect(source).toContain('response.headers.get("content-type")');
-    expect(source).toContain('contentType.includes("text/html")');
-    expect(source).toContain("html: await response.text()");
+    expect(source).toContain("redirectUri");
+    expect(source).not.toContain('response.headers.get("content-type")');
+    expect(source).not.toContain('contentType.includes("text/html")');
+    expect(source).not.toContain("html: await response.text()");
     expect(source).not.toContain("unwrapData(await api.api.auth.logout.post()");
   });
 });

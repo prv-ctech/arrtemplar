@@ -27,7 +27,6 @@ import {
   type UserPermission,
 } from "../../../../../../packages/shared/src";
 import { openTestDatabase, resetTestDatabase } from "../../../../../helpers/database";
-import { readFormAction } from "../../../../../helpers/html";
 
 const DEFAULT_PASSWORD = "correct-horse-battery-staple";
 const issuer = "https://auth.example.test/application/o/template-app/";
@@ -49,9 +48,9 @@ describe("OAuth auth service", () => {
 
     const firstLogin = authService.completeOAuthLogin(
       {
-        provider: "authentik",
+        provider: "oidc",
         issuer,
-        subject: "stable-authentik-sub",
+        subject: "stable-oidc-sub",
         preferredUsername: "cnonajulca",
         email: "plex-user@example.test",
       },
@@ -64,9 +63,9 @@ describe("OAuth auth service", () => {
 
     const secondLogin = authService.completeOAuthLogin(
       {
-        provider: "authentik",
+        provider: "oidc",
         issuer,
-        subject: "stable-authentik-sub",
+        subject: "stable-oidc-sub",
         preferredUsername: "changed-name",
         email: "changed@example.test",
       },
@@ -90,12 +89,40 @@ describe("OAuth auth service", () => {
     });
     expect(storedIdentities).toHaveLength(1);
     expect(storedIdentities[0]).toMatchObject({
-      provider: "authentik",
+      provider: "oidc",
       issuer,
-      subject: "stable-authentik-sub",
+      subject: "stable-oidc-sub",
+      preferredUsername: "changed-name",
+      email: "changed@example.test",
       userId: storedUsers[0]?.id,
     });
     expect(database.db.select().from(sessions).all()).toHaveLength(2);
+  });
+
+  it("refuses unknown OAuth users when auto-registration is disabled", async () => {
+    const database = await createDatabase();
+    const authService = new AuthService(database);
+
+    const result = authService.completeOAuthLogin(
+      {
+        provider: "oidc",
+        issuer,
+        subject: "new-disabled-subject",
+        preferredUsername: "blocked-user",
+        email: "blocked-user@example.test",
+      },
+      context,
+      undefined,
+      { autoRegister: false },
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: 401,
+      body: { error: { code: "OAUTH_AUTO_REGISTER_DISABLED" } },
+    });
+    expect(database.db.select().from(users).all()).toHaveLength(0);
+    expect(database.db.select().from(authIdentities).all()).toHaveLength(0);
   });
 
   it("persists the encrypted OAuth ID token only on the new login session", async () => {
@@ -104,7 +131,7 @@ describe("OAuth auth service", () => {
 
     const firstLogin = authService.completeOAuthLogin(
       {
-        provider: "authentik",
+        provider: "oidc",
         issuer,
         subject: "token-subject",
         preferredUsername: "token-user",
@@ -112,9 +139,10 @@ describe("OAuth auth service", () => {
       },
       context,
       {
-        provider: "authentik",
+        provider: "oidc",
         idTokenEncrypted: "first-encrypted-id-token",
         masterKeyId: "first-master-key-id",
+        sid: "first-provider-session",
       },
     );
 
@@ -124,7 +152,7 @@ describe("OAuth auth service", () => {
 
     authService.completeOAuthLogin(
       {
-        provider: "authentik",
+        provider: "oidc",
         issuer,
         subject: "token-subject",
         preferredUsername: "token-user",
@@ -132,9 +160,10 @@ describe("OAuth auth service", () => {
       },
       context,
       {
-        provider: "authentik",
+        provider: "oidc",
         idTokenEncrypted: "second-encrypted-id-token",
         masterKeyId: "second-master-key-id",
+        sid: "second-provider-session",
       },
     );
 
@@ -144,19 +173,50 @@ describe("OAuth auth service", () => {
     expect(
       storedSessions.some(
         (session) =>
-          session.oauthProvider === "authentik" &&
+          session.oauthProvider === "oidc" &&
           session.oauthIdTokenEncrypted === "first-encrypted-id-token" &&
-          session.oauthMasterKeyId === "first-master-key-id",
+          session.oauthMasterKeyId === "first-master-key-id" &&
+          session.oauthSid === "first-provider-session",
       ),
     ).toBe(true);
     expect(
       storedSessions.some(
         (session) =>
-          session.oauthProvider === "authentik" &&
+          session.oauthProvider === "oidc" &&
           session.oauthIdTokenEncrypted === "second-encrypted-id-token" &&
-          session.oauthMasterKeyId === "second-master-key-id",
+          session.oauthMasterKeyId === "second-master-key-id" &&
+          session.oauthSid === "second-provider-session",
       ),
     ).toBe(true);
+  });
+
+  it("stores null oauth sid when the ID token has no session id", async () => {
+    const database = await createDatabase();
+    const authService = new AuthService(database);
+
+    const login = authService.completeOAuthLogin(
+      {
+        provider: "oidc",
+        issuer,
+        subject: "sidless-subject",
+        preferredUsername: "sidless-user",
+        email: "sidless-user@example.test",
+      },
+      context,
+      {
+        provider: "oidc",
+        idTokenEncrypted: "sidless-encrypted-id-token",
+        masterKeyId: "sidless-master-key-id",
+      },
+    );
+
+    if (!login.ok) {
+      throw new Error(login.body.error.message);
+    }
+
+    const storedSession = database.db.select().from(sessions).get();
+
+    expect(storedSession?.oauthSid).toBeNull();
   });
 
   it("leaves OAuth token columns null for local sessions", async () => {
@@ -186,6 +246,7 @@ describe("OAuth auth service", () => {
     expect(storedSession.oauthProvider).toBeNull();
     expect(storedSession.oauthIdTokenEncrypted).toBeNull();
     expect(storedSession.oauthMasterKeyId).toBeNull();
+    expect(storedSession.oauthSid).toBeNull();
   });
 
   it("does not key OAuth users by email and blocks local login for OAuth accounts", async () => {
@@ -199,7 +260,7 @@ describe("OAuth auth service", () => {
 
     const oauthLogin = authService.completeOAuthLogin(
       {
-        provider: "authentik",
+        provider: "oidc",
         issuer,
         subject: "different-subject-same-email",
         preferredUsername: "local-owner",
@@ -242,7 +303,7 @@ describe("OAuth auth service", () => {
 
     const linkResult = authService.linkOAuthIdentityToAdmin(
       {
-        provider: "authentik",
+        provider: "oidc",
         issuer,
         subject: "admin-subject",
       },
@@ -256,7 +317,7 @@ describe("OAuth auth service", () => {
 
     const nonAdminResult = authService.linkOAuthIdentityToAdmin(
       {
-        provider: "authentik",
+        provider: "oidc",
         issuer,
         subject: "viewer-subject",
       },
@@ -269,7 +330,7 @@ describe("OAuth auth service", () => {
       .values({
         id: Bun.randomUUIDv7(),
         userId: normalUser.id,
-        provider: "authentik",
+        provider: "oidc",
         issuer,
         subject: "taken-subject",
         createdAt: new Date().toISOString(),
@@ -278,7 +339,7 @@ describe("OAuth auth service", () => {
 
     const takeoverResult = authService.linkOAuthIdentityToAdmin(
       {
-        provider: "authentik",
+        provider: "oidc",
         issuer,
         subject: "taken-subject",
       },
@@ -287,12 +348,99 @@ describe("OAuth auth service", () => {
     );
 
     expect(linkResult.identity).toMatchObject({
-      provider: "authentik",
-      issuer,
-      subject: "admin-subject",
+      provider: "oidc",
+      subjectPreview: "admin-…ject",
     });
     expect(nonAdminResult).toMatchObject({ ok: false, status: 403 });
     expect(takeoverResult).toMatchObject({ ok: false, status: 409 });
+  });
+
+  it("returns safe linked identity display metadata", async () => {
+    const database = await createDatabase();
+    const authService = new AuthService(database);
+    const adminUser = await insertUser(database, {
+      username: "identity-admin",
+      email: "identity-admin@example.test",
+      permissions: [SYSTEM_ADMIN_PERMISSION],
+    });
+
+    insertEnabledProvider(database, issuer, { providerKind: "keycloak" });
+    const linkResult = authService.linkOAuthIdentityToAdmin(
+      {
+        provider: "oidc",
+        issuer,
+        subject: "very-long-sensitive-subject-value",
+        preferredUsername: "identity-handle",
+        name: "Identity Name",
+        email: "identity@example.test",
+      },
+      toPublicActor(adminUser, [SYSTEM_ADMIN_PERMISSION]),
+      context,
+    );
+
+    if (!linkResult.ok) {
+      throw new Error(linkResult.body.error.message);
+    }
+
+    expect(linkResult.identity).toMatchObject({
+      provider: "oidc",
+      providerKind: "keycloak",
+      subjectPreview: "very-l…alue",
+      displayName: "identity-handle",
+      preferredUsername: "identity-handle",
+      name: "Identity Name",
+      email: "identity@example.test",
+    });
+    expect("subject" in linkResult.identity).toBe(false);
+  });
+
+  it("links multiple external OAuth identities to one local admin", async () => {
+    const database = await createDatabase();
+    const authService = new AuthService(database);
+    const adminUser = await insertUser(database, {
+      username: "multi-link-admin",
+      email: "multi-link-admin@example.test",
+      permissions: [SYSTEM_ADMIN_PERMISSION],
+    });
+    const actor = toPublicActor(adminUser, [SYSTEM_ADMIN_PERMISSION]);
+
+    insertEnabledProvider(database, issuer);
+
+    const firstResult = authService.linkOAuthIdentityToAdmin(
+      {
+        provider: "oidc",
+        issuer,
+        subject: "external-subject-one",
+        preferredUsername: "external-one",
+      },
+      actor,
+      context,
+    );
+    const secondResult = authService.linkOAuthIdentityToAdmin(
+      {
+        provider: "oidc",
+        issuer,
+        subject: "external-subject-two",
+        preferredUsername: "external-two",
+      },
+      actor,
+      context,
+    );
+
+    expect(firstResult).toMatchObject({ ok: true });
+    expect(secondResult).toMatchObject({ ok: true });
+    expect(
+      database.db
+        .select({
+          userId: authIdentities.userId,
+          preferredUsername: authIdentities.preferredUsername,
+        })
+        .from(authIdentities)
+        .all(),
+    ).toEqual([
+      { userId: adminUser.id, preferredUsername: "external-one" },
+      { userId: adminUser.id, preferredUsername: "external-two" },
+    ]);
   });
 
   it("deleting a provider removes all identities for that provider slug", async () => {
@@ -312,14 +460,14 @@ describe("OAuth auth service", () => {
       .insert(authProviders)
       .values({
         id: Bun.randomUUIDv7(),
-        slug: "authentik",
-        label: "Authentik",
+        slug: "oidc",
+        label: "OIDC",
         issuer,
         clientId: "template-client",
         clientSecretEncrypted: "ciphertext",
         masterKeyId: "oauth-client-secret-v1",
         scopes: testScopes,
-        redirectUris: JSON.stringify(["http://localhost:3000/api/auth/callback/authentik"]),
+        redirectUris: JSON.stringify(["http://localhost:3000/api/auth/callback/oidc"]),
         enabled: false,
         createdAt: now,
         updatedAt: now,
@@ -331,7 +479,7 @@ describe("OAuth auth service", () => {
         {
           id: Bun.randomUUIDv7(),
           userId: user.id,
-          provider: "authentik",
+          provider: "oidc",
           issuer,
           subject: "old-issuer-subject",
           createdAt: now,
@@ -339,7 +487,7 @@ describe("OAuth auth service", () => {
         {
           id: Bun.randomUUIDv7(),
           userId: user.id,
-          provider: "authentik",
+          provider: "oidc",
           issuer: "https://auth.example.test/application/o/renamed-template-app/",
           subject: "new-issuer-subject",
           createdAt: now,
@@ -347,52 +495,11 @@ describe("OAuth auth service", () => {
       ])
       .run();
 
-    expect(oauthService.deleteProvider("authentik")).toEqual({ ok: true, body: { status: "ok" } });
+    expect(oauthService.deleteProvider("oidc")).toEqual({ ok: true, body: { status: "ok" } });
     expect(database.db.select().from(authIdentities).all()).toHaveLength(0);
   });
 
-  it("can force the provider login prompt for post-sign-out Authentik redirects", async () => {
-    const database = await createDatabase();
-    const authService = new AuthService(database);
-    const oauthService = new OAuthService(database, authService, {
-      encryptionKey: "00".repeat(32),
-      webOrigin: "http://localhost:5173",
-    });
-    let promptIssuer = "";
-    const discoveryServer = Bun.serve({
-      port: 0,
-      fetch: (_request: Request) =>
-        Response.json({
-          issuer: promptIssuer,
-          authorization_endpoint: `${promptIssuer}authorize/`,
-          token_endpoint: `${promptIssuer}token/`,
-          jwks_uri: `${promptIssuer}jwks/`,
-          id_token_signing_alg_values_supported: ["RS256"],
-        }),
-    });
-
-    promptIssuer = new URL("/application/o/prompt-login/", discoveryServer.url).toString();
-    insertEnabledProvider(database, promptIssuer);
-
-    try {
-      const result = await oauthService.buildAuthorizationRedirect({
-        mode: "login",
-        provider: "authentik",
-        prompt: "login",
-        requestUrl: "http://localhost:3000/api/auth/oauth/authentik/start?prompt=login",
-      });
-
-      if (!result.ok) {
-        throw new Error(result.body.error.message);
-      }
-
-      expect(new URL(result.authorizationUrl).searchParams.get("prompt")).toBe("login");
-    } finally {
-      discoveryServer.stop(true);
-    }
-  });
-
-  it("builds an end-session POST form without token data in the action URL", async () => {
+  it("builds an end-session redirect URI without logout parameters", async () => {
     const database = await createDatabase();
     const authService = new AuthService(database);
     const oauthService = new OAuthService(database, authService, {
@@ -417,10 +524,9 @@ describe("OAuth auth service", () => {
     insertEnabledProvider(database, logoutIssuer);
 
     try {
-      const encryptedIdToken = await encryptOAuthIdToken("test-id-token", encryptionKey);
       const loginResult = authService.completeOAuthLogin(
         {
-          provider: "authentik",
+          provider: "oidc",
           issuer: logoutIssuer,
           subject: "logout-subject",
           preferredUsername: "logout-user",
@@ -428,9 +534,9 @@ describe("OAuth auth service", () => {
         },
         context,
         {
-          provider: "authentik",
-          idTokenEncrypted: encryptedIdToken.encrypted,
-          masterKeyId: encryptedIdToken.masterKeyId,
+          provider: "oidc",
+          idTokenEncrypted: "unused-id-token",
+          masterKeyId: "unused-master-key-id",
         },
       );
 
@@ -440,26 +546,61 @@ describe("OAuth auth service", () => {
 
       const logout = await oauthService.buildLogout({
         sessionToken: loginResult.sessionToken,
-        requestUrl: "http://localhost:3000/api/auth/logout",
       });
-
+      expect(oauthService.deleteProvider("oidc")).toEqual({ ok: true, body: { status: "ok" } });
       if (logout.kind !== "sso") {
-        throw new Error("Expected SSO logout form.");
+        throw new Error("Expected SSO logout redirect.");
       }
 
-      const action = readFormAction(logout.html);
+      const redirectUri = new URL(logout.redirectUri);
 
-      expect(action).toBe(`${logoutIssuer}end-session/`);
-      expect(new URL(action).searchParams.has("id_token_hint")).toBe(false);
-      expect(logout.html).toContain('method="post"');
-      expect(logout.html).toContain('name="id_token_hint"');
-      expect(logout.html).toContain('name="post_logout_redirect_uri"');
-      expect(logout.html).toContain('name="client_id"');
-      expect(logout.html).toContain('name="state"');
-      expect(logout.logoutStateCookieValue).toContain(".");
+      expect(logout.redirectUri).toBe(`${logoutIssuer}end-session/`);
+      expect(redirectUri.searchParams.has("id_token_hint")).toBe(false);
+      expect(redirectUri.searchParams.has("post_logout_redirect_uri")).toBe(false);
+      expect(redirectUri.searchParams.has("client_id")).toBe(false);
+      expect(redirectUri.searchParams.has("state")).toBe(false);
     } finally {
       discoveryServer.stop(true);
     }
+  });
+
+  it("uses the configured end-session endpoint before discovery logout metadata", async () => {
+    const database = await createDatabase();
+    const authService = new AuthService(database);
+    const oauthService = new OAuthService(database, authService, {
+      encryptionKey,
+      webOrigin: "http://localhost:5173",
+    });
+    const configuredIssuer = "https://auth.example.test/application/o/configured-logout/";
+    const configuredLogoutUrl = `${configuredIssuer}logout/`;
+
+    insertEnabledProvider(database, configuredIssuer, { endSessionEndpoint: configuredLogoutUrl });
+    const loginResult = authService.completeOAuthLogin(
+      {
+        provider: "oidc",
+        issuer: configuredIssuer,
+        subject: "configured-logout-subject",
+        preferredUsername: "configured-logout-user",
+        email: "configured-logout-user@example.test",
+      },
+      context,
+      {
+        provider: "oidc",
+        idTokenEncrypted: "unused-id-token",
+        masterKeyId: "unused-master-key-id",
+      },
+    );
+
+    if (!loginResult.ok) {
+      throw new Error(loginResult.body.error.message);
+    }
+
+    await expect(
+      oauthService.buildLogout({ sessionToken: loginResult.sessionToken }),
+    ).resolves.toEqual({
+      kind: "sso",
+      redirectUri: configuredLogoutUrl,
+    });
   });
 
   it("falls back to local logout when discovery has no end-session endpoint", async () => {
@@ -489,7 +630,7 @@ describe("OAuth auth service", () => {
       const encryptedIdToken = await encryptOAuthIdToken("test-id-token", encryptionKey);
       const loginResult = authService.completeOAuthLogin(
         {
-          provider: "authentik",
+          provider: "oidc",
           issuer: noLogoutIssuer,
           subject: "local-fallback-subject",
           preferredUsername: "fallback-user",
@@ -497,7 +638,7 @@ describe("OAuth auth service", () => {
         },
         context,
         {
-          provider: "authentik",
+          provider: "oidc",
           idTokenEncrypted: encryptedIdToken.encrypted,
           masterKeyId: encryptedIdToken.masterKeyId,
         },
@@ -510,7 +651,6 @@ describe("OAuth auth service", () => {
       await expect(
         oauthService.buildLogout({
           sessionToken: loginResult.sessionToken,
-          requestUrl: "http://localhost:3000/api/auth/logout",
         }),
       ).resolves.toEqual({ kind: "local" });
     } finally {
@@ -584,22 +724,28 @@ function toPublicActor(user: User, permissions: UserPermission[]): PublicUser {
   };
 }
 
-function insertEnabledProvider(database: DatabaseClient, providerIssuer: string): void {
+function insertEnabledProvider(
+  database: DatabaseClient,
+  providerIssuer: string,
+  options: { endSessionEndpoint?: string; providerKind?: "keycloak" } = {},
+): void {
   const now = new Date().toISOString();
 
   database.db
     .insert(authProviders)
     .values({
       id: Bun.randomUUIDv7(),
-      slug: "authentik",
-      label: "Authentik",
+      slug: "oidc",
+      providerKind: options.providerKind ?? "custom",
+      label: "OIDC",
       issuer: providerIssuer,
       clientId: "template-client",
       clientSecretEncrypted: "ciphertext",
       masterKeyId: "oauth-client-secret-v1",
       scopes: testScopes,
-      redirectUris: JSON.stringify(["http://localhost:3000/api/auth/callback/authentik"]),
+      redirectUris: JSON.stringify(["http://localhost:3000/api/auth/callback/oidc"]),
       enabled: true,
+      ...(options.endSessionEndpoint ? { endSessionEndpoint: options.endSessionEndpoint } : {}),
       createdAt: now,
       updatedAt: now,
     })

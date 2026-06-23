@@ -7,6 +7,7 @@ import type {
   AuthProviderSummary,
   AuthProvidersListResponse,
   AuthUpsertProviderRequest,
+  TokenEndpointAuthMethod,
 } from "@arrtemplar/shared";
 import { SYSTEM_ADMIN_PERMISSION } from "@arrtemplar/shared";
 import { eq } from "drizzle-orm";
@@ -23,13 +24,18 @@ import {
   createOAuthStateCookieValue,
   type OAuthStateMode,
   type OAuthStatePayload,
-  verifyLogoutStateCookieValue,
   verifyOAuthStateCookieValue,
 } from "../../security/oauth-state";
 import type { AuthRequestContext, AuthService } from "../auth.service";
 import { fetchOidcDiscovery, normalizeIssuerUrl, parseHttpIntegrationUrl } from "./discovery";
-import { buildEndSessionRedirect } from "./end-session";
-import { type OidcIdTokenClaims, verifyOidcIdToken } from "./jwks";
+import {
+  type OidcIdTokenClaims,
+  type OidcUserinfoClaims,
+  readOidcLogoutTokenProviderCandidate,
+  verifyOidcIdToken,
+  verifyOidcLogoutToken,
+  verifyOidcUserinfoToken,
+} from "./jwks";
 
 type OAuthServiceOptions = {
   encryptionKey: string | null;
@@ -69,23 +75,23 @@ type OAuthCallbackStateResult =
   | { ok: true; encryptionKey: string; provider: AuthProvider; statePayload: OAuthStatePayload }
   | OAuthFailure<400 | 404 | 503>;
 
-type LogoutResult =
-  | { kind: "local" }
-  | { kind: "sso"; html: string; logoutStateCookieValue: string };
+type LogoutResult = { kind: "local" } | { kind: "sso"; redirectUri: string };
+
+type BackChannelLogoutResult = { ok: true; deletedCount: number } | OAuthFailure<400 | 502>;
 
 type NormalizedProviderConfig = {
-  label: string;
-  issuer: string;
-  clientId: string;
-  scopes: string;
-  redirectUris: string[];
-  enabled: boolean;
+  [Key in keyof Omit<
+    AuthProviderSummary,
+    "createdAt" | "hasClientSecret" | "slug" | "updatedAt"
+  >]: AuthProviderSummary[Key];
 };
 
 type TokenResponse = {
   accessToken?: string;
   idToken: string;
 };
+
+type ClientSecretResult = { ok: true; value: string | null } | OAuthFailure<503>;
 
 const oauthEncryptionKeyRequiredError = createApiError(
   "OAUTH_ENCRYPTION_KEY_REQUIRED",
@@ -108,6 +114,10 @@ const oauthProviderUnavailableError = createApiError(
   "OAuth provider could not be reached or returned invalid data.",
 );
 const oauthTokenInvalidError = createApiError("OAUTH_TOKEN_INVALID", "OAuth ID token is invalid.");
+const oauthLogoutTokenInvalidError = createApiError(
+  "OAUTH_LOGOUT_TOKEN_INVALID",
+  "OAuth logout token is invalid.",
+);
 
 export class OAuthService {
   constructor(
@@ -138,7 +148,12 @@ export class OAuthService {
       return { ok: false, status: 400, body: oauthInvalidProviderConfigError };
     }
 
-    if ((normalized.enabled || input.clientSecret !== undefined) && !this.options.encryptionKey) {
+    const secretRequired = requiresClientSecret(normalized.tokenEndpointAuthMethod);
+
+    if (
+      (input.clientSecret !== undefined || (normalized.enabled && secretRequired)) &&
+      !this.options.encryptionKey
+    ) {
       return { ok: false, status: 503, body: oauthEncryptionKeyRequiredError };
     }
 
@@ -156,9 +171,12 @@ export class OAuthService {
       masterKeyId = encrypted.masterKeyId;
     }
 
-    if (!clientSecretEncrypted || !masterKeyId) {
+    if (secretRequired && (!clientSecretEncrypted || !masterKeyId)) {
       return { ok: false, status: 400, body: oauthInvalidProviderConfigError };
     }
+
+    clientSecretEncrypted ??= "";
+    masterKeyId ??= "";
 
     const now = new Date().toISOString();
 
@@ -210,12 +228,44 @@ export class OAuthService {
     }
 
     return this.upsertProvider(slug, {
-      label: input.label ?? existing.label,
-      issuer: input.issuer ?? existing.issuer,
-      clientId: input.clientId ?? existing.clientId,
-      scopes: input.scopes ?? existing.scopes,
-      redirectUris: input.redirectUris ?? parseStoredRedirectUris(existing.redirectUris),
-      enabled: input.enabled ?? existing.enabled,
+      providerKind: readPatchValue(input.providerKind, existing.providerKind),
+      label: readPatchValue(input.label, existing.label),
+      issuer: readPatchValue(input.issuer, existing.issuer),
+      clientId: readPatchValue(input.clientId, existing.clientId),
+      scopes: readPatchValue(input.scopes, existing.scopes),
+      redirectUris: readPatchValue(
+        input.redirectUris,
+        parseStoredRedirectUris(existing.redirectUris),
+      ),
+      enabled: readPatchValue(input.enabled, existing.enabled),
+      buttonText: readPatchValue(input.buttonText, existing.buttonText),
+      autoRegister: readPatchValue(input.autoRegister, existing.autoRegister),
+      tokenEndpointAuthMethod: readPatchValue(
+        input.tokenEndpointAuthMethod,
+        existing.tokenEndpointAuthMethod,
+      ),
+      timeoutMs: readPatchValue(input.timeoutMs, existing.timeoutMs),
+      prompt: readNullablePatchValue(input.prompt, existing.prompt),
+      endSessionEndpoint: readNullablePatchValue(
+        input.endSessionEndpoint,
+        existing.endSessionEndpoint,
+      ),
+      idTokenSigningAlgorithm: readPatchValue(
+        input.idTokenSigningAlgorithm,
+        existing.idTokenSigningAlgorithm,
+      ),
+      profileSigningAlgorithm: readPatchValue(
+        input.profileSigningAlgorithm,
+        existing.profileSigningAlgorithm,
+      ),
+      mobileRedirectEnabled: readPatchValue(
+        input.mobileRedirectEnabled,
+        existing.mobileRedirectEnabled,
+      ),
+      mobileRedirectUri: readNullablePatchValue(
+        input.mobileRedirectUri,
+        existing.mobileRedirectUri,
+      ),
       ...(input.clientSecret !== undefined ? { clientSecret: input.clientSecret } : {}),
     });
   }
@@ -239,7 +289,6 @@ export class OAuthService {
     linkToUserId?: string;
     mode: "link" | "login";
     provider: AuthProviderSlug;
-    prompt?: "login";
     requestUrl: string;
     returnTo?: string;
   }): Promise<OAuthStartResult> {
@@ -269,7 +318,7 @@ export class OAuthService {
       return { ok: false, status: 400, body: oauthStateInvalidError };
     }
 
-    const discovery = await readDiscovery(provider.issuer);
+    const discovery = await readDiscovery(provider);
 
     if (!discovery.ok) {
       return discovery;
@@ -289,8 +338,8 @@ export class OAuthService {
     authorizationUrl.searchParams.set("code_challenge", pkce.codeChallenge);
     authorizationUrl.searchParams.set("code_challenge_method", "S256");
 
-    if (input.prompt) {
-      authorizationUrl.searchParams.set("prompt", input.prompt);
+    if (provider.prompt) {
+      authorizationUrl.searchParams.set("prompt", provider.prompt);
     }
 
     return {
@@ -329,7 +378,7 @@ export class OAuthService {
 
     const { encryptionKey, provider, statePayload } = stateResult;
 
-    const discovery = await readDiscovery(provider.issuer);
+    const discovery = await readDiscovery(provider);
 
     if (!discovery.ok) {
       return discovery;
@@ -346,8 +395,10 @@ export class OAuthService {
       codeVerifier: statePayload.codeVerifier,
       clientId: provider.clientId,
       clientSecret: clientSecret.value,
+      tokenEndpointAuthMethod: provider.tokenEndpointAuthMethod,
       redirectUri: statePayload.redirectUri,
       tokenEndpoint: discovery.document.tokenEndpoint,
+      timeoutMs: provider.timeoutMs,
     });
 
     if (!tokenResponse.ok) {
@@ -360,6 +411,8 @@ export class OAuthService {
       discovery: discovery.document,
       expectedNonce: statePayload.nonce,
       idToken: tokenResponse.token.idToken,
+      signingAlgorithm: provider.idTokenSigningAlgorithm,
+      timeoutMs: provider.timeoutMs,
       ...(tokenResponse.token.accessToken ? { accessToken: tokenResponse.token.accessToken } : {}),
     });
 
@@ -367,15 +420,28 @@ export class OAuthService {
       return claims;
     }
 
+    const profileClaims = await readUserinfoClaims({
+      clientId: provider.clientId,
+      discovery: discovery.document,
+      idTokenClaims: claims.claims,
+      profileSigningAlgorithm: provider.profileSigningAlgorithm,
+      timeoutMs: provider.timeoutMs,
+      ...(tokenResponse.token.accessToken ? { accessToken: tokenResponse.token.accessToken } : {}),
+    });
+
+    if (!profileClaims.ok) {
+      return profileClaims;
+    }
+
     const identityInput = {
       provider: provider.slug,
       issuer: discovery.document.issuer,
       subject: claims.claims.sub,
-      ...(claims.claims.preferred_username
-        ? { preferredUsername: claims.claims.preferred_username }
+      ...(profileClaims.claims.preferred_username
+        ? { preferredUsername: profileClaims.claims.preferred_username }
         : {}),
-      ...(claims.claims.name ? { name: claims.claims.name } : {}),
-      ...(claims.claims.email ? { email: claims.claims.email } : {}),
+      ...(profileClaims.claims.name ? { name: profileClaims.claims.name } : {}),
+      ...(profileClaims.claims.email ? { email: profileClaims.claims.email } : {}),
     };
 
     if (statePayload.mode === "link") {
@@ -389,11 +455,17 @@ export class OAuthService {
     }
 
     const idTokenEncrypted = await encryptOAuthIdToken(tokenResponse.token.idToken, encryptionKey);
-    const loginResult = this.authService.completeOAuthLogin(identityInput, input.context, {
-      provider: provider.slug,
-      idTokenEncrypted: idTokenEncrypted.encrypted,
-      masterKeyId: idTokenEncrypted.masterKeyId,
-    });
+    const loginResult = this.authService.completeOAuthLogin(
+      identityInput,
+      input.context,
+      {
+        provider: provider.slug,
+        idTokenEncrypted: idTokenEncrypted.encrypted,
+        masterKeyId: idTokenEncrypted.masterKeyId,
+        ...(claims.claims.sid ? { sid: claims.claims.sid } : {}),
+      },
+      { autoRegister: provider.autoRegister },
+    );
 
     if (!loginResult.ok) {
       return loginResult;
@@ -499,69 +571,119 @@ export class OAuthService {
     return provider?.enabled ? provider : undefined;
   }
 
-  async buildLogout(input: {
-    sessionToken: string | null;
-    requestUrl: string;
-  }): Promise<LogoutResult> {
-    if (!this.options.encryptionKey) {
+  async buildLogout(input: { sessionToken: string | null }): Promise<LogoutResult> {
+    const oauthProvider = this.authService.getOAuthSessionProvider(input.sessionToken);
+
+    if (!oauthProvider) {
       return { kind: "local" };
     }
 
-    const oauthSessionToken = this.authService.getOAuthLogoutToken(input.sessionToken);
-
-    if (!oauthSessionToken) {
-      return { kind: "local" };
-    }
-
-    const provider = this.findProvider(oauthSessionToken.provider);
+    const provider = this.findProvider(oauthProvider);
 
     if (!provider) {
       return { kind: "local" };
     }
 
-    const postLogoutRedirectUri = new URL("/api/auth/logout/callback", input.requestUrl).toString();
-    const result = await buildEndSessionRedirect({
-      provider,
-      oauthSessionToken,
-      encryptionKey: this.options.encryptionKey,
-      postLogoutRedirectUri,
-    });
+    if (provider.endSessionEndpoint) {
+      return { kind: "sso", redirectUri: provider.endSessionEndpoint };
+    }
 
-    if (!result) {
+    const discovery = await readDiscovery(provider);
+
+    if (!discovery.ok || !discovery.document.endSessionEndpoint) {
       return { kind: "local" };
     }
 
-    return {
-      kind: "sso",
-      html: result.html,
-      logoutStateCookieValue: result.logoutStateCookieValue,
-    };
+    return { kind: "sso", redirectUri: discovery.document.endSessionEndpoint };
   }
 
-  async verifyLogoutState(input: {
-    state: string;
-    logoutStateCookieValue: string | undefined;
-  }): Promise<boolean> {
-    if (!this.options.encryptionKey) {
-      return false;
+  async handleBackChannelLogout(input: {
+    context: AuthRequestContext;
+    logoutToken: string;
+  }): Promise<BackChannelLogoutResult> {
+    const candidate = readOidcLogoutTokenProviderCandidate(input.logoutToken);
+
+    if (!candidate) {
+      return { ok: false, status: 400, body: oauthLogoutTokenInvalidError };
     }
 
-    const expectedState = await verifyLogoutStateCookieValue(
-      input.logoutStateCookieValue,
-      this.options.encryptionKey,
+    const provider = this.findEnabledProviderByIssuerAndAudience(
+      candidate.issuer,
+      candidate.audiences,
     );
 
-    return !!expectedState && expectedState === input.state;
+    if (!provider) {
+      return { ok: false, status: 400, body: oauthLogoutTokenInvalidError };
+    }
+
+    const discovery = await readDiscovery(provider);
+
+    if (!discovery.ok) {
+      return discovery;
+    }
+
+    if (discovery.document.backchannelLogoutSupported !== true) {
+      return { ok: false, status: 400, body: oauthLogoutTokenInvalidError };
+    }
+
+    const claims = await readVerifiedLogoutClaims({
+      clientId: provider.clientId,
+      discovery: discovery.document,
+      logoutToken: input.logoutToken,
+      signingAlgorithm: provider.idTokenSigningAlgorithm,
+      timeoutMs: provider.timeoutMs,
+    });
+
+    if (!claims.ok) {
+      return claims;
+    }
+
+    const invalidation = this.authService.invalidateOAuthSessions({
+      provider: provider.slug,
+      issuer: discovery.document.issuer,
+      ...(claims.claims.sub ? { subject: claims.claims.sub } : {}),
+      ...(claims.claims.sid ? { sid: claims.claims.sid } : {}),
+      context: input.context,
+    });
+
+    return { ok: true, deletedCount: invalidation.deletedCount };
+  }
+
+  private findEnabledProviderByIssuerAndAudience(
+    issuer: string,
+    audiences: readonly string[],
+  ): AuthProvider | undefined {
+    let normalizedIssuer: string;
+
+    try {
+      normalizedIssuer = normalizeIssuerUrl(issuer);
+    } catch {
+      return undefined;
+    }
+
+    return this.database.db
+      .select()
+      .from(authProviders)
+      .all()
+      .find(
+        (provider) =>
+          provider.enabled &&
+          provider.issuer === normalizedIssuer &&
+          audiences.includes(provider.clientId),
+      );
   }
 }
 
 async function readDiscovery(
-  issuer: string,
+  provider: Pick<AuthProvider, "issuer" | "timeoutMs">,
 ): Promise<
   { ok: true; document: Awaited<ReturnType<typeof fetchOidcDiscovery>> } | OAuthFailure<502>
 > {
   try {
-    return { ok: true, document: await fetchOidcDiscovery(issuer) };
+    return {
+      ok: true,
+      document: await fetchOidcDiscovery(provider.issuer, { timeoutMs: provider.timeoutMs }),
+    };
   } catch {
     return { ok: false, status: 502, body: oauthProviderUnavailableError };
   }
@@ -570,7 +692,11 @@ async function readDiscovery(
 async function readClientSecret(
   provider: AuthProvider,
   encryptionKey: string,
-): Promise<{ ok: true; value: string } | OAuthFailure<503>> {
+): Promise<ClientSecretResult> {
+  if (!provider.clientSecretEncrypted) {
+    return { ok: true, value: null };
+  }
+
   try {
     return {
       ok: true,
@@ -588,6 +714,8 @@ async function readVerifiedClaims(input: {
   discovery: Awaited<ReturnType<typeof fetchOidcDiscovery>>;
   expectedNonce: string;
   idToken: string;
+  signingAlgorithm: AuthProviderSummary["idTokenSigningAlgorithm"];
+  timeoutMs: number;
 }): Promise<{ ok: true; claims: OidcIdTokenClaims } | OAuthFailure<401>> {
   try {
     return { ok: true, claims: await verifyOidcIdToken(input) };
@@ -596,13 +724,180 @@ async function readVerifiedClaims(input: {
   }
 }
 
+async function readUserinfoClaims(input: {
+  accessToken?: string;
+  clientId: string;
+  discovery: Awaited<ReturnType<typeof fetchOidcDiscovery>>;
+  idTokenClaims: OidcIdTokenClaims;
+  profileSigningAlgorithm: AuthProviderSummary["profileSigningAlgorithm"];
+  timeoutMs: number;
+}): Promise<{ ok: true; claims: OidcUserinfoClaims } | OAuthFailure<401 | 502>> {
+  const idTokenProfileClaims = toUserinfoClaims(input.idTokenClaims);
+
+  if (!input.accessToken || !input.discovery.userinfoEndpoint) {
+    return { ok: true, claims: idTokenProfileClaims };
+  }
+
+  const userinfoClaims = await fetchUserinfoClaims({
+    accessToken: input.accessToken,
+    clientId: input.clientId,
+    discovery: input.discovery,
+    profileSigningAlgorithm: input.profileSigningAlgorithm,
+    timeoutMs: input.timeoutMs,
+  });
+
+  if (!userinfoClaims.ok) {
+    return userinfoClaims;
+  }
+
+  if (userinfoClaims.claims.sub !== input.idTokenClaims.sub) {
+    return { ok: false, status: 401, body: oauthTokenInvalidError };
+  }
+
+  return {
+    ok: true,
+    claims: {
+      ...idTokenProfileClaims,
+      ...readPresentUserinfoProfileClaims(userinfoClaims.claims),
+    },
+  };
+}
+
+async function fetchUserinfoClaims(input: {
+  accessToken: string;
+  clientId: string;
+  discovery: Awaited<ReturnType<typeof fetchOidcDiscovery>>;
+  profileSigningAlgorithm: AuthProviderSummary["profileSigningAlgorithm"];
+  timeoutMs: number;
+}): Promise<{ ok: true; claims: OidcUserinfoClaims } | OAuthFailure<401 | 502>> {
+  const response = await fetchUserinfoResponse(input);
+
+  if (!response.ok) {
+    return response;
+  }
+
+  if (input.profileSigningAlgorithm === "none") {
+    return readPlainUserinfoClaims(response.response);
+  }
+
+  try {
+    return {
+      ok: true,
+      claims: await verifyOidcUserinfoToken({
+        clientId: input.clientId,
+        discovery: input.discovery,
+        signingAlgorithm: input.profileSigningAlgorithm,
+        timeoutMs: input.timeoutMs,
+        userinfoToken: await response.response.text(),
+      }),
+    };
+  } catch {
+    return { ok: false, status: 401, body: oauthTokenInvalidError };
+  }
+}
+
+async function fetchUserinfoResponse(input: {
+  accessToken: string;
+  discovery: Awaited<ReturnType<typeof fetchOidcDiscovery>>;
+  profileSigningAlgorithm: AuthProviderSummary["profileSigningAlgorithm"];
+  timeoutMs: number;
+}): Promise<{ ok: true; response: Response } | OAuthFailure<502>> {
+  const accept =
+    input.profileSigningAlgorithm === "none"
+      ? "application/json"
+      : "application/jwt, application/json";
+
+  try {
+    const response = await fetch(input.discovery.userinfoEndpoint ?? "", {
+      headers: { accept, authorization: `Bearer ${input.accessToken}` },
+      redirect: "error",
+      signal: AbortSignal.timeout(input.timeoutMs),
+    });
+
+    if (!response.ok) {
+      return { ok: false, status: 502, body: oauthProviderUnavailableError };
+    }
+
+    return { ok: true, response };
+  } catch {
+    return { ok: false, status: 502, body: oauthProviderUnavailableError };
+  }
+}
+
+async function readPlainUserinfoClaims(
+  response: Response,
+): Promise<{ ok: true; claims: OidcUserinfoClaims } | OAuthFailure<401 | 502>> {
+  let value: unknown;
+
+  try {
+    value = await response.json();
+  } catch {
+    return { ok: false, status: 502, body: oauthProviderUnavailableError };
+  }
+
+  if (!value || typeof value !== "object") {
+    return { ok: false, status: 401, body: oauthTokenInvalidError };
+  }
+
+  const record = value as Record<string, unknown>;
+
+  if (typeof record.sub !== "string" || !record.sub) {
+    return { ok: false, status: 401, body: oauthTokenInvalidError };
+  }
+
+  return { ok: true, claims: toUserinfoClaims(record as OidcUserinfoClaims) };
+}
+
+function toUserinfoClaims(
+  claims: Pick<
+    OidcUserinfoClaims,
+    "email" | "email_verified" | "name" | "preferred_username" | "sub"
+  >,
+): OidcUserinfoClaims {
+  return {
+    sub: claims.sub,
+    ...readPresentUserinfoProfileClaims(claims),
+  };
+}
+
+function readPresentUserinfoProfileClaims(
+  claims: Pick<OidcUserinfoClaims, "email" | "email_verified" | "name" | "preferred_username">,
+): Omit<OidcUserinfoClaims, "sub"> {
+  return {
+    ...(claims.preferred_username ? { preferred_username: claims.preferred_username } : {}),
+    ...(claims.name ? { name: claims.name } : {}),
+    ...(claims.email ? { email: claims.email } : {}),
+    ...(typeof claims.email_verified === "boolean"
+      ? { email_verified: claims.email_verified }
+      : {}),
+  };
+}
+
+async function readVerifiedLogoutClaims(input: {
+  clientId: string;
+  discovery: Awaited<ReturnType<typeof fetchOidcDiscovery>>;
+  logoutToken: string;
+  signingAlgorithm: AuthProviderSummary["idTokenSigningAlgorithm"];
+  timeoutMs: number;
+}): Promise<
+  { ok: true; claims: Awaited<ReturnType<typeof verifyOidcLogoutToken>> } | OAuthFailure<400>
+> {
+  try {
+    return { ok: true, claims: await verifyOidcLogoutToken(input) };
+  } catch {
+    return { ok: false, status: 400, body: oauthLogoutTokenInvalidError };
+  }
+}
+
 async function exchangeCode(input: {
   clientId: string;
-  clientSecret: string;
+  clientSecret: string | null;
   code: string;
   codeVerifier: string;
   redirectUri: string;
   tokenEndpoint: string;
+  tokenEndpointAuthMethod: TokenEndpointAuthMethod;
+  timeoutMs: number;
 }): Promise<{ ok: true; token: TokenResponse } | OAuthFailure<502>> {
   const body = new URLSearchParams({
     grant_type: "authorization_code",
@@ -611,18 +906,34 @@ async function exchangeCode(input: {
     client_id: input.clientId,
     code_verifier: input.codeVerifier,
   });
+  const headers: Record<string, string> = {
+    accept: "application/json",
+    "content-type": "application/x-www-form-urlencoded",
+  };
+
+  if (input.tokenEndpointAuthMethod === "client_secret_basic") {
+    if (!input.clientSecret) {
+      return { ok: false, status: 502, body: oauthProviderUnavailableError };
+    }
+
+    headers.authorization = createBasicAuthHeader(input.clientId, input.clientSecret);
+  }
+
+  if (input.tokenEndpointAuthMethod === "client_secret_post") {
+    if (!input.clientSecret) {
+      return { ok: false, status: 502, body: oauthProviderUnavailableError };
+    }
+
+    body.set("client_secret", input.clientSecret);
+  }
 
   try {
     const response = await fetch(input.tokenEndpoint, {
       method: "POST",
-      headers: {
-        accept: "application/json",
-        authorization: createBasicAuthHeader(input.clientId, input.clientSecret),
-        "content-type": "application/x-www-form-urlencoded",
-      },
+      headers,
       body,
       redirect: "error",
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(input.timeoutMs),
     });
 
     if (!response.ok) {
@@ -659,25 +970,74 @@ function normalizeProviderConfig(
 ): NormalizedProviderConfig | null {
   const label = input.label.trim();
   const clientId = input.clientId.trim();
+  const buttonText = input.buttonText.trim();
+  const prompt = normalizeNullableText(input.prompt);
   const scopes = normalizeScopes(input.scopes);
   const redirectUris = normalizeRedirectUris(input.redirectUris);
 
-  if (!label || !clientId || !scopes || redirectUris.length === 0) {
+  if (!label || !clientId || !buttonText || !scopes || redirectUris.length === 0) {
     return null;
   }
 
   try {
+    const issuer = normalizeIssuerUrl(input.issuer);
+
     return {
+      providerKind: input.providerKind,
       label,
-      issuer: normalizeIssuerUrl(input.issuer),
+      issuer,
       clientId,
       scopes,
       redirectUris,
       enabled: input.enabled,
+      buttonText,
+      autoRegister: input.autoRegister,
+      tokenEndpointAuthMethod: input.tokenEndpointAuthMethod,
+      timeoutMs: input.timeoutMs,
+      prompt,
+      endSessionEndpoint: normalizeOptionalProviderEndpoint(input.endSessionEndpoint, issuer),
+      idTokenSigningAlgorithm: input.idTokenSigningAlgorithm,
+      profileSigningAlgorithm: input.profileSigningAlgorithm,
+      mobileRedirectEnabled: input.mobileRedirectEnabled,
+      mobileRedirectUri: normalizeOptionalRedirectUri(input.mobileRedirectUri),
     };
   } catch {
     return null;
   }
+}
+
+function normalizeNullableText(value: string | null | undefined): string | null {
+  const normalized = value?.trim();
+
+  return normalized || null;
+}
+
+function normalizeOptionalProviderEndpoint(
+  value: string | null | undefined,
+  issuer: string,
+): string | null {
+  const normalized = normalizeNullableText(value);
+
+  if (!normalized) {
+    return null;
+  }
+
+  const issuerOrigin = new URL(issuer).origin;
+  const url = parseHttpIntegrationUrl(normalized, "OIDC end-session endpoint");
+
+  if (url.origin !== issuerOrigin) {
+    throw new Error("OIDC end-session endpoint must share the issuer origin.");
+  }
+
+  return url.toString();
+}
+
+function normalizeOptionalRedirectUri(value: string | null | undefined): string | null {
+  const normalized = normalizeNullableText(value);
+
+  return normalized
+    ? parseHttpIntegrationUrl(normalized, "OIDC mobile redirect URI").toString()
+    : null;
 }
 
 function normalizeScopes(value: string): string | null {
@@ -724,6 +1084,14 @@ function normalizeOptionalSecret(value: string | undefined): string | null {
   return normalized || null;
 }
 
+function readPatchValue<T>(value: T | undefined, fallback: T): T {
+  return value ?? fallback;
+}
+
+function readNullablePatchValue<T>(value: T | undefined, fallback: T): T {
+  return value === undefined ? fallback : value;
+}
+
 function resolveCallbackRedirectUri(provider: AuthProvider, requestUrl: string): string | null {
   const callbackUrl = new URL(`/api/auth/callback/${provider.slug}`, requestUrl).toString();
   const configuredRedirectUris = parseStoredRedirectUris(provider.redirectUris);
@@ -754,16 +1122,31 @@ function normalizeReturnTo(value: string | undefined, webOrigin: string): string
 function toProviderSummary(provider: AuthProvider): AuthProviderSummary {
   return {
     slug: provider.slug,
+    providerKind: provider.providerKind,
     label: provider.label,
     issuer: provider.issuer,
     clientId: provider.clientId,
     scopes: provider.scopes,
     redirectUris: parseStoredRedirectUris(provider.redirectUris),
     enabled: provider.enabled,
+    buttonText: provider.buttonText,
+    autoRegister: provider.autoRegister,
+    tokenEndpointAuthMethod: provider.tokenEndpointAuthMethod,
+    timeoutMs: provider.timeoutMs,
+    prompt: provider.prompt,
+    endSessionEndpoint: provider.endSessionEndpoint,
+    idTokenSigningAlgorithm: provider.idTokenSigningAlgorithm,
+    profileSigningAlgorithm: provider.profileSigningAlgorithm,
+    mobileRedirectEnabled: provider.mobileRedirectEnabled,
+    mobileRedirectUri: provider.mobileRedirectUri,
     hasClientSecret: provider.clientSecretEncrypted.length > 0,
     createdAt: provider.createdAt,
     updatedAt: provider.updatedAt,
   };
+}
+
+function requiresClientSecret(method: TokenEndpointAuthMethod): boolean {
+  return method === "client_secret_basic" || method === "client_secret_post";
 }
 
 function createBasicAuthHeader(clientId: string, clientSecret: string): string {

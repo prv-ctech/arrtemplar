@@ -72,22 +72,22 @@ describe("app shell primary navigation", () => {
     expect(source).not.toContain("onSettled: () =>");
   });
 
-  it("marks successful sign-out navigation so Authentik shows a fresh login prompt", async () => {
+  it("does not keep the removed post-sign-out prompt fallback", async () => {
     const source = await Bun.file(appShellSourcePath).text();
 
     expect(source).toContain('to: "/login"');
-    expect(source).toContain("search: { signedOut: true }");
+    expect(source).not.toContain("signedOut");
   });
 
-  it("continues SSO logout HTML without showing the local sign-out toast", async () => {
+  it("continues SSO logout with a top-level GET redirect without showing the local sign-out toast", async () => {
     const source = await Bun.file(appShellSourcePath).text();
 
     expect(source).toContain('if (logoutResult.kind === "sso")');
-    expect(source).toContain("continueSsoLogoutDocument(logoutResult.html)");
-    expect(source).toContain("function continueSsoLogoutDocument(html: string): void");
-    expect(source).toContain('new DOMParser().parseFromString(html, "text/html")');
-    expect(source).toContain('document.createElement("form")');
-    expect(source).toContain('actionUrl.searchParams.has("id_token_hint")');
+    expect(source).toContain("window.location.href = logoutResult.redirectUri");
+    expect(source).not.toContain("continueSsoLogoutDocument");
+    expect(source).not.toContain("new DOMParser()");
+    expect(source).not.toContain('document.createElement("form")');
+    expect(source).not.toContain('actionUrl.searchParams.has("id_token_hint")');
     expect(source).not.toContain("document.write");
   });
 });

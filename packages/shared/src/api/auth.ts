@@ -1,9 +1,39 @@
 import type { PermissionCatalogEntry, UserPermission } from "./permissions";
 import type { ProfileAvatarId, ProfileBannerId } from "./profile-media";
 
-export const AUTH_PROVIDER_SLUGS = ["authentik"] as const;
+export const AUTH_PROVIDER_SLUGS = ["oidc"] as const;
 
 export type AuthProviderSlug = (typeof AUTH_PROVIDER_SLUGS)[number];
+
+export const AUTH_PROVIDER_KIND_VALUES = [
+  "authentik",
+  "authelia",
+  "google",
+  "keycloak",
+  "okta",
+  "custom",
+] as const;
+
+export type AuthProviderKind = (typeof AUTH_PROVIDER_KIND_VALUES)[number];
+
+export const TOKEN_ENDPOINT_AUTH_METHOD_VALUES = [
+  "client_secret_basic",
+  "client_secret_post",
+  "none",
+] as const;
+
+export type TokenEndpointAuthMethod = (typeof TOKEN_ENDPOINT_AUTH_METHOD_VALUES)[number];
+
+export const OIDC_SIGNING_ALGORITHM_VALUES = ["RS256", "ES256"] as const;
+
+export type OidcSigningAlgorithm = (typeof OIDC_SIGNING_ALGORITHM_VALUES)[number];
+
+export const OIDC_PROFILE_SIGNING_ALGORITHM_VALUES = [
+  "none",
+  ...OIDC_SIGNING_ALGORITHM_VALUES,
+] as const;
+
+export type OidcProfileSigningAlgorithm = (typeof OIDC_PROFILE_SIGNING_ALGORITHM_VALUES)[number];
 
 export const AUTH_METHOD_VALUES = ["local", "oauth"] as const;
 
@@ -15,16 +45,31 @@ export const AUTH_API_ROUTES = {
   providers: "/api/auth/providers",
   provider: "/api/auth/providers/:slug",
   identitiesMe: "/api/auth/identities/me",
+  identities: "/api/auth/identities",
 } as const;
 
-export type AuthProviderSummary = {
-  slug: AuthProviderSlug;
+export type AuthProviderConfig = {
+  providerKind: AuthProviderKind;
   label: string;
   issuer: string;
   clientId: string;
   scopes: string;
   redirectUris: string[];
   enabled: boolean;
+  buttonText: string;
+  autoRegister: boolean;
+  tokenEndpointAuthMethod: TokenEndpointAuthMethod;
+  timeoutMs: number;
+  prompt: string | null;
+  endSessionEndpoint: string | null;
+  idTokenSigningAlgorithm: OidcSigningAlgorithm;
+  profileSigningAlgorithm: OidcProfileSigningAlgorithm;
+  mobileRedirectEnabled: boolean;
+  mobileRedirectUri: string | null;
+};
+
+export type AuthProviderSummary = AuthProviderConfig & {
+  slug: AuthProviderSlug;
   hasClientSecret: boolean;
   createdAt: string;
   updatedAt: string;
@@ -38,14 +83,11 @@ export type AuthProviderResponse = {
   provider: AuthProviderSummary;
 };
 
-export type AuthUpsertProviderRequest = {
-  label: string;
-  issuer: string;
-  clientId: string;
+export type AuthUpsertProviderRequest = AuthProviderConfig & {
   clientSecret?: string;
-  scopes: string;
-  redirectUris: string[];
-  enabled: boolean;
+  prompt?: string | null;
+  endSessionEndpoint?: string | null;
+  mobileRedirectUri?: string | null;
 };
 
 export type AuthPatchProviderRequest = Partial<AuthUpsertProviderRequest>;
@@ -53,13 +95,24 @@ export type AuthPatchProviderRequest = Partial<AuthUpsertProviderRequest>;
 export type AuthIdentity = {
   id: string;
   provider: AuthProviderSlug;
+  providerKind: AuthProviderKind;
   issuer: string;
-  subject: string;
+  subjectPreview: string;
+  displayName: string;
+  preferredUsername: string | null;
+  name: string | null;
+  email: string | null;
   createdAt: string;
 };
 
 export type AuthIdentitiesResponse = {
   identities: AuthIdentity[];
+};
+
+export type AuthUnlinkAllIdentitiesResponse = {
+  status: "ok";
+  deletedIdentityCount: number;
+  revokedOAuthSessionCount: number;
 };
 
 export const NOTIFICATION_FREQUENCY_VALUES = ["all", "minimal"] as const;
@@ -93,6 +146,8 @@ export type ToastNotificationClassification = {
 
 export const TOAST_NOTIFICATION_EVENTS = {
   "auth.admin.created": { severity: "success", importance: "important" },
+  "auth.provider.save.failed": { severity: "error", importance: "important" },
+  "auth.provider.saved": { severity: "success", importance: "standard" },
   "auth.sign_out.failed": { severity: "error", importance: "important" },
   "auth.signed_in": { severity: "success", importance: "important" },
   "auth.signed_out": { severity: "success", importance: "standard" },
@@ -368,6 +423,7 @@ export type UpdateManagedUserProfileResponse = ManagedUserProfileResponse;
 
 export type LogoutResponse = {
   status: "ok";
+  redirectUri?: string;
 };
 
 export type ChangePasswordResponse = {

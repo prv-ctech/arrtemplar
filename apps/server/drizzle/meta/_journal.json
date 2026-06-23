@@ -43,6 +43,27 @@
       "when": 1782015237453,
       "tag": "0006_oauth_session_logout",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1782165514919,
+      "tag": "0007_oauth_backchannel_logout",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1782192381560,
+      "tag": "0008_universal_oidc_auth",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1782217300000,
+      "tag": "0009_widen_notification_history_auth_events",
+      "breakpoints": true
     }
   ]
 }

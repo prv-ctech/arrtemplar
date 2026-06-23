@@ -4,7 +4,14 @@ description: "Use when writing, reviewing, or refactoring any code. Enforces no 
 applyTo: "**"
 ---
 
-## 🗑️ No Dead Code
+## No God Files
+
+Files should have a single responsibility. If a file is too large, split it into smaller files.
+
+- If a file is over 1000 lines, consider splitting it into multiple files.
+- If a file has multiple responsibilities, consider splitting it into multiple files.
+
+## No Dead Code
 
 Remove confirmed-unused logic immediately. Do not leave it commented out, flagged, or sitting in the file.
 
@@ -15,7 +22,7 @@ Remove confirmed-unused logic immediately. Do not leave it commented out, flagge
 
 ---
 
-## 🧬 No Duplicate Code
+## No Duplicate Code
 
 **Single source of truth** for every piece of logic. Do not copy, reimplement, or fork existing functionality.
 
@@ -28,7 +35,7 @@ When you find duplication: consolidate into one shared location, update all call
 
 ---
 
-## 🧹 No Overengineered Code
+##  No Overengineered Code
 
 Prefer the simplest approach that correctly solves the problem. Minimal, readable code wins.
 
@@ -40,7 +47,7 @@ Prefer the simplest approach that correctly solves the problem. Minimal, readabl
 
 ---
 
-## 🔌 No Wrappers — Use Native Tools & Official Plugins
+##  No Wrappers — Use Native Tools & Official Plugins
 
 Do not wrap a library to "make it work." Use the library's native API or an **official/maintained plugin**.
 
@@ -54,20 +61,6 @@ Do not wrap a library to "make it work." Use the library's native API or an **of
 
 ---
 
-## 🩹 No Workarounds — Fix the Root Cause
+##  No Workarounds — Fix the Root Cause
 
 Never patch around a problem. Identify and resolve the root cause.
-
----
-
-## ✅ Enforcement During Code Review
-
-Check every change against all 5 rules:
-
-1. Was any dead code left behind?
-2. Was existing functionality duplicated instead of reused?
-3. Was the solution more complex than necessary?
-4. Was a wrapper introduced instead of using native/plugin APIs?
-5. Was a workaround applied instead of fixing the root cause?
-
-If any rule is violated, the change must be corrected before approval.

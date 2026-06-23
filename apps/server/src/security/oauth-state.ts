@@ -4,15 +4,12 @@ import {
   base64UrlEncode,
   decodeBase64Url,
   importOAuthSigningKey,
-  OAUTH_LOGOUT_STATE_PURPOSE,
   OAUTH_STATE_PURPOSE,
   type OAuthKeyPurpose,
 } from "./oauth-crypto";
 
 export const OAUTH_STATE_COOKIE_NAME = "arrtemplar_oauth_state" as const;
 export const OAUTH_STATE_COOKIE_MAX_AGE_SECONDS = 10 * 60;
-export const OAUTH_LOGOUT_STATE_COOKIE_NAME = "arrtemplar_oauth_logout_state" as const;
-export const OAUTH_LOGOUT_STATE_COOKIE_MAX_AGE_SECONDS = 2 * 60;
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
@@ -28,11 +25,6 @@ export type OAuthStatePayload = {
   linkToUserId?: string;
   returnTo: string;
   redirectUri: string;
-  expiresAt: number;
-};
-
-type OAuthLogoutStatePayload = {
-  state: string;
   expiresAt: number;
 };
 
@@ -62,38 +54,6 @@ export async function verifyOAuthStateCookieValue(
   );
 
   return payload && payload.expiresAt > Math.floor(Date.now() / 1000) ? payload : null;
-}
-
-export async function createLogoutStateCookieValue(
-  state: string,
-  signingKey: string,
-): Promise<string> {
-  const payloadJson = JSON.stringify({
-    state,
-    expiresAt: Math.floor(Date.now() / 1000) + OAUTH_LOGOUT_STATE_COOKIE_MAX_AGE_SECONDS,
-  } satisfies OAuthLogoutStatePayload);
-  const encodedPayload = base64UrlEncode(textEncoder.encode(payloadJson));
-  const signature = await signStateValue(encodedPayload, signingKey, OAUTH_LOGOUT_STATE_PURPOSE);
-
-  return `${encodedPayload}.${signature}`;
-}
-
-export async function verifyLogoutStateCookieValue(
-  value: string | undefined,
-  signingKey: string,
-): Promise<string | null> {
-  const payload = await verifyStateCookieValue<OAuthLogoutStatePayload>(
-    value,
-    signingKey,
-    OAUTH_LOGOUT_STATE_PURPOSE,
-    parseLogoutStatePayload,
-  );
-
-  if (!payload || payload.expiresAt <= Math.floor(Date.now() / 1000)) {
-    return null;
-  }
-
-  return payload.state;
 }
 
 async function signStateValue(
@@ -148,27 +108,6 @@ function parseOAuthStatePayload(encodedPayload: string): OAuthStatePayload | nul
     const payload = JSON.parse(textDecoder.decode(decodeBase64Url(encodedPayload)));
 
     return isOAuthStatePayload(payload) ? payload : null;
-  } catch {
-    return null;
-  }
-}
-
-function parseLogoutStatePayload(encodedPayload: string): OAuthLogoutStatePayload | null {
-  try {
-    const payload = JSON.parse(textDecoder.decode(decodeBase64Url(encodedPayload)));
-
-    if (
-      payload &&
-      typeof payload === "object" &&
-      typeof payload.state === "string" &&
-      payload.state.length > 0 &&
-      typeof payload.expiresAt === "number" &&
-      Number.isInteger(payload.expiresAt)
-    ) {
-      return { state: payload.state, expiresAt: payload.expiresAt };
-    }
-
-    return null;
   } catch {
     return null;
   }

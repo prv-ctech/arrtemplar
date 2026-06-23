@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { Buffer } from "node:buffer";
 import { hashPassword } from "../../../../../apps/server/src/auth/password";
 import { generatePublicUserId } from "../../../../../apps/server/src/auth/public-user-id";
 import { LoginRateLimiter } from "../../../../../apps/server/src/auth/rate-limit";
@@ -12,17 +13,16 @@ import {
 import type { DatabaseClient } from "../../../../../apps/server/src/db/client";
 import {
   auditLogs,
+  authIdentities,
   authProviders,
   notificationHistory,
   sessions,
   userPermissionGrants,
   users,
 } from "../../../../../apps/server/src/db/schema";
-import { encryptOAuthIdToken } from "../../../../../apps/server/src/security/oauth-crypto";
+import { base64UrlEncode } from "../../../../../apps/server/src/security/oauth-crypto";
 import {
-  createLogoutStateCookieValue,
   createOAuthStateCookieValue,
-  OAUTH_LOGOUT_STATE_COOKIE_NAME,
   OAUTH_STATE_COOKIE_NAME,
 } from "../../../../../apps/server/src/security/oauth-state";
 import {
@@ -39,7 +39,6 @@ import {
   USER_PERMISSION_VALUES,
   type UserPermission,
 } from "../../../../../packages/shared/src";
-import { readFormAction } from "../../../../helpers/html";
 import {
   closeServerTestDatabases,
   createServerTestApp,
@@ -567,8 +566,45 @@ describe("auth routes", () => {
     });
   });
 
+  it("rejects password login while OIDC mode is enabled", async () => {
+    const { app, database } = await createAuthTestApp();
+
+    insertAuthProvider(database, "http://localhost/application/o/password-disabled/");
+    const response = await loginWithPassword(app, "admin@example.local", DEFAULT_PASSWORD);
+    const body = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(body).toEqual({
+      error: {
+        code: "AUTH_MODE_PASSWORD_DISABLED",
+        message: "Password login is disabled while OAuth/OIDC is enabled.",
+      },
+    });
+  });
+
+  it("rejects OAuth authorization starts while OIDC mode is disabled", async () => {
+    const { app, database } = await createEmptyAuthTestApp(
+      new LoginRateLimiter(),
+      OAUTH_TEST_ENCRYPTION_KEY,
+    );
+
+    insertAuthProvider(database, "http://localhost/application/o/start-disabled/", {
+      enabled: false,
+    });
+    const response = await app.handle(new Request("http://localhost/api/auth/oauth/oidc/start"));
+    const body = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(body).toEqual({
+      error: {
+        code: "OAUTH_PROVIDER_NOT_FOUND",
+        message: "OAuth provider is not configured or enabled.",
+      },
+    });
+  });
+
   it("derives auth request IP from direct server metadata only", () => {
-    const request = new Request("http://localhost/api/auth/oauth/authentik/start", {
+    const request = new Request("http://localhost/api/auth/oauth/oidc/start", {
       headers: { "x-forwarded-for": "203.0.113.10", "user-agent": "auth-test" },
     });
     const context = createRequestContext(request, {
@@ -603,17 +639,17 @@ describe("auth routes", () => {
 
     try {
       const firstResponse = await app.handle(
-        new Request("http://localhost/api/auth/oauth/authentik/start", {
+        new Request("http://localhost/api/auth/oauth/oidc/start", {
           headers: { "x-forwarded-for": "198.51.100.10" },
         }),
       );
       const blockedResponse = await app.handle(
-        new Request("http://localhost/api/auth/oauth/authentik/start", {
+        new Request("http://localhost/api/auth/oauth/oidc/start", {
           headers: { "x-forwarded-for": "198.51.100.10" },
         }),
       );
       const spoofedIpResponse = await app.handle(
-        new Request("http://localhost/api/auth/oauth/authentik/start", {
+        new Request("http://localhost/api/auth/oauth/oidc/start", {
           headers: { "x-forwarded-for": "198.51.100.11" },
         }),
       );
@@ -643,7 +679,7 @@ describe("auth routes", () => {
 
     const loginFailure = await app.handle(
       new Request(
-        `http://localhost/api/auth/callback/authentik?code=login-code&state=${loginState.state}`,
+        `http://localhost/api/auth/callback/oidc?code=login-code&state=${loginState.state}`,
         {
           headers: { cookie: loginState.cookie },
         },
@@ -651,7 +687,7 @@ describe("auth routes", () => {
     );
     const linkFailure = await app.handle(
       new Request(
-        `http://localhost/api/auth/callback/authentik?code=link-code&state=${linkState.state}`,
+        `http://localhost/api/auth/callback/oidc?code=link-code&state=${linkState.state}`,
         {
           headers: { cookie: linkState.cookie },
         },
@@ -659,7 +695,7 @@ describe("auth routes", () => {
     );
     const blockedLogin = await app.handle(
       new Request(
-        `http://localhost/api/auth/callback/authentik?code=other-login-code&state=${loginState.state}`,
+        `http://localhost/api/auth/callback/oidc?code=other-login-code&state=${loginState.state}`,
         {
           headers: { cookie: loginState.cookie },
         },
@@ -679,18 +715,14 @@ describe("auth routes", () => {
     insertAuthProvider(database, "http://localhost/application/o/callback-rate-limit/");
 
     const firstResponse = await app.handle(
-      new Request(
-        "http://localhost/api/auth/callback/authentik?code=first-code&state=first-state",
-        {
-          headers: { "x-forwarded-for": "198.51.100.12" },
-        },
-      ),
+      new Request("http://localhost/api/auth/callback/oidc?code=first-code&state=first-state", {
+        headers: { "x-forwarded-for": "198.51.100.12" },
+      }),
     );
     const blockedResponse = await app.handle(
-      new Request(
-        "http://localhost/api/auth/callback/authentik?code=second-code&state=second-state",
-        { headers: { "x-forwarded-for": "198.51.100.12" } },
-      ),
+      new Request("http://localhost/api/auth/callback/oidc?code=second-code&state=second-state", {
+        headers: { "x-forwarded-for": "198.51.100.12" },
+      }),
     );
     const auditLog = database.db
       .select()
@@ -702,7 +734,7 @@ describe("auth routes", () => {
     expect(blockedResponse.status).toBe(429);
     expect(auditLog?.metadataJson).toBe(
       JSON.stringify({
-        provider: "authentik",
+        provider: "oidc",
         route: "callback",
         mode: null,
       }),
@@ -1021,7 +1053,7 @@ describe("auth routes", () => {
     expect(setCookie).toContain(`${OAUTH_STATE_COOKIE_NAME}=`);
   });
 
-  it("serves OAuth logout as a no-store POST continuation and deletes the local session", async () => {
+  it("serves OAuth logout as no-store JSON redirect URI and deletes the local session", async () => {
     const { app, database } = await createEmptyAuthTestApp(
       new LoginRateLimiter(),
       OAUTH_TEST_ENCRYPTION_KEY,
@@ -1051,10 +1083,6 @@ describe("auth routes", () => {
 
     try {
       const sessionToken = generateSessionToken();
-      const encryptedIdToken = await encryptOAuthIdToken(
-        "test-id-token",
-        OAUTH_TEST_ENCRYPTION_KEY,
-      );
       const now = new Date();
       database.db
         .insert(sessions)
@@ -1065,9 +1093,7 @@ describe("auth routes", () => {
           expiresAt: createSessionExpiresAt(now).toISOString(),
           ipAddress: "127.0.0.1",
           userAgent: "route-test",
-          oauthProvider: "authentik",
-          oauthIdTokenEncrypted: encryptedIdToken.encrypted,
-          oauthMasterKeyId: encryptedIdToken.masterKeyId,
+          oauthProvider: "oidc",
           createdAt: now.toISOString(),
         })
         .run();
@@ -1081,24 +1107,20 @@ describe("auth routes", () => {
           },
         ),
       );
-      const html = await logoutResponse.text();
+      const body = await logoutResponse.json();
       const setCookie = logoutResponse.headers.get("set-cookie") ?? "";
-      const action = readFormAction(html);
+      const redirectUri = new URL(body.redirectUri);
 
       expect(logoutResponse.status).toBe(200);
-      expect(logoutResponse.headers.get("content-type")).toStartWith("text/html");
+      expect(logoutResponse.headers.get("content-type")).toStartWith("application/json");
       expect(logoutResponse.headers.get("cache-control")).toBe("no-store");
-      expect(logoutResponse.headers.get("referrer-policy")).toBe("no-referrer");
-      expect(action).toBe(`${logoutIssuer}end-session/`);
-      expect(new URL(action).searchParams.has("id_token_hint")).toBe(false);
-      expect(html).toContain('method="post"');
-      expect(html).toContain('name="id_token_hint"');
-      expect(html).toContain('name="post_logout_redirect_uri"');
-      expect(html).toContain('name="client_id"');
-      expect(html).toContain('name="state"');
+      expect(body).toEqual({ status: "ok", redirectUri: `${logoutIssuer}end-session/` });
+      expect(redirectUri.searchParams.has("id_token_hint")).toBe(false);
+      expect(redirectUri.searchParams.has("post_logout_redirect_uri")).toBe(false);
+      expect(redirectUri.searchParams.has("client_id")).toBe(false);
+      expect(redirectUri.searchParams.has("state")).toBe(false);
       expect(setCookie).toContain(`${SESSION_COOKIE_NAME}=`);
       expect(setCookie).toContain(`${OAUTH_STATE_COOKIE_NAME}=`);
-      expect(setCookie).toContain(`${OAUTH_LOGOUT_STATE_COOKIE_NAME}=`);
       expect(
         database.db
           .select()
@@ -1111,41 +1133,327 @@ describe("auth routes", () => {
     }
   });
 
-  it("validates OAuth logout callback state before redirecting to login", async () => {
+  it("does not expose the legacy OAuth logout callback route", async () => {
     const { app } = await createEmptyAuthTestApp(new LoginRateLimiter(), OAUTH_TEST_ENCRYPTION_KEY);
-    const state = "valid-logout-state";
-    const stateCookie = await createLogoutStateCookieValue(state, OAUTH_TEST_ENCRYPTION_KEY);
-    const response = await app.handle(
-      new Request(`http://localhost/api/auth/logout/callback?state=${state}`, {
-        headers: { cookie: `${OAUTH_LOGOUT_STATE_COOKIE_NAME}=${stateCookie}` },
-      }),
-    );
-    const setCookie = response.headers.get("set-cookie") ?? "";
+    const response = await app.handle(new Request("http://localhost/api/auth/logout/callback"));
 
-    expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe(`${TEST_WEB_ORIGIN}/login`);
-    expect(setCookie).toContain(`${OAUTH_LOGOUT_STATE_COOKIE_NAME}=`);
+    expect(response.status).toBe(404);
   });
 
-  it("rejects OAuth logout callbacks with missing or invalid state", async () => {
-    const { app } = await createEmptyAuthTestApp(new LoginRateLimiter(), OAUTH_TEST_ENCRYPTION_KEY);
-    const missingResponse = await app.handle(
-      new Request("http://localhost/api/auth/logout/callback"),
-    );
-    const invalidResponse = await app.handle(
-      new Request("http://localhost/api/auth/logout/callback?state=wrong", {
-        headers: { cookie: `${OAUTH_LOGOUT_STATE_COOKIE_NAME}=not-a-valid-state-cookie` },
-      }),
-    );
+  it("accepts back-channel logout tokens and deletes the matching OAuth sid session", async () => {
+    const { app, database } = await createEmptyAuthTestApp();
+    const keys = await createRsaFixture();
+    const oauthUser = await insertTestUser(database, {
+      username: "backchannel-user",
+      email: "backchannel-user@example.local",
+      password: DEFAULT_PASSWORD,
+    });
+    const otherUser = await insertTestUser(database, {
+      username: "other-backchannel-user",
+      email: "other-backchannel-user@example.local",
+      password: DEFAULT_PASSWORD,
+    });
+    let logoutIssuer = "";
+    const discoveryServer = Bun.serve({
+      port: 0,
+      fetch: (request) => {
+        if (new URL(request.url).pathname.endsWith("/jwks/")) {
+          return Response.json({ keys: [keys.jwk] });
+        }
 
-    expect(missingResponse.status).toBe(400);
-    expect(await missingResponse.json()).toEqual({
-      error: {
-        code: "OAUTH_LOGOUT_STATE_INVALID",
-        message: "OAuth logout state is invalid or expired.",
+        return Response.json(createDiscoveryDocument(logoutIssuer, keys.jwk.kid, true));
       },
     });
-    expect(invalidResponse.status).toBe(400);
+
+    logoutIssuer = new URL("/application/o/backchannel-route/", discoveryServer.url).toString();
+    insertAuthProvider(database, logoutIssuer);
+    insertOAuthIdentity(database, oauthUser.id, logoutIssuer, "backchannel-subject");
+    insertOAuthIdentity(database, otherUser.id, logoutIssuer, "other-backchannel-subject");
+    const matchingToken = insertOAuthSession(database, oauthUser.id, "matching-provider-sid");
+    const otherSidToken = insertOAuthSession(database, oauthUser.id, "other-provider-sid");
+    const otherUserToken = insertOAuthSession(database, otherUser.id, "matching-provider-sid");
+
+    try {
+      const logoutToken = await signLogoutJwt(keys.privateKey, keys.jwk.kid, {
+        iss: logoutIssuer,
+        sub: "backchannel-subject",
+        aud: "template-client",
+        exp: nowSeconds() + 300,
+        iat: nowSeconds(),
+        jti: `logout-${crypto.randomUUID()}`,
+        sid: "matching-provider-sid",
+        events: { "http://schemas.openid.net/event/backchannel-logout": {} },
+      });
+      const response = await app.handle(
+        new Request("http://localhost/api/auth/oauth/backchannel-logout", {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ logout_token: logoutToken }),
+        }),
+      );
+      const responseText = await response.text();
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(responseText).not.toContain(logoutToken);
+      expect(sessionExists(database, matchingToken)).toBe(false);
+      expect(sessionExists(database, otherSidToken)).toBe(true);
+      expect(sessionExists(database, otherUserToken)).toBe(true);
+    } finally {
+      discoveryServer.stop(true);
+    }
+  });
+
+  it("accepts sid-only back-channel logout tokens and deletes matching OAuth sid sessions", async () => {
+    const { app, database } = await createEmptyAuthTestApp();
+    const keys = await createRsaFixture();
+    const oauthUser = await insertTestUser(database, {
+      username: "sid-only-backchannel-user",
+      email: "sid-only-backchannel-user@example.local",
+      password: DEFAULT_PASSWORD,
+    });
+    let logoutIssuer = "";
+    const discoveryServer = Bun.serve({
+      port: 0,
+      fetch: (request) => {
+        if (new URL(request.url).pathname.endsWith("/jwks/")) {
+          return Response.json({ keys: [keys.jwk] });
+        }
+
+        return Response.json(createDiscoveryDocument(logoutIssuer, keys.jwk.kid, true));
+      },
+    });
+
+    logoutIssuer = new URL(
+      "/application/o/backchannel-sid-only-route/",
+      discoveryServer.url,
+    ).toString();
+    insertAuthProvider(database, logoutIssuer);
+    const matchingToken = insertOAuthSession(database, oauthUser.id, "sid-only-provider-session");
+    const otherSidToken = insertOAuthSession(database, oauthUser.id, "sid-only-other-session");
+
+    try {
+      const logoutToken = await signLogoutJwt(keys.privateKey, keys.jwk.kid, {
+        iss: logoutIssuer,
+        aud: "template-client",
+        exp: nowSeconds() + 300,
+        iat: nowSeconds(),
+        jti: `logout-${crypto.randomUUID()}`,
+        sid: "sid-only-provider-session",
+        events: { "http://schemas.openid.net/event/backchannel-logout": {} },
+      });
+      const response = await app.handle(
+        new Request("http://localhost/api/auth/oauth/backchannel-logout", {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ logout_token: logoutToken }),
+        }),
+      );
+      const responseText = await response.text();
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(responseText).not.toContain(logoutToken);
+      expect(sessionExists(database, matchingToken)).toBe(false);
+      expect(sessionExists(database, otherSidToken)).toBe(true);
+    } finally {
+      discoveryServer.stop(true);
+    }
+  });
+
+  it("deletes all OAuth identity sessions when back-channel logout has subject without sid", async () => {
+    const { app, database } = await createEmptyAuthTestApp();
+    const keys = await createRsaFixture();
+    const oauthUser = await insertTestUser(database, {
+      username: "subject-logout-user",
+      email: "subject-logout-user@example.local",
+      password: DEFAULT_PASSWORD,
+    });
+    let logoutIssuer = "";
+    const discoveryServer = Bun.serve({
+      port: 0,
+      fetch: (request) => {
+        if (new URL(request.url).pathname.endsWith("/jwks/")) {
+          return Response.json({ keys: [keys.jwk] });
+        }
+
+        return Response.json(createDiscoveryDocument(logoutIssuer, keys.jwk.kid, true));
+      },
+    });
+
+    logoutIssuer = new URL(
+      "/application/o/backchannel-subject-route/",
+      discoveryServer.url,
+    ).toString();
+    insertAuthProvider(database, logoutIssuer);
+    insertOAuthIdentity(database, oauthUser.id, logoutIssuer, "subject-only-subject");
+    const firstToken = insertOAuthSession(database, oauthUser.id, "first-provider-sid");
+    const secondToken = insertOAuthSession(database, oauthUser.id, "second-provider-sid");
+
+    try {
+      const logoutToken = await signLogoutJwt(keys.privateKey, keys.jwk.kid, {
+        iss: logoutIssuer,
+        sub: "subject-only-subject",
+        aud: "template-client",
+        exp: nowSeconds() + 300,
+        iat: nowSeconds(),
+        jti: `logout-${crypto.randomUUID()}`,
+        events: { "http://schemas.openid.net/event/backchannel-logout": {} },
+      });
+      const response = await app.handle(
+        new Request("http://localhost/api/auth/oauth/backchannel-logout", {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ logout_token: logoutToken }),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(sessionExists(database, firstToken)).toBe(false);
+      expect(sessionExists(database, secondToken)).toBe(false);
+    } finally {
+      discoveryServer.stop(true);
+    }
+  });
+
+  it("unlinks all OAuth identities and revokes only OAuth sessions for system admins", async () => {
+    const { app, database, admin, viewer, viewerCookie } = await createAuthTestApp();
+    const adminCookie = await loginAndReadCookie(app, "admin@example.local");
+    const issuer = "http://localhost/application/o/unlink-all/";
+
+    insertAuthProvider(database, issuer);
+    insertOAuthIdentity(database, admin.id, issuer, "admin-subject");
+    insertOAuthIdentity(database, viewer.id, issuer, "viewer-subject");
+    const adminOauthToken = insertOAuthSession(database, admin.id, "admin-oauth-session");
+    const viewerOauthToken = insertOAuthSession(database, viewer.id, "viewer-oauth-session");
+
+    const deniedResponse = await app.handle(
+      csrfJsonDeleteRequest("/api/auth/identities", { cookie: viewerCookie }),
+    );
+
+    expect(deniedResponse.status).toBe(403);
+    expect(database.db.select().from(authIdentities).all()).toHaveLength(2);
+
+    const response = await app.handle(
+      csrfJsonDeleteRequest("/api/auth/identities", { cookie: adminCookie }),
+    );
+    const body = await response.json();
+    const auditLog = database.db
+      .select()
+      .from(auditLogs)
+      .all()
+      .find((log) => log.action === "auth.oauth.identities_unlinked_all");
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({
+      status: "ok",
+      deletedIdentityCount: 2,
+      revokedOAuthSessionCount: 2,
+    });
+    expect(database.db.select().from(authIdentities).all()).toHaveLength(0);
+    expect(sessionExists(database, adminOauthToken)).toBe(false);
+    expect(sessionExists(database, viewerOauthToken)).toBe(false);
+    expect(database.db.select().from(users).all()).toHaveLength(2);
+    expect(database.db.select().from(userPermissionGrants).all()).toHaveLength(1);
+    await expectSessionAccepted(app, adminCookie);
+    expect(auditLog?.metadataJson).toBe(
+      JSON.stringify({ deletedIdentityCount: 2, revokedOAuthSessionCount: 2 }),
+    );
+  });
+
+  it("refuses unlink-all when no active local system admin exists", async () => {
+    const { app, database } = await createEmptyAuthTestApp();
+    const oauthAdmin = await insertTestUser(database, {
+      username: "oauth-admin",
+      email: "oauth-admin@example.local",
+      password: DEFAULT_PASSWORD,
+      permissions: [SYSTEM_ADMIN_PERMISSION],
+    });
+
+    database.sqlite
+      .query("UPDATE users SET auth_method = ? WHERE id = ?")
+      .run("oauth", oauthAdmin.id);
+    const oauthAdminToken = insertOAuthSession(database, oauthAdmin.id, "oauth-admin-session");
+
+    const response = await app.handle(
+      csrfJsonDeleteRequest("/api/auth/identities", {
+        cookie: `${SESSION_COOKIE_NAME}=${oauthAdminToken}`,
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body).toEqual({
+      error: {
+        code: "LAST_SYSTEM_ADMIN_REQUIRED",
+        message: "At least one active user must keep the system:admin permission.",
+      },
+    });
+    expect(sessionExists(database, oauthAdminToken)).toBe(true);
+  });
+
+  it("rejects invalid back-channel logout requests without echoing tokens", async () => {
+    const { app, database } = await createEmptyAuthTestApp();
+    const keys = await createRsaFixture();
+    let logoutIssuer = "";
+    const discoveryServer = Bun.serve({
+      port: 0,
+      fetch: (request) => {
+        if (new URL(request.url).pathname.endsWith("/jwks/")) {
+          return Response.json({ keys: [keys.jwk] });
+        }
+
+        return Response.json(createDiscoveryDocument(logoutIssuer, keys.jwk.kid, false));
+      },
+    });
+
+    logoutIssuer = new URL(
+      "/application/o/backchannel-disabled-route/",
+      discoveryServer.url,
+    ).toString();
+    insertAuthProvider(database, logoutIssuer);
+
+    try {
+      const validButDisabledToken = await signLogoutJwt(keys.privateKey, keys.jwk.kid, {
+        iss: logoutIssuer,
+        sub: "disabled-subject",
+        aud: "template-client",
+        exp: nowSeconds() + 300,
+        iat: nowSeconds(),
+        jti: `logout-${crypto.randomUUID()}`,
+        events: { "http://schemas.openid.net/event/backchannel-logout": {} },
+      });
+      const missingResponse = await app.handle(
+        new Request("http://localhost/api/auth/oauth/backchannel-logout", {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams(),
+        }),
+      );
+      const malformedResponse = await app.handle(
+        new Request("http://localhost/api/auth/oauth/backchannel-logout", {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ logout_token: "not-a-jwt" }),
+        }),
+      );
+      const disabledResponse = await app.handle(
+        new Request("http://localhost/api/auth/oauth/backchannel-logout", {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ logout_token: validButDisabledToken }),
+        }),
+      );
+      const disabledText = await disabledResponse.text();
+
+      expect(missingResponse.status).toBe(400);
+      expect(malformedResponse.status).toBe(400);
+      expect(disabledResponse.status).toBe(400);
+      expect(disabledResponse.headers.get("cache-control")).toBe("no-store");
+      expect(disabledText).not.toContain(validButDisabledToken);
+    } finally {
+      discoveryServer.stop(true);
+    }
   });
 
   it("keeps notification history self-only and validates history inputs", async () => {
@@ -1318,7 +1626,7 @@ async function insertTestUser(
     password: string;
     permissions?: UserPermission[];
   },
-): Promise<void> {
+): Promise<{ id: string }> {
   const now = new Date().toISOString();
   const userId = Bun.randomUUIDv7();
 
@@ -1354,6 +1662,57 @@ async function insertTestUser(
       )
       .run();
   }
+
+  return { id: userId };
+}
+
+function insertOAuthIdentity(
+  database: DatabaseClient,
+  userId: string,
+  issuer: string,
+  subject: string,
+): void {
+  database.db
+    .insert(authIdentities)
+    .values({
+      id: Bun.randomUUIDv7(),
+      userId,
+      provider: "oidc",
+      issuer,
+      subject,
+      createdAt: new Date().toISOString(),
+    })
+    .run();
+}
+
+function insertOAuthSession(database: DatabaseClient, userId: string, oauthSid: string): string {
+  const sessionToken = generateSessionToken();
+  const now = new Date();
+
+  database.db
+    .insert(sessions)
+    .values({
+      id: Bun.randomUUIDv7(),
+      userId,
+      tokenHash: hashSessionToken(sessionToken),
+      expiresAt: createSessionExpiresAt(now).toISOString(),
+      ipAddress: "127.0.0.1",
+      userAgent: "backchannel-route-test",
+      oauthProvider: "oidc",
+      oauthSid,
+      createdAt: now.toISOString(),
+    })
+    .run();
+
+  return sessionToken;
+}
+
+function sessionExists(database: DatabaseClient, sessionToken: string): boolean {
+  return database.db
+    .select()
+    .from(sessions)
+    .all()
+    .some((session) => session.tokenHash === hashSessionToken(sessionToken));
 }
 
 async function loginAndReadCookie(
@@ -1405,6 +1764,19 @@ async function expectSessionRejected(
   expect(usersResponse.status).toBe(401);
 }
 
+async function expectSessionAccepted(
+  app: TestAppContext["app"],
+  cookieHeader: string,
+): Promise<void> {
+  const meResponse = await app.handle(
+    new Request("http://localhost/api/auth/me", { headers: { cookie: cookieHeader } }),
+  );
+  const meBody = await meResponse.json();
+
+  expect(meResponse.status).toBe(200);
+  expect(meBody.user).not.toBeNull();
+}
+
 function toCookieHeader(setCookie: string): string {
   return setCookie.split(";")[0] ?? "";
 }
@@ -1436,26 +1808,99 @@ function findStoredUserByEmail(database: DatabaseClient, email: string) {
     .find((user) => user.email === email);
 }
 
-function insertAuthProvider(database: DatabaseClient, providerIssuer: string): void {
+function insertAuthProvider(
+  database: DatabaseClient,
+  providerIssuer: string,
+  options: { enabled?: boolean } = {},
+): void {
   const now = new Date().toISOString();
 
   database.db
     .insert(authProviders)
     .values({
       id: Bun.randomUUIDv7(),
-      slug: "authentik",
-      label: "Authentik",
+      slug: "oidc",
+      label: "OIDC",
       issuer: providerIssuer,
       clientId: "template-client",
       clientSecretEncrypted: "unused-by-logout",
       masterKeyId: "oauth-client-secret-v1",
       scopes: "openid profile email",
-      redirectUris: JSON.stringify(["http://localhost/api/auth/callback/authentik"]),
-      enabled: true,
+      redirectUris: JSON.stringify(["http://localhost/api/auth/callback/oidc"]),
+      enabled: options.enabled ?? true,
       createdAt: now,
       updatedAt: now,
     })
     .run();
+}
+
+async function createRsaFixture(): Promise<{
+  jwk: JsonWebKey & { kid: string };
+  privateKey: CryptoKey;
+}> {
+  const pair = await crypto.subtle.generateKey(
+    {
+      name: "RSASSA-PKCS1-v1_5",
+      modulusLength: 2048,
+      publicExponent: new Uint8Array([1, 0, 1]),
+      hash: "SHA-256",
+    },
+    true,
+    ["sign", "verify"],
+  );
+  const jwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
+
+  return {
+    privateKey: pair.privateKey,
+    jwk: {
+      ...jwk,
+      alg: "RS256",
+      kid: `kid-${crypto.randomUUID()}`,
+      use: "sig",
+    },
+  };
+}
+
+function createDiscoveryDocument(
+  issuer: string,
+  _kid: string,
+  backchannelLogoutSupported: boolean,
+) {
+  return {
+    issuer,
+    authorization_endpoint: `${issuer}authorize/`,
+    token_endpoint: `${issuer}token/`,
+    userinfo_endpoint: `${issuer}userinfo/`,
+    jwks_uri: `${issuer}jwks/`,
+    id_token_signing_alg_values_supported: ["RS256"],
+    backchannel_logout_supported: backchannelLogoutSupported,
+    backchannel_logout_session_supported: backchannelLogoutSupported,
+  };
+}
+
+async function signLogoutJwt(
+  privateKey: CryptoKey,
+  kid: string,
+  claims: Record<string, unknown>,
+): Promise<string> {
+  const encodedHeader = encodeJson({ alg: "RS256", kid, typ: "logout+jwt" });
+  const encodedPayload = encodeJson(claims);
+  const signingInput = `${encodedHeader}.${encodedPayload}`;
+  const signature = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    privateKey,
+    new TextEncoder().encode(signingInput),
+  );
+
+  return `${signingInput}.${base64UrlEncode(signature)}`;
+}
+
+function encodeJson(value: unknown): string {
+  return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
+}
+
+function nowSeconds(): number {
+  return Math.floor(Date.now() / 1000);
 }
 
 async function createOAuthCallbackStateCookie(
@@ -1464,13 +1909,13 @@ async function createOAuthCallbackStateCookie(
 ): Promise<{ cookie: string; state: string }> {
   const value = await createOAuthStateCookieValue(
     {
-      provider: "authentik",
+      provider: "oidc",
       state,
       nonce: `${mode}-nonce`,
       codeVerifier: `${mode}-code-verifier`,
       mode,
       returnTo: "/settings/auth",
-      redirectUri: "http://localhost/api/auth/callback/authentik",
+      redirectUri: "http://localhost/api/auth/callback/oidc",
     },
     OAUTH_TEST_ENCRYPTION_KEY,
   );

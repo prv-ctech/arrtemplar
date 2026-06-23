@@ -10,13 +10,11 @@ const oauthGcmIvBytes = 12;
 const OAUTH_CLIENT_SECRET_PURPOSE = "arrtemplar/oauth-client-secret/v1" as const;
 const OAUTH_ID_TOKEN_PURPOSE = "arrtemplar/oauth-id-token/v1" as const;
 export const OAUTH_STATE_PURPOSE = "arrtemplar/oauth-state/v1" as const;
-export const OAUTH_LOGOUT_STATE_PURPOSE = "arrtemplar/oauth-logout-state/v1" as const;
 
 export type OAuthKeyPurpose =
   | typeof OAUTH_CLIENT_SECRET_PURPOSE
   | typeof OAUTH_ID_TOKEN_PURPOSE
-  | typeof OAUTH_STATE_PURPOSE
-  | typeof OAUTH_LOGOUT_STATE_PURPOSE;
+  | typeof OAUTH_STATE_PURPOSE;
 
 export type EncryptedOAuthClientSecret = {
   encrypted: string;
