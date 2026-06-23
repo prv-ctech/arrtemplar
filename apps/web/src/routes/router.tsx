@@ -6,7 +6,6 @@ import { AccountRoute } from "./components/account-route";
 import { AdminAboutRoute } from "./components/admin-about-route";
 import { AdminAuthRoute } from "./components/admin-auth-route";
 import { AdminGeneralRoute } from "./components/admin-general-route";
-import { AdminImportRoute } from "./components/admin-import-route";
 import { AdminLibraryRoute } from "./components/admin-library-route";
 import { AdminLogsRoute } from "./components/admin-logs-route";
 import { AdminNotificationsRoute } from "./components/admin-notifications-route";
@@ -158,12 +157,6 @@ const settingsUsersRoute = createRoute({
   component: AdminUsersRoute,
 });
 
-const settingsImportRoute = createRoute({
-  getParentRoute: () => settingsRoute,
-  path: "import",
-  component: AdminImportRoute,
-});
-
 const settingsNotificationsRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "notifications",
@@ -211,7 +204,6 @@ const routeTree = rootRoute.addChildren([
     settingsGeneralRoute,
     settingsLibraryRoute,
     settingsUsersRoute,
-    settingsImportRoute,
     settingsNotificationsRoute,
     settingsAuthRoute,
     settingsServicesRoute,

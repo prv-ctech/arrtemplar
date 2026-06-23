@@ -2,7 +2,6 @@ import { type PublicUser, SYSTEM_ADMIN_PERMISSION } from "@arrtemplar/shared";
 import {
   BellIcon,
   BookOpenIcon,
-  DownloadSimpleIcon,
   FingerprintIcon,
   GearIcon,
   InfoIcon,
@@ -27,7 +26,6 @@ export type AdminSettingsPage =
   | "theme"
   | "general"
   | "library"
-  | "import"
   | "notifications"
   | "auth"
   | "services"
@@ -40,7 +38,6 @@ type SettingsRouteTarget =
   | "/settings/theme"
   | "/settings/general"
   | "/settings/library"
-  | "/settings/import"
   | "/settings/notifications"
   | "/settings/auth"
   | "/settings/services"
@@ -90,15 +87,6 @@ function createSettingsEntries(user: PublicUser) {
       label: "Users",
       icon: <UserIcon aria-hidden="true" className="size-5" />,
       path: "/settings/users",
-    });
-  }
-
-  if (hasRequiredPermission(user, "settings:import")) {
-    entries.push({
-      id: "import",
-      label: "Import",
-      icon: <DownloadSimpleIcon aria-hidden="true" className="size-5" />,
-      path: "/settings/import",
     });
   }
 
@@ -187,13 +175,6 @@ function ActiveSettingsPage({ activePage }: { activePage: AdminSettingsPage }) {
       );
     case "users":
       return <AdminUsersSettings />;
-    case "import":
-      return (
-        <SettingsPlaceholder
-          description="Import queue, files, and parser settings."
-          title="Import"
-        />
-      );
     case "notifications":
       return (
         <SettingsPlaceholder

@@ -8,7 +8,6 @@ const SETTINGS_PAGE_IDS = [
   "theme",
   "general",
   "library",
-  "import",
   "notifications",
   "services",
   "logs",

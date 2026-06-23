@@ -33,7 +33,6 @@ const serviceOperatorPermissions: readonly UserPermission[] = [
   "settings:theme",
   "settings:services",
   "settings:library",
-  "settings:import",
   "settings:notifications",
   "settings:logs",
 ];

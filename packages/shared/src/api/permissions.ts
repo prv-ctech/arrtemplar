@@ -170,15 +170,6 @@ export const PERMISSION_CATALOG = [
     route: { surface: "settings", path: "/settings/library" },
   },
   {
-    permission: "settings:import",
-    category: "settings",
-    label: "Import settings",
-    description: "Manage import pipelines, parsers, and related operational settings.",
-    risk: "medium",
-    defaultGrant: "explicit",
-    route: { surface: "settings", path: "/settings/import" },
-  },
-  {
     permission: "settings:notifications",
     category: "settings",
     label: "Notification settings",

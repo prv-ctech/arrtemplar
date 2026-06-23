@@ -34,7 +34,6 @@ const expectedPermissions: UserPermission[] = [
   "settings:general",
   "settings:services",
   "settings:library",
-  "settings:import",
   "settings:notifications",
   "settings:auth",
   "settings:logs",
