@@ -4,6 +4,9 @@ import {
   AUTH_PROVIDER_SLUGS,
   DEFAULT_PROFILE_AVATAR_ID,
   DEFAULT_PROFILE_BANNER_ID,
+  DOWNLOAD_CLIENT_AUTH_MODE_VALUES,
+  DOWNLOAD_CLIENT_KIND_VALUES,
+  DOWNLOAD_CLIENT_PROBE_OUTCOME_VALUES,
   NOTIFICATION_FREQUENCY_VALUES,
   OIDC_PROFILE_SIGNING_ALGORITHM_VALUES,
   OIDC_SIGNING_ALGORITHM_VALUES,
@@ -50,6 +53,18 @@ const oidcProfileSigningAlgorithmEnum = [...OIDC_PROFILE_SIGNING_ALGORITHM_VALUE
 const notificationFrequencyEnum = [...NOTIFICATION_FREQUENCY_VALUES] as [
   (typeof NOTIFICATION_FREQUENCY_VALUES)[number],
   ...(typeof NOTIFICATION_FREQUENCY_VALUES)[number][],
+];
+const downloadClientKindEnum = [...DOWNLOAD_CLIENT_KIND_VALUES] as [
+  (typeof DOWNLOAD_CLIENT_KIND_VALUES)[number],
+  ...(typeof DOWNLOAD_CLIENT_KIND_VALUES)[number][],
+];
+const downloadClientAuthModeEnum = [...DOWNLOAD_CLIENT_AUTH_MODE_VALUES] as [
+  (typeof DOWNLOAD_CLIENT_AUTH_MODE_VALUES)[number],
+  ...(typeof DOWNLOAD_CLIENT_AUTH_MODE_VALUES)[number][],
+];
+const downloadClientProbeOutcomeEnum = [...DOWNLOAD_CLIENT_PROBE_OUTCOME_VALUES] as [
+  (typeof DOWNLOAD_CLIENT_PROBE_OUTCOME_VALUES)[number],
+  ...(typeof DOWNLOAD_CLIENT_PROBE_OUTCOME_VALUES)[number][],
 ];
 const toastNotificationIdEnum = [...TOAST_NOTIFICATION_EVENT_IDS] as [
   (typeof TOAST_NOTIFICATION_EVENT_IDS)[number],
@@ -266,6 +281,38 @@ export const apiKeys = sqliteTable(
   ],
 );
 
+export const downloadClients = sqliteTable(
+  "download_clients",
+  {
+    id: text("id").primaryKey(),
+    kind: text("kind", { enum: downloadClientKindEnum }).notNull(),
+    displayName: text("display_name").notNull(),
+    isDefault: integer("is_default", { mode: "boolean" }).notNull().default(false),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+    useSsl: integer("use_ssl", { mode: "boolean" }).notNull().default(false),
+    host: text("host").notNull(),
+    port: integer("port").notNull(),
+    urlBase: text("url_base"),
+    authMode: text("auth_mode", { enum: downloadClientAuthModeEnum }).notNull(),
+    username: text("username"),
+    apiKeyEncrypted: text("api_key_encrypted"),
+    passwordEncrypted: text("password_encrypted"),
+    masterKeyId: text("master_key_id"),
+    lastTestedAt: text("last_tested_at"),
+    lastTestOutcome: text("last_test_outcome", { enum: downloadClientProbeOutcomeEnum }),
+    lastTestMessage: text("last_test_message"),
+    lastStatusCheckedAt: text("last_status_checked_at"),
+    lastStatusOutcome: text("last_status_outcome", { enum: downloadClientProbeOutcomeEnum }),
+    lastStatusMessage: text("last_status_message"),
+    createdAt: text("created_at").notNull().default(timestampNow),
+    updatedAt: text("updated_at").notNull().default(timestampNow),
+  },
+  (table) => [
+    index("download_clients_kind_idx").on(table.kind),
+    index("download_clients_enabled_idx").on(table.enabled),
+  ],
+);
+
 export const apiKeyPermissionGrants = sqliteTable(
   "api_key_permission_grants",
   {
@@ -318,6 +365,8 @@ export type Session = InferSelectModel<typeof sessions>;
 export type NewSession = InferInsertModel<typeof sessions>;
 export type ApiKey = InferSelectModel<typeof apiKeys>;
 export type NewApiKey = InferInsertModel<typeof apiKeys>;
+export type DownloadClient = InferSelectModel<typeof downloadClients>;
+export type NewDownloadClient = InferInsertModel<typeof downloadClients>;
 export type ApiKeyPermissionGrant = InferSelectModel<typeof apiKeyPermissionGrants>;
 export type NewApiKeyPermissionGrant = InferInsertModel<typeof apiKeyPermissionGrants>;
 export type AuditLog = InferSelectModel<typeof auditLogs>;

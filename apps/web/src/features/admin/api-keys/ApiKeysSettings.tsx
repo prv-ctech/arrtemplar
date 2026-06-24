@@ -30,7 +30,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { notify } from "@/features/notifications/notification-gateway";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -41,15 +40,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { notify } from "@/features/notifications/notification-gateway";
 import { SettingsStatus } from "@/features/settings/SettingsPrimitives";
 import { cn } from "@/lib/utils";
 import { useAuthenticatedRouteUser } from "@/routes/authenticated-route-user";
 import { togglePermissionSelection } from "../../user/permission-selection";
 import { usePermissionCatalogQuery } from "../admin-users";
 import { permissionsDialogContentClassName } from "../permission-grant-dialog";
-import {
-  PermissionCategoryGrid,
-} from "../permission-grant-grid";
+import { PermissionCategoryGrid } from "../permission-grant-grid";
 import {
   useApiKeysQuery,
   useCreateApiKeyMutation,
@@ -607,7 +605,9 @@ function ApiKeyFormDialog({
   }
 
   function togglePermission(permission: UserPermission) {
-    setPermissionDraft((current) => togglePermissionSelection(current ?? selectedPermissions, permission));
+    setPermissionDraft((current) =>
+      togglePermissionSelection(current ?? selectedPermissions, permission),
+    );
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -810,11 +810,7 @@ function ApiKeySecretDialog({
         {reveal ? <Input className="font-mono text-xs" readOnly value={reveal.secret} /> : null}
         <DialogFooter>
           {reveal ? (
-            <Button
-              onClick={() => copySecret(reveal.secret)}
-              type="button"
-              variant="outline"
-            >
+            <Button onClick={() => copySecret(reveal.secret)} type="button" variant="outline">
               Copy
             </Button>
           ) : null}

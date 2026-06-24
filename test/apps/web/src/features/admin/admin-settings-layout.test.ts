@@ -4,6 +4,7 @@ import { readWorkspaceSource, readWorkspaceSources } from "./admin-settings-test
 const settingsSourcePath = "apps/web/src/features/admin/AdminSettings.tsx";
 const apiKeysSettingsSourcePath = "apps/web/src/features/admin/api-keys/ApiKeysSettings.tsx";
 const authSettingsSourcePath = "apps/web/src/features/auth-settings/AuthSettings.tsx";
+const servicesSettingsSourcePath = "apps/web/src/features/services-settings/ServicesSettings.tsx";
 const settingsPrimitivesSourcePath = "apps/web/src/features/settings/SettingsPrimitives.tsx";
 const tableSourcePath = "apps/web/src/components/ui/table.tsx";
 const usersSourcePaths = [
@@ -33,11 +34,36 @@ describe("app settings layout", () => {
     expect(source).toContain('path: "/settings/services"');
     expect(source).toContain('path: "/settings/auth"');
     expect(source).toContain("AuthSettings");
+    expect(source).toContain("ServicesSettings");
     expect(source).toContain("SYSTEM_ADMIN_PERMISSION");
     expect(source).not.toContain('hasRequiredPermission(user, "settings:auth")');
     expect(source).not.toContain('path: "/admin/');
     expect(source).not.toContain("Admin settings");
     expect(source).not.toContain("mod role");
+    expect(source).not.toContain("External service integrations and connectivity.");
+  });
+
+  it("uses real Services settings cards instead of placeholder copy", async () => {
+    const source = await readWorkspaceSource(servicesSettingsSourcePath);
+
+    expect(source).toContain("useDownloadClientConfigsQuery");
+    expect(source).toContain("useDownloadClientStatusQuery");
+    expect(source).toContain("/services/qbittorrent.svg");
+    expect(source).toContain("/services/sabnzbd.svg");
+    expect(source).toContain("SettingsAccordionCard");
+    expect(source).toContain("Service name");
+    expect(source).toContain("Add another service");
+    expect(source).toContain("DeleteServiceDialog");
+    expect(source).toContain("Test connection");
+    expect(source).toContain("Save settings");
+    expect(source).toContain("Connected");
+    expect(source).toContain("Not configured");
+    expect(source).not.toContain("This settings section is scaffolded");
+    expect(source).not.toContain("decorative bubble");
+    expect(source).not.toContain(
+      "Save downloader connections, test them, and review normalized compatibility status.",
+    );
+    expect(source).not.toContain("Outbound access is intentional here.");
   });
 
   it("keeps the users section as a real directory-driven management surface", async () => {

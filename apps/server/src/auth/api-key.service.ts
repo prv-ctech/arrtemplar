@@ -19,10 +19,10 @@ import {
 import { eq, inArray } from "drizzle-orm";
 import type { DatabaseClient } from "../db/client";
 import {
+  type ApiKey,
   apiKeyPermissionGrants,
   apiKeys,
   auditLogs,
-  type ApiKey,
   type User,
   userPermissionGrants,
   users,
@@ -240,9 +240,7 @@ export class ApiKeyService {
       tx.update(apiKeys)
         .set({
           ...(normalizedInput.name ? { name: normalizedInput.name } : {}),
-          ...(normalizedInput.hasDescription
-            ? { description: normalizedInput.description }
-            : {}),
+          ...(normalizedInput.hasDescription ? { description: normalizedInput.description } : {}),
           ...(normalizedInput.hasExpiresAt ? { expiresAt: normalizedInput.expiresAt } : {}),
           ...(normalizedInput.hasIpAllowlist
             ? { ipAllowlistJson: JSON.stringify(normalizedInput.ipAllowlist) }
@@ -320,9 +318,7 @@ export class ApiKeyService {
         existing.permissions,
       );
 
-      tx.delete(apiKeyPermissionGrants)
-        .where(eq(apiKeyPermissionGrants.apiKeyId, apiKeyId))
-        .run();
+      tx.delete(apiKeyPermissionGrants).where(eq(apiKeyPermissionGrants.apiKeyId, apiKeyId)).run();
       tx.delete(apiKeys).where(eq(apiKeys.id, apiKeyId)).run();
       writeApiKeyAuditLog(tx, {
         action: "api_keys.deleted",
@@ -698,7 +694,9 @@ type NormalizedCreateApiKeyInput = NormalizedApiKeyInput & {
   permissions: UserPermission[];
 };
 
-function normalizeCreateApiKeyInput(input: CreateApiKeyRequest): NormalizedCreateApiKeyInput | null {
+function normalizeCreateApiKeyInput(
+  input: CreateApiKeyRequest,
+): NormalizedCreateApiKeyInput | null {
   const normalizedInput = normalizeApiKeyInput(input, { requirePermissions: true });
 
   if (!normalizedInput?.name || !normalizedInput.permissions) {
@@ -1012,7 +1010,10 @@ function readPermissionGrantsByApiKeyId(
   }
 
   for (const grant of tx
-    .select({ apiKeyId: apiKeyPermissionGrants.apiKeyId, permission: apiKeyPermissionGrants.permission })
+    .select({
+      apiKeyId: apiKeyPermissionGrants.apiKeyId,
+      permission: apiKeyPermissionGrants.permission,
+    })
     .from(apiKeyPermissionGrants)
     .where(inArray(apiKeyPermissionGrants.apiKeyId, [...apiKeyIds]))
     .all()) {

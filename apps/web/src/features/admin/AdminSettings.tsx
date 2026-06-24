@@ -17,6 +17,7 @@ import { ThemeSettings } from "@/features/account/AccountSettings";
 import { ApiKeysSettings } from "@/features/admin/api-keys/ApiKeysSettings";
 import { canManageUsers, hasRequiredPermission } from "@/features/auth/auth-state";
 import { AuthSettings } from "@/features/auth-settings/AuthSettings";
+import { ServicesSettings } from "@/features/services-settings/ServicesSettings";
 import { useAuthenticatedRouteUser } from "@/routes/authenticated-route-user";
 import { type SettingsEntry, SettingsNav } from "../settings/SettingsNav";
 import { SettingsPanel } from "../settings/SettingsPrimitives";
@@ -181,12 +182,7 @@ function ActiveSettingsPage({ activePage }: { activePage: AdminSettingsPage }) {
     case "auth":
       return <AuthSettings />;
     case "services":
-      return (
-        <SettingsPlaceholder
-          description="External service integrations and connectivity."
-          title="Services"
-        />
-      );
+      return <ServicesSettings />;
     case "logs":
       return (
         <SettingsPlaceholder

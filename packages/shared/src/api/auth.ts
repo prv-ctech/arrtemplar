@@ -444,5 +444,10 @@ export type ApiErrorResponse = {
   error: {
     code: string;
     message: string;
+    fieldErrors?: Array<{
+      field: string;
+      code: string;
+      message: string;
+    }>;
   };
 };

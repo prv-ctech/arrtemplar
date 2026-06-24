@@ -9,14 +9,13 @@ import {
   OIDC_SIGNING_ALGORITHM_VALUES,
   TOKEN_ENDPOINT_AUTH_METHOD_VALUES,
 } from "@arrtemplar/shared";
-import { CaretDownIcon } from "@phosphor-icons/react";
 import { type FormEvent, type ReactNode, useId, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { notify } from "@/features/notifications/notification-gateway";
+import { SettingsAccordionCard } from "@/features/settings/SettingsAccordionCard";
 import { SettingsRow, SettingsStatus } from "@/features/settings/SettingsPrimitives";
 import { cn } from "@/lib/utils";
 import { useAuthenticatedRouteUser } from "@/routes/authenticated-route-user";
@@ -679,76 +678,17 @@ function AuthServiceCard({
   title: string;
 }) {
   return (
-    <Card className="w-full overflow-hidden rounded-2xl bg-card/50 shadow-none">
-      <AuthServiceCardHeader
-        action={action}
-        contentId={contentId}
-        isExpanded={isExpanded}
-        onToggle={onToggle}
-        title={title}
-      />
-      <AuthServiceCardBody contentId={contentId} isExpanded={isExpanded}>
-        {children}
-      </AuthServiceCardBody>
-    </Card>
-  );
-}
-
-function AuthServiceCardHeader({
-  action,
-  contentId,
-  isExpanded,
-  onToggle,
-  title,
-}: {
-  action?: ReactNode;
-  contentId: string;
-  isExpanded: boolean;
-  onToggle: () => void;
-  title: string;
-}) {
-  return (
-    <CardHeader className="p-0">
-      <div className="flex items-start gap-2 p-3">
-        <AuthServiceToggleButton
-          contentId={contentId}
-          isExpanded={isExpanded}
-          onToggle={onToggle}
-          title={title}
-        />
-        {action}
-      </div>
-    </CardHeader>
-  );
-}
-
-function AuthServiceToggleButton({
-  contentId,
-  isExpanded,
-  onToggle,
-  title,
-}: {
-  contentId: string;
-  isExpanded: boolean;
-  onToggle: () => void;
-  title: string;
-}) {
-  return (
-    <button
-      aria-controls={contentId}
-      aria-expanded={isExpanded}
-      aria-label={`${isExpanded ? "Collapse" : "Expand"} ${title} auth settings`}
-      className={cn(
-        "flex min-w-0 flex-1 cursor-pointer items-start gap-3 rounded-xl text-left transition-colors duration-200",
-        "hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-      )}
-      onClick={onToggle}
-      type="button"
+    <SettingsAccordionCard
+      action={action}
+      contentId={contentId}
+      icon={<OidcServiceLogo />}
+      isExpanded={isExpanded}
+      onToggle={onToggle}
+      title={title}
+      toggleLabel={`${isExpanded ? "Collapse" : "Expand"} ${title} auth settings`}
     >
-      <OidcServiceLogo />
-      <AuthServiceDetails title={title} />
-      <AuthServiceExpandIcon isExpanded={isExpanded} />
-    </button>
+      {children}
+    </SettingsAccordionCard>
   );
 }
 
@@ -764,49 +704,6 @@ function OidcServiceLogo() {
     >
       ID
     </div>
-  );
-}
-
-function AuthServiceDetails({ title }: { title: string }) {
-  return (
-    <div className="min-w-0 flex-1 py-2.5">
-      <CardTitle className="text-sm leading-5 sm:text-base">{title}</CardTitle>
-    </div>
-  );
-}
-
-function AuthServiceExpandIcon({ isExpanded }: { isExpanded: boolean }) {
-  return (
-    <CaretDownIcon
-      aria-hidden="true"
-      className={cn(
-        "mt-3 size-4 shrink-0 text-muted-foreground transition-transform duration-200",
-        isExpanded && "rotate-180",
-      )}
-    />
-  );
-}
-
-function AuthServiceCardBody({
-  children,
-  contentId,
-  isExpanded,
-}: {
-  children: ReactNode;
-  contentId: string;
-  isExpanded: boolean;
-}) {
-  if (!isExpanded) {
-    return null;
-  }
-
-  return (
-    <>
-      <Separator />
-      <CardContent className="p-2.5" id={contentId}>
-        {children}
-      </CardContent>
-    </>
   );
 }
 

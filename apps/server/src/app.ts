@@ -8,6 +8,7 @@ import type { LoginRateLimiter } from "./auth/rate-limit";
 import { createAuthRoutes } from "./auth/routes";
 import { env } from "./config/env";
 import { createDatabase, type DatabaseClient } from "./db/client";
+import { createDownloadClientRoutes } from "./download-clients/routes";
 import {
   corsAllowedHeaders,
   corsAllowedMethods,
@@ -109,11 +110,21 @@ export function createApp(options: CreateAppOptions = {}) {
           tags: [
             { name: "System", description: "Application status and diagnostics" },
             { name: "Auth", description: "Authentication, sessions, and role checks" },
+            {
+              name: "Settings",
+              description: "Admin-controlled settings and integration endpoints",
+            },
           ],
         },
       }),
     )
     .use(createAuthRoutes(authRoutesOptions))
+    .use(
+      createDownloadClientRoutes({
+        database,
+        secretEncryptionKey: authRoutesOptions.oauthClientSecretEncryptionKey,
+      }),
+    )
     .get(
       "/",
       ({ request }): BackendRootResponse => ({

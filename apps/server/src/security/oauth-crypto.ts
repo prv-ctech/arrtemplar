@@ -8,11 +8,13 @@ const oauthHmacKeyBytes = 64;
 const oauthGcmIvBytes = 12;
 
 const OAUTH_CLIENT_SECRET_PURPOSE = "arrtemplar/oauth-client-secret/v1" as const;
+const DOWNLOAD_CLIENT_SECRET_PURPOSE = "arrtemplar/download-client-secret/v1" as const;
 const OAUTH_ID_TOKEN_PURPOSE = "arrtemplar/oauth-id-token/v1" as const;
 export const OAUTH_STATE_PURPOSE = "arrtemplar/oauth-state/v1" as const;
 
 export type OAuthKeyPurpose =
   | typeof OAUTH_CLIENT_SECRET_PURPOSE
+  | typeof DOWNLOAD_CLIENT_SECRET_PURPOSE
   | typeof OAUTH_ID_TOKEN_PURPOSE
   | typeof OAUTH_STATE_PURPOSE;
 
@@ -22,6 +24,11 @@ export type EncryptedOAuthClientSecret = {
 };
 
 export type EncryptedOAuthIdToken = {
+  encrypted: string;
+  masterKeyId: string;
+};
+
+export type EncryptedDownloadClientSecret = {
   encrypted: string;
   masterKeyId: string;
 };
@@ -82,6 +89,17 @@ export async function encryptOAuthClientSecret(
   return encryptWithPurpose(plaintext, masterKey, OAUTH_CLIENT_SECRET_PURPOSE);
 }
 
+export async function encryptDownloadClientSecret(
+  plaintext: string,
+  masterKey: string,
+): Promise<EncryptedDownloadClientSecret> {
+  if (!plaintext) {
+    throw new Error("Download client secret must not be empty.");
+  }
+
+  return encryptWithPurpose(plaintext, masterKey, DOWNLOAD_CLIENT_SECRET_PURPOSE);
+}
+
 export async function decryptOAuthClientSecret(
   encrypted: string,
   masterKey: string,
@@ -100,6 +118,14 @@ export async function decryptOAuthClientSecret(
     const legacyKey = await importRawAesGcmKey(masterKey, ["decrypt"]);
     return decryptAesGcm(encrypted, legacyKey);
   }
+}
+
+export async function decryptDownloadClientSecret(
+  encrypted: string,
+  masterKey: string,
+): Promise<string> {
+  const derivedKey = await deriveAesGcmKey(masterKey, DOWNLOAD_CLIENT_SECRET_PURPOSE);
+  return decryptAesGcm(encrypted, derivedKey);
 }
 
 export async function encryptOAuthIdToken(

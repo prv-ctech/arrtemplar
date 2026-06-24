@@ -27,6 +27,12 @@ import type {
   CreateLocalUserRequest,
   CreateNotificationHistoryRequest,
   CreateNotificationHistoryResponse,
+  DeleteDownloadClientResponse,
+  DownloadClientKind,
+  DownloadClientListResponse,
+  DownloadClientProbeResponse,
+  DownloadClientResponse,
+  DownloadClientSavedConfig,
   HealthResponse,
   LoginRequest,
   LoginResponse,
@@ -43,6 +49,7 @@ import type {
   UpdateManagedUserProfileRequest,
   UpdateNotificationPreferencesRequest,
   UpdateUserProfileRequest,
+  UpsertDownloadClientRequest,
   UserPermission,
 } from "@arrtemplar/shared";
 import {
@@ -54,6 +61,9 @@ import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   DEFAULT_PROFILE_AVATAR_ID,
   DEFAULT_PROFILE_BANNER_ID,
+  isDownloadClientAuthMode,
+  isDownloadClientKind,
+  isDownloadClientProbeOutcome,
   isProfileAvatarId,
   isProfileBannerId,
   isToastNotificationId,
@@ -67,7 +77,12 @@ import {
 } from "@arrtemplar/shared";
 import { treaty } from "@elysia/eden";
 import { resolveApiBaseUrl } from "./api-base-url";
-import { ApiClientError, getApiErrorCode, getApiErrorMessage } from "./api-error";
+import {
+  ApiClientError,
+  getApiErrorCode,
+  getApiErrorFieldErrors,
+  getApiErrorMessage,
+} from "./api-error";
 
 const apiBaseUrl = resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
 const unsafeMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -290,16 +305,15 @@ export async function getPermissionCatalog(): Promise<readonly PermissionCatalog
     "Permission catalog request failed.",
   );
 
-  return response.permissions
-    .flatMap((entry) => {
-      if (typeof entry.permission !== "string" || !isUserPermission(entry.permission)) {
-        return [];
-      }
+  return response.permissions.flatMap((entry) => {
+    if (typeof entry.permission !== "string" || !isUserPermission(entry.permission)) {
+      return [];
+    }
 
-      const catalogEntry = PERMISSION_CATALOG_BY_PERMISSION.get(entry.permission);
+    const catalogEntry = PERMISSION_CATALOG_BY_PERMISSION.get(entry.permission);
 
-      return catalogEntry ? [catalogEntry] : [];
-    });
+    return catalogEntry ? [catalogEntry] : [];
+  });
 }
 
 export async function listApiKeys(): Promise<ApiKeySummary[]> {
@@ -356,6 +370,120 @@ export async function deleteApiKey(apiKeyId: string): Promise<ApiKeySummary> {
   });
 
   return normalizeApiKeyMutationResponse(response).apiKey;
+}
+
+export async function listDownloadClientConfigs(): Promise<DownloadClientSavedConfig[]> {
+  const response = await requestApiJson({
+    fallback: "Download client settings request failed.",
+    method: "GET",
+    path: "/api/settings/services",
+  });
+
+  return normalizeDownloadClientListResponse(response).clients;
+}
+
+export async function upsertDownloadClientConfig(
+  kind: DownloadClientKind,
+  input: UpsertDownloadClientRequest,
+): Promise<DownloadClientSavedConfig> {
+  const response = await requestApiJson({
+    body: input,
+    fallback: "Download client settings save failed.",
+    method: "PUT",
+    path: `/api/settings/services/${encodeURIComponent(kind)}`,
+  });
+
+  return requireDownloadClientConfig(normalizeDownloadClientResponse(response), kind);
+}
+
+export async function createDownloadClientConfig(
+  kind: DownloadClientKind,
+  input: UpsertDownloadClientRequest,
+): Promise<DownloadClientSavedConfig> {
+  const response = await requestApiJson({
+    body: input,
+    fallback: "Download client settings save failed.",
+    method: "POST",
+    path: `/api/settings/services/${encodeURIComponent(kind)}/instances`,
+  });
+
+  return requireDownloadClientConfig(normalizeDownloadClientResponse(response), kind);
+}
+
+export async function updateDownloadClientConfig(
+  clientId: string,
+  input: UpsertDownloadClientRequest,
+): Promise<DownloadClientSavedConfig> {
+  const response = await requestApiJson({
+    body: input,
+    fallback: "Download client settings save failed.",
+    method: "PUT",
+    path: `/api/settings/services/instances/${encodeURIComponent(clientId)}`,
+  });
+
+  return requireDownloadClientConfigById(normalizeDownloadClientResponse(response), clientId);
+}
+
+export async function deleteDownloadClientConfigById(
+  clientId: string,
+): Promise<DeleteDownloadClientResponse> {
+  const response = await requestApiJson({
+    fallback: "Download client delete failed.",
+    method: "DELETE",
+    path: `/api/settings/services/instances/${encodeURIComponent(clientId)}`,
+  });
+
+  return normalizeDeleteDownloadClientResponse(response, undefined, clientId);
+}
+
+export async function testDownloadClientConfig(
+  kind: DownloadClientKind,
+): Promise<DownloadClientProbeResponse> {
+  const response = await requestApiJson({
+    body: {},
+    fallback: "Download client test failed.",
+    method: "POST",
+    path: `/api/settings/services/${encodeURIComponent(kind)}/test`,
+  });
+
+  return normalizeDownloadClientProbeResponse(response, kind);
+}
+
+export async function testDownloadClientConfigById(
+  clientId: string,
+): Promise<DownloadClientProbeResponse> {
+  const response = await requestApiJson({
+    body: {},
+    fallback: "Download client test failed.",
+    method: "POST",
+    path: `/api/settings/services/instances/${encodeURIComponent(clientId)}/test`,
+  });
+
+  return normalizeDownloadClientProbeResponse(response);
+}
+
+export async function getDownloadClientStatus(
+  kind: DownloadClientKind,
+): Promise<DownloadClientProbeResponse> {
+  const response = await requestApiJson({
+    fallback: "Download client status request failed.",
+    method: "GET",
+    path: `/api/settings/services/${encodeURIComponent(kind)}/status`,
+  });
+
+  return normalizeDownloadClientProbeResponse(response, kind);
+}
+
+export async function getDownloadClientStatusById(
+  clientId: string,
+): Promise<DownloadClientProbeResponse> {
+  const response = await requestApiJson({
+    fallback: "Download client status request failed.",
+    method: "GET",
+    path: `/api/settings/services/instances/${encodeURIComponent(clientId)}/status`,
+  });
+
+  return normalizeDownloadClientProbeResponse(response);
 }
 
 export async function createUser(input: CreateLocalUserRequest): Promise<AdminUserSummary> {
@@ -479,6 +607,7 @@ async function createApiClientErrorFromResponse(
     getApiErrorMessage(body, fallback),
     response.status,
     getApiErrorCode(body),
+    getApiErrorFieldErrors(body),
   );
 }
 
@@ -501,7 +630,12 @@ function isLogoutResponse(value: unknown): value is LogoutResponse {
 
 function unwrapData<T>({ data, error, status }: EdenResult<T>, fallback: string): T {
   if (error) {
-    throw new ApiClientError(getApiErrorMessage(error, fallback), status, getApiErrorCode(error));
+    throw new ApiClientError(
+      getApiErrorMessage(error, fallback),
+      status,
+      getApiErrorCode(error),
+      getApiErrorFieldErrors(error),
+    );
   }
 
   if (data === null) {
@@ -742,6 +876,71 @@ export function normalizeApiKeyListResponse(value: unknown): ApiKeyListResponse 
   return { apiKeys: value.apiKeys.map(normalizeApiKeySummary) };
 }
 
+function normalizeDownloadClientListResponse(value: unknown): DownloadClientListResponse {
+  if (!isRecord(value) || !Array.isArray(value.clients)) {
+    throwInvalidDownloadClientResponse();
+  }
+
+  return { clients: value.clients.map(normalizeDownloadClientSavedConfig) };
+}
+
+function normalizeDownloadClientResponse(value: unknown): DownloadClientResponse {
+  if (!isRecord(value) || !("client" in value)) {
+    throwInvalidDownloadClientResponse();
+  }
+
+  return {
+    client: value.client === null ? null : normalizeDownloadClientSavedConfig(value.client),
+  };
+}
+
+function normalizeDownloadClientProbeResponse(
+  value: unknown,
+  expectedKind?: DownloadClientKind,
+): DownloadClientProbeResponse {
+  if (!isRecord(value) || !isRecord(value.result)) {
+    throwInvalidDownloadClientResponse();
+  }
+
+  const result = value.result;
+
+  if (
+    !isDownloadClientKind(result.kind) ||
+    (expectedKind && result.kind !== expectedKind) ||
+    typeof result.configured !== "boolean" ||
+    typeof result.enabled !== "boolean" ||
+    !isDownloadClientProbeOutcome(result.outcome) ||
+    typeof result.summary !== "string" ||
+    !isDateTime(result.checkedAt) ||
+    typeof result.reachable !== "boolean" ||
+    typeof result.authenticated !== "boolean" ||
+    typeof result.compatible !== "boolean" ||
+    !isNullableString(result.version) ||
+    !isNullableString(result.webApiVersion) ||
+    !isNullableString(result.connectionState)
+  ) {
+    throwInvalidDownloadClientResponse();
+  }
+
+  return {
+    ...(isDownloadClientOperationError(value.error) ? { error: value.error } : {}),
+    result: {
+      kind: result.kind,
+      configured: result.configured,
+      enabled: result.enabled,
+      outcome: result.outcome,
+      summary: result.summary,
+      checkedAt: normalizeDateTime(result.checkedAt),
+      reachable: result.reachable,
+      authenticated: result.authenticated,
+      compatible: result.compatible,
+      version: result.version,
+      webApiVersion: result.webApiVersion,
+      connectionState: result.connectionState,
+    },
+  };
+}
+
 function normalizeApiKeyReveal(value: unknown): ApiKeyReveal {
   if (!isRecord(value) || typeof value.secret !== "string") {
     throwInvalidApiKeyResponse();
@@ -803,10 +1002,146 @@ function normalizeApiKeySummary(value: unknown): ApiKeySummary {
   };
 }
 
+function normalizeDownloadClientSavedConfig(value: unknown): DownloadClientSavedConfig {
+  if (!isDownloadClientSavedConfigResponse(value)) {
+    throwInvalidDownloadClientResponse();
+  }
+
+  return {
+    id: value.id,
+    kind: value.kind,
+    displayName: value.displayName,
+    isDefault: value.isDefault,
+    enabled: value.enabled,
+    useSsl: value.useSsl,
+    host: value.host,
+    port: value.port,
+    urlBase: value.urlBase,
+    authMode: value.authMode,
+    username: value.username,
+    hasApiKey: value.hasApiKey,
+    hasPassword: value.hasPassword,
+    lastTestedAt: normalizeNullableDateTime(value.lastTestedAt),
+    lastTestOutcome: value.lastTestOutcome,
+    lastTestMessage: value.lastTestMessage,
+    lastStatusCheckedAt: normalizeNullableDateTime(value.lastStatusCheckedAt),
+    lastStatusOutcome: value.lastStatusOutcome,
+    lastStatusMessage: value.lastStatusMessage,
+    createdAt: normalizeDateTime(value.createdAt),
+    updatedAt: normalizeDateTime(value.updatedAt),
+  };
+}
+
+type DownloadClientSavedConfigResponse = {
+  authMode: DownloadClientSavedConfig["authMode"];
+  createdAt: string | Date;
+  displayName: string;
+  enabled: boolean;
+  hasApiKey: boolean;
+  hasPassword: boolean;
+  host: string;
+  id: string;
+  isDefault: boolean;
+  kind: DownloadClientKind;
+  lastStatusCheckedAt: string | Date | null;
+  lastStatusMessage: string | null;
+  lastStatusOutcome: DownloadClientSavedConfig["lastStatusOutcome"];
+  lastTestedAt: string | Date | null;
+  lastTestMessage: string | null;
+  lastTestOutcome: DownloadClientSavedConfig["lastTestOutcome"];
+  port: number;
+  updatedAt: string | Date;
+  urlBase: string | null;
+  username: string | null;
+  useSsl: boolean;
+};
+
+function isDownloadClientSavedConfigResponse(
+  value: unknown,
+): value is DownloadClientSavedConfigResponse {
+  return (
+    isRecord(value) &&
+    hasDownloadClientIdentityFields(value) &&
+    hasDownloadClientConnectionFields(value) &&
+    hasDownloadClientAuthFields(value) &&
+    hasDownloadClientProbeMetadataFields(value) &&
+    isDateTime(value.createdAt) &&
+    isDateTime(value.updatedAt)
+  );
+}
+
+function hasDownloadClientIdentityFields(value: Record<string, unknown>): boolean {
+  return (
+    typeof value.id === "string" &&
+    isDownloadClientKind(value.kind) &&
+    typeof value.displayName === "string" &&
+    typeof value.isDefault === "boolean"
+  );
+}
+
+function hasDownloadClientConnectionFields(value: Record<string, unknown>): boolean {
+  return (
+    typeof value.enabled === "boolean" &&
+    typeof value.useSsl === "boolean" &&
+    typeof value.host === "string" &&
+    typeof value.port === "number" &&
+    isNullableString(value.urlBase)
+  );
+}
+
+function hasDownloadClientAuthFields(value: Record<string, unknown>): boolean {
+  return (
+    isDownloadClientAuthMode(value.authMode) &&
+    isNullableString(value.username) &&
+    typeof value.hasApiKey === "boolean" &&
+    typeof value.hasPassword === "boolean"
+  );
+}
+
+function hasDownloadClientProbeMetadataFields(value: Record<string, unknown>): boolean {
+  return (
+    isNullableDateTime(value.lastTestedAt) &&
+    isNullableDownloadClientProbeOutcome(value.lastTestOutcome) &&
+    isNullableString(value.lastTestMessage) &&
+    isNullableDateTime(value.lastStatusCheckedAt) &&
+    isNullableDownloadClientProbeOutcome(value.lastStatusOutcome) &&
+    isNullableString(value.lastStatusMessage)
+  );
+}
+
 function isApiKeyCreatedBy(value: unknown): value is ApiKeySummary["createdBy"] {
   return (
     value === null ||
     (isRecord(value) && typeof value.id === "string" && typeof value.username === "string")
+  );
+}
+
+function isNullableDownloadClientProbeOutcome(
+  value: unknown,
+): value is DownloadClientSavedConfig["lastTestOutcome"] {
+  return value === null || isDownloadClientProbeOutcome(value);
+}
+
+function isDownloadClientOperationError(
+  value: unknown,
+): value is NonNullable<DownloadClientProbeResponse["error"]> {
+  if (!isRecord(value) || typeof value.code !== "string" || typeof value.message !== "string") {
+    return false;
+  }
+
+  if (value.fieldErrors === undefined) {
+    return true;
+  }
+
+  return (
+    Array.isArray(value.fieldErrors) &&
+    value.fieldErrors.every(
+      (entry) =>
+        isRecord(entry) &&
+        typeof entry.field === "string" &&
+        typeof entry.code === "string" &&
+        typeof entry.message === "string",
+    )
   );
 }
 
@@ -820,6 +1155,55 @@ function isStringArray(value: unknown): value is string[] {
 
 function throwInvalidApiKeyResponse(): never {
   throw new ApiClientError("API key response was invalid.", 0, "INVALID_API_KEY_RESPONSE");
+}
+
+function throwInvalidDownloadClientResponse(): never {
+  throw new ApiClientError(
+    "Download client response was invalid.",
+    0,
+    "INVALID_DOWNLOAD_CLIENT_RESPONSE",
+  );
+}
+
+function normalizeDeleteDownloadClientResponse(
+  value: unknown,
+  expectedKind?: DownloadClientKind,
+  expectedId?: string,
+): DeleteDownloadClientResponse {
+  if (
+    !isRecord(value) ||
+    value.status !== "ok" ||
+    typeof value.deletedId !== "string" ||
+    !isDownloadClientKind(value.deletedKind) ||
+    (expectedKind && value.deletedKind !== expectedKind) ||
+    (expectedId && value.deletedId !== expectedId)
+  ) {
+    throwInvalidDownloadClientResponse();
+  }
+
+  return { status: "ok", deletedId: value.deletedId, deletedKind: value.deletedKind };
+}
+
+function requireDownloadClientConfig(
+  response: DownloadClientResponse,
+  kind: DownloadClientKind,
+): DownloadClientSavedConfig {
+  if (!response.client || response.client.kind !== kind) {
+    throwInvalidDownloadClientResponse();
+  }
+
+  return response.client;
+}
+
+function requireDownloadClientConfigById(
+  response: DownloadClientResponse,
+  clientId: string,
+): DownloadClientSavedConfig {
+  if (!response.client || response.client.id !== clientId) {
+    throwInvalidDownloadClientResponse();
+  }
+
+  return response.client;
 }
 
 function normalizeNotificationHistoryItem(value: unknown): NotificationHistoryItem {

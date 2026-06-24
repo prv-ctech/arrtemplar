@@ -190,6 +190,30 @@ describe("api key api client", () => {
   });
 });
 
+describe("download client api client", () => {
+  it("exposes typed client functions and response normalizers for settings/services", async () => {
+    const source = await Bun.file(apiSourcePath).text();
+
+    expect(source).toContain("DownloadClientKind");
+    expect(source).toContain("UpsertDownloadClientRequest");
+    expect(source).toContain("export async function listDownloadClientConfigs");
+    expect(source).toContain('path: "/api/settings/services"');
+    expect(source).toContain("export async function upsertDownloadClientConfig");
+    expect(source).toContain("export async function createDownloadClientConfig");
+    expect(source).toContain("export async function updateDownloadClientConfig");
+    expect(source).toContain("export async function deleteDownloadClientConfigById");
+    expect(source).toContain("export async function testDownloadClientConfig");
+    expect(source).toContain("export async function testDownloadClientConfigById");
+    expect(source).toContain("export async function getDownloadClientStatus");
+    expect(source).toContain("export async function getDownloadClientStatusById");
+    expect(source).toContain("normalizeDownloadClientListResponse");
+    expect(source).toContain("normalizeDownloadClientProbeResponse");
+    expect(source).toContain("isDownloadClientKind");
+    expect(source).toContain("isDownloadClientAuthMode");
+    expect(source).toContain("isDownloadClientProbeOutcome");
+  });
+});
+
 function createApiKeyListResponse(overrides: Record<string, unknown> = {}) {
   return {
     apiKeys: [
