@@ -34,6 +34,7 @@ import {
   type NotificationHistoryItem,
   type NotificationHistoryListResponse,
   type NotificationPreferences,
+  normalizePermissionList,
   OAUTH_LOCAL_EMAIL_DOMAIN,
   type PublicUser,
   type AuthIdentity as SharedAuthIdentity,
@@ -465,9 +466,6 @@ const oauthAutoRegisterDisabledError: ApiErrorResponse = {
   },
 };
 
-const permissionOrder = new Map<UserPermission, number>(
-  USER_PERMISSION_VALUES.map((permission, index) => [permission, index]),
-);
 const notificationHistoryTitleMaxLength = 160;
 const notificationHistoryDescriptionMaxLength = 500;
 
@@ -669,7 +667,7 @@ export class AuthService {
       requiredPermission: "users:permissions",
       targetUserId,
       mutate: (tx, targetUser, actorUser, now) => {
-        const permissions = normalizePermissions(input.permissions.filter(isUserPermission));
+        const permissions = normalizePermissionList(input.permissions.filter(isUserPermission));
 
         if (
           !permissions.includes(SYSTEM_ADMIN_PERMISSION) &&
@@ -2063,7 +2061,7 @@ function readExplicitPermissionGrantsByUserId(
   }
 
   for (const [userId, permissions] of permissionsByUserId) {
-    permissionsByUserId.set(userId, normalizePermissions(permissions));
+    permissionsByUserId.set(userId, normalizePermissionList(permissions));
   }
 
   return permissionsByUserId;
@@ -2090,7 +2088,7 @@ function readExplicitPermissionGrants(
   tx: DatabaseTransaction | DatabaseClient["db"],
   userId: string,
 ): UserPermission[] {
-  return normalizePermissions(
+  return normalizePermissionList(
     tx
       .select({ permission: userPermissionGrants.permission })
       .from(userPermissionGrants)
@@ -2115,13 +2113,7 @@ function computeEffectivePermissions(
     return [...USER_PERMISSION_VALUES];
   }
 
-  return normalizePermissions([...DEFAULT_SIGNED_IN_USER_PERMISSIONS, ...explicitPermissions]);
-}
-
-function normalizePermissions(permissions: readonly UserPermission[]): UserPermission[] {
-  return [...new Set(permissions)].sort(
-    (left, right) => (permissionOrder.get(left) ?? 0) - (permissionOrder.get(right) ?? 0),
-  );
+  return normalizePermissionList([...DEFAULT_SIGNED_IN_USER_PERMISSIONS, ...explicitPermissions]);
 }
 
 function hasExplicitPermissionGrant(

@@ -64,6 +64,18 @@ const toastNotificationImportanceEnum = [...TOAST_NOTIFICATION_IMPORTANCE_VALUES
   ...(typeof TOAST_NOTIFICATION_IMPORTANCE_VALUES)[number][],
 ];
 
+function permissionGrantMetadataColumns() {
+  return {
+    id: text("id").primaryKey(),
+    permission: text("permission", { enum: userPermissionEnum }).notNull(),
+    grantedByUserId: text("granted_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: text("created_at").notNull().default(timestampNow),
+    updatedAt: text("updated_at").notNull().default(timestampNow),
+  };
+}
+
 export const users = sqliteTable(
   "users",
   {
@@ -188,16 +200,10 @@ export const notificationHistory = sqliteTable(
 export const userPermissionGrants = sqliteTable(
   "user_permission_grants",
   {
-    id: text("id").primaryKey(),
+    ...permissionGrantMetadataColumns(),
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    permission: text("permission", { enum: userPermissionEnum }).notNull(),
-    grantedByUserId: text("granted_by_user_id").references(() => users.id, {
-      onDelete: "set null",
-    }),
-    createdAt: text("created_at").notNull().default(timestampNow),
-    updatedAt: text("updated_at").notNull().default(timestampNow),
   },
   (table) => [
     uniqueIndex("user_permission_grants_user_permission_unique").on(table.userId, table.permission),
@@ -263,16 +269,10 @@ export const apiKeys = sqliteTable(
 export const apiKeyPermissionGrants = sqliteTable(
   "api_key_permission_grants",
   {
-    id: text("id").primaryKey(),
+    ...permissionGrantMetadataColumns(),
     apiKeyId: text("api_key_id")
       .notNull()
       .references(() => apiKeys.id, { onDelete: "cascade" }),
-    permission: text("permission", { enum: userPermissionEnum }).notNull(),
-    grantedByUserId: text("granted_by_user_id").references(() => users.id, {
-      onDelete: "set null",
-    }),
-    createdAt: text("created_at").notNull().default(timestampNow),
-    updatedAt: text("updated_at").notNull().default(timestampNow),
   },
   (table) => [
     uniqueIndex("api_key_permission_grants_key_permission_unique").on(

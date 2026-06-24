@@ -5,6 +5,7 @@ const settingsSourcePath = "apps/web/src/features/admin/AdminSettings.tsx";
 const apiKeysSettingsSourcePath = "apps/web/src/features/admin/api-keys/ApiKeysSettings.tsx";
 const authSettingsSourcePath = "apps/web/src/features/auth-settings/AuthSettings.tsx";
 const settingsPrimitivesSourcePath = "apps/web/src/features/settings/SettingsPrimitives.tsx";
+const tableSourcePath = "apps/web/src/components/ui/table.tsx";
 const usersSourcePaths = [
   "apps/web/src/features/admin/AdminUsersSettings.tsx",
   "apps/web/src/features/admin/admin-users-table.tsx",
@@ -147,6 +148,7 @@ describe("app settings layout", () => {
   it("uses API Keys as the real General settings surface", async () => {
     const settingsSource = await readWorkspaceSource(settingsSourcePath);
     const apiKeysSource = await readWorkspaceSource(apiKeysSettingsSourcePath);
+    const tableSource = await readWorkspaceSource(tableSourcePath);
 
     expect(settingsSource).toContain("ApiKeysSettings");
     expect(settingsSource).toContain('case "general":');
@@ -167,6 +169,13 @@ describe("app settings layout", () => {
     expect(apiKeysSource).toContain("Key name");
     expect(apiKeysSource).toContain("readDateTimeLocalIso");
     expect(apiKeysSource).toContain("isApiKeyEligiblePermission");
+    expect(apiKeysSource).toContain("notify(");
+    expect(apiKeysSource).toContain("api_keys.created");
+    expect(apiKeysSource).toContain("api_keys.updated");
+    expect(apiKeysSource).toContain("api_keys.revoked");
+    expect(apiKeysSource).toContain("api_keys.deleted");
+    expect(apiKeysSource).toContain("api_keys.secret.copied");
+    expect(tableSource).toContain("pb-4 sm:pb-0");
     expect(apiKeysSource).not.toContain("Refresh key");
     expect(apiKeysSource).not.toContain("Rotate key");
     expect(apiKeysSource).not.toContain("useRefreshApiKeyMutation");

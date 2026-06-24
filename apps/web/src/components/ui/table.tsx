@@ -9,7 +9,7 @@ export function Table({ className, containerClassName, ...props }: TableProps) {
   return (
     <div
       className={cn(
-        "relative w-full overflow-x-auto rounded-3xl border border-border bg-card/60",
+        "relative w-full overflow-x-auto rounded-3xl border border-border bg-card/60 pb-4 sm:pb-0",
         containerClassName,
       )}
     >

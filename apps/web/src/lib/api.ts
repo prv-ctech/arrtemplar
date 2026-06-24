@@ -291,14 +291,15 @@ export async function getPermissionCatalog(): Promise<readonly PermissionCatalog
   );
 
   return response.permissions
-    .map((entry) => {
+    .flatMap((entry) => {
       if (typeof entry.permission !== "string" || !isUserPermission(entry.permission)) {
-        return undefined;
+        return [];
       }
 
-      return PERMISSION_CATALOG_BY_PERMISSION.get(entry.permission);
-    })
-    .filter((entry): entry is PermissionCatalogEntry => Boolean(entry));
+      const catalogEntry = PERMISSION_CATALOG_BY_PERMISSION.get(entry.permission);
+
+      return catalogEntry ? [catalogEntry] : [];
+    });
 }
 
 export async function listApiKeys(): Promise<ApiKeySummary[]> {

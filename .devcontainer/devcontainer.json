@@ -43,7 +43,8 @@
         "vscjava.vscode-java-debug",
         "github.vscode-github-actions",
         "vscjava.vscode-java-pack",
-        "bierner.markdown-mermaid"
+        "bierner.markdown-mermaid",
+        "DavidAnson.vscode-markdownlint"
       ],
       "settings": {
         "workbench.browser.openLocalhostLinks": true,

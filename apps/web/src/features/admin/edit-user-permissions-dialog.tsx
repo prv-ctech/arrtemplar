@@ -16,7 +16,8 @@ import { notify } from "@/features/notifications/notification-gateway";
 import { cn } from "@/lib/utils";
 import { getExplicitPermissionSet, togglePermissionSelection } from "../user/permission-selection";
 import { usePermissionCatalogQuery, useUpdateManagedUserPermissionsMutation } from "./admin-users";
-import { PermissionCategoryGrid, permissionsDialogContentClassName } from "./permission-grant-grid";
+import { permissionsDialogContentClassName } from "./permission-grant-dialog";
+import { PermissionCategoryGrid } from "./permission-grant-grid";
 
 const serviceOperatorPermissions: readonly UserPermission[] = [
   "settings:theme",

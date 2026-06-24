@@ -2,12 +2,13 @@ import {
   type ApiKeyReveal,
   type ApiKeySummary,
   isApiKeyEligiblePermission,
+  type NotificationPreferences,
   PERMISSION_CATALOG_BY_PERMISSION,
   type UserPermission,
 } from "@arrtemplar/shared";
 import { CaretDownIcon, KeyIcon, PlusIcon } from "@phosphor-icons/react";
 import type { FormEvent, ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,6 +30,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { notify } from "@/features/notifications/notification-gateway";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -41,11 +43,12 @@ import {
 } from "@/components/ui/table";
 import { SettingsStatus } from "@/features/settings/SettingsPrimitives";
 import { cn } from "@/lib/utils";
+import { useAuthenticatedRouteUser } from "@/routes/authenticated-route-user";
 import { togglePermissionSelection } from "../../user/permission-selection";
 import { usePermissionCatalogQuery } from "../admin-users";
+import { permissionsDialogContentClassName } from "../permission-grant-dialog";
 import {
   PermissionCategoryGrid,
-  permissionsDialogContentClassName,
 } from "../permission-grant-grid";
 import {
   useApiKeysQuery,
@@ -78,6 +81,7 @@ export function ApiKeysSettings() {
 }
 
 function useApiKeysSettingsState() {
+  const actor = useAuthenticatedRouteUser();
   const apiKeysQuery = useApiKeysQuery();
   const revokeMutation = useRevokeApiKeyMutation();
   const deleteMutation = useDeleteApiKeyMutation();
@@ -91,9 +95,29 @@ function useApiKeysSettingsState() {
   function revokeApiKey(apiKey: ApiKeySummary) {
     setErrorMessage(null);
     revokeMutation.mutate(apiKey.id, {
-      onSuccess: () => setStatusMessage("API key revoked."),
+      onSuccess: () => {
+        setStatusMessage("API key revoked.");
+        notify(
+          {
+            id: "api_keys.revoked",
+            title: "API key revoked.",
+            description: apiKey.name,
+          },
+          actor.notificationPreferences,
+        );
+      },
       onError: (error) => {
-        setErrorMessage(error instanceof Error ? error.message : "Revoke failed.");
+        const message = error instanceof Error ? error.message : "Revoke failed.";
+
+        setErrorMessage(message);
+        notify(
+          {
+            id: "api_keys.revoke.failed",
+            title: message,
+            description: apiKey.name,
+          },
+          actor.notificationPreferences,
+        );
       },
     });
   }
@@ -101,9 +125,29 @@ function useApiKeysSettingsState() {
   function deleteApiKey(apiKey: ApiKeySummary) {
     setErrorMessage(null);
     deleteMutation.mutate(apiKey.id, {
-      onSuccess: () => setStatusMessage("API key deleted."),
+      onSuccess: () => {
+        setStatusMessage("API key deleted.");
+        notify(
+          {
+            id: "api_keys.deleted",
+            title: "API key deleted.",
+            description: apiKey.name,
+          },
+          actor.notificationPreferences,
+        );
+      },
       onError: (error) => {
-        setErrorMessage(error instanceof Error ? error.message : "Delete failed.");
+        const message = error instanceof Error ? error.message : "Delete failed.";
+
+        setErrorMessage(message);
+        notify(
+          {
+            id: "api_keys.delete.failed",
+            title: message,
+            description: apiKey.name,
+          },
+          actor.notificationPreferences,
+        );
       },
     });
   }
@@ -128,6 +172,7 @@ function useApiKeysSettingsState() {
     deleteMutation,
     dialogMode,
     errorMessage,
+    notificationPreferences: actor.notificationPreferences,
     pendingAction,
     revealedKey,
     revokeMutation,
@@ -166,10 +211,15 @@ function ApiKeysSettingsView({ state }: { state: ApiKeysSettingsState }) {
         mode={state.dialogMode}
         onClose={() => state.setDialogMode({ kind: "closed" })}
         onError={state.setErrorMessage}
+        notificationPreferences={state.notificationPreferences}
         onReveal={state.setRevealedKey}
         onStatus={state.setStatusMessage}
       />
-      <ApiKeySecretDialog onClose={() => state.setRevealedKey(null)} reveal={state.revealedKey} />
+      <ApiKeySecretDialog
+        notificationPreferences={state.notificationPreferences}
+        onClose={() => state.setRevealedKey(null)}
+        reveal={state.revealedKey}
+      />
       <ConfirmApiKeyActionDialog
         action={state.pendingAction}
         isPending={isLifecycleMutationPending}
@@ -521,12 +571,14 @@ function ApiKeyPermissionSummary({ permissions }: { permissions: readonly UserPe
 
 function ApiKeyFormDialog({
   mode,
+  notificationPreferences,
   onClose,
   onError,
   onReveal,
   onStatus,
 }: {
   mode: ApiKeyDialogMode;
+  notificationPreferences: NotificationPreferences;
   onClose: () => void;
   onError: (message: string | null) => void;
   onReveal: (reveal: ApiKeyReveal) => void;
@@ -536,7 +588,9 @@ function ApiKeyFormDialog({
   const updateMutation = useUpdateApiKeyMutation();
   const permissionCatalogQuery = usePermissionCatalogQuery();
   const apiKey = mode.kind === "edit" ? mode.apiKey : null;
-  const [selectedPermissions, setSelectedPermissions] = useState<Set<UserPermission>>(new Set());
+  const [permissionDraft, setPermissionDraft] = useState<Set<UserPermission> | null>(null);
+  const basePermissions = useMemo(() => new Set(apiKey?.permissions ?? []), [apiKey]);
+  const selectedPermissions = permissionDraft ?? basePermissions;
   const eligiblePermissions = useMemo(
     () =>
       (permissionCatalogQuery.data ?? []).filter((entry) =>
@@ -545,19 +599,15 @@ function ApiKeyFormDialog({
     [permissionCatalogQuery.data],
   );
 
-  useEffect(() => {
-    setSelectedPermissions(new Set(apiKey?.permissions ?? []));
-  }, [apiKey]);
-
   function handleOpenChange(open: boolean) {
     if (!open) {
       onClose();
-      setSelectedPermissions(new Set());
+      setPermissionDraft(null);
     }
   }
 
   function togglePermission(permission: UserPermission) {
-    setSelectedPermissions((current) => togglePermissionSelection(current, permission));
+    setPermissionDraft((current) => togglePermissionSelection(current ?? selectedPermissions, permission));
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -566,7 +616,16 @@ function ApiKeyFormDialog({
     const input = readApiKeyFormInput(new FormData(event.currentTarget), permissions);
 
     if (permissions.length === 0) {
-      onError("Select at least one permission.");
+      const message = "Select at least one permission.";
+
+      onError(message);
+      notify(
+        {
+          id: mode.kind === "create" ? "api_keys.create.failed" : "api_keys.update.failed",
+          title: message,
+        },
+        notificationPreferences,
+      );
       return;
     }
 
@@ -576,9 +635,28 @@ function ApiKeyFormDialog({
         onSuccess: (result) => {
           onReveal(result);
           onStatus("API key created.");
+          notify(
+            {
+              id: "api_keys.created",
+              title: "API key created.",
+              description: result.apiKey.name,
+            },
+            notificationPreferences,
+          );
           handleOpenChange(false);
         },
-        onError: (error) => onError(error instanceof Error ? error.message : "Create failed."),
+        onError: (error) => {
+          const message = error instanceof Error ? error.message : "Create failed.";
+
+          onError(message);
+          notify(
+            {
+              id: "api_keys.create.failed",
+              title: message,
+            },
+            notificationPreferences,
+          );
+        },
       });
       return;
     }
@@ -589,9 +667,29 @@ function ApiKeyFormDialog({
         {
           onSuccess: () => {
             onStatus("API key updated.");
+            notify(
+              {
+                id: "api_keys.updated",
+                title: "API key updated.",
+                description: apiKey.name,
+              },
+              notificationPreferences,
+            );
             handleOpenChange(false);
           },
-          onError: (error) => onError(error instanceof Error ? error.message : "Update failed."),
+          onError: (error) => {
+            const message = error instanceof Error ? error.message : "Update failed.";
+
+            onError(message);
+            notify(
+              {
+                id: "api_keys.update.failed",
+                title: message,
+                description: apiKey.name,
+              },
+              notificationPreferences,
+            );
+          },
         },
       );
     }
@@ -673,12 +771,35 @@ function ApiKeyMetadataFields({ apiKey }: { apiKey: ApiKeySummary | null }) {
 }
 
 function ApiKeySecretDialog({
+  notificationPreferences,
   onClose,
   reveal,
 }: {
+  notificationPreferences: NotificationPreferences;
   onClose: () => void;
   reveal: ApiKeyReveal | null;
 }) {
+  function copySecret(secret: string) {
+    void navigator.clipboard.writeText(secret).then(
+      () =>
+        notify(
+          {
+            id: "api_keys.secret.copied",
+            title: "API key copied.",
+          },
+          notificationPreferences,
+        ),
+      () =>
+        notify(
+          {
+            id: "api_keys.secret.copy.failed",
+            title: "Copy failed.",
+          },
+          notificationPreferences,
+        ),
+    );
+  }
+
   return (
     <Dialog onOpenChange={(open) => !open && onClose()} open={Boolean(reveal)}>
       <DialogContent>
@@ -690,7 +811,7 @@ function ApiKeySecretDialog({
         <DialogFooter>
           {reveal ? (
             <Button
-              onClick={() => void navigator.clipboard.writeText(reveal.secret)}
+              onClick={() => copySecret(reveal.secret)}
               type="button"
               variant="outline"
             >
@@ -772,8 +893,11 @@ function readApiKeyFormInput(formData: FormData, permissions: UserPermission[]) 
   const expiresAtValue = String(formData.get("expiresAt") ?? "");
   const ipAllowlist = String(formData.get("ipAllowlist") ?? "")
     .split(/[\n,]/)
-    .map((entry) => entry.trim())
-    .filter(Boolean);
+    .flatMap((entry) => {
+      const trimmedEntry = entry.trim();
+
+      return trimmedEntry ? [trimmedEntry] : [];
+    });
 
   return {
     name: String(formData.get("name") ?? "").trim(),

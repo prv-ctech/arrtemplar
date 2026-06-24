@@ -10,6 +10,7 @@ import {
   hasPermissionGrant,
   isApiKeyEligiblePermission,
   isUserPermission,
+  normalizePermissionList,
   type PublicUser,
   type UpdateApiKeyRequest,
   USER_PERMISSION_VALUES,
@@ -18,10 +19,10 @@ import {
 import { eq, inArray } from "drizzle-orm";
 import type { DatabaseClient } from "../db/client";
 import {
-  type ApiKey,
   apiKeyPermissionGrants,
   apiKeys,
   auditLogs,
+  type ApiKey,
   type User,
   userPermissionGrants,
   users,
@@ -113,10 +114,6 @@ const forbiddenApiKeyManagementError: ApiErrorResponse = {
     message: "settings:general permission is required.",
   },
 };
-
-const permissionOrder = new Map<UserPermission, number>(
-  USER_PERMISSION_VALUES.map((permission, index) => [permission, index]),
-);
 
 export class ApiKeyService {
   constructor(
@@ -239,18 +236,13 @@ export class ApiKeyService {
       return { ok: false, status: 422, body: invalidApiKeyInputError };
     }
 
-    const result = this.database.db.transaction((tx) => {
-      const existing = readApiKeyById(tx, apiKeyId);
-
-      if (!existing) {
-        return null;
-      }
-
-      const now = new Date().toISOString();
+    const result = this.mutateExistingApiKey(apiKeyId, (tx, _existing, now) => {
       tx.update(apiKeys)
         .set({
           ...(normalizedInput.name ? { name: normalizedInput.name } : {}),
-          ...(normalizedInput.hasDescription ? { description: normalizedInput.description } : {}),
+          ...(normalizedInput.hasDescription
+            ? { description: normalizedInput.description }
+            : {}),
           ...(normalizedInput.hasExpiresAt ? { expiresAt: normalizedInput.expiresAt } : {}),
           ...(normalizedInput.hasIpAllowlist
             ? { ipAllowlistJson: JSON.stringify(normalizedInput.ipAllowlist) }
@@ -293,14 +285,7 @@ export class ApiKeyService {
       return updated;
     });
 
-    if (!result) {
-      return { ok: false, status: 404, body: apiKeyNotFoundError };
-    }
-
-    return {
-      ok: true,
-      body: { status: "ok", apiKey: this.toApiKeySummary(result.apiKey, result.permissions) },
-    };
+    return this.toApiKeyMutationResult(result);
   }
 
   revokeApiKey(
@@ -335,7 +320,9 @@ export class ApiKeyService {
         existing.permissions,
       );
 
-      tx.delete(apiKeyPermissionGrants).where(eq(apiKeyPermissionGrants.apiKeyId, apiKeyId)).run();
+      tx.delete(apiKeyPermissionGrants)
+        .where(eq(apiKeyPermissionGrants.apiKeyId, apiKeyId))
+        .run();
       tx.delete(apiKeys).where(eq(apiKeys.id, apiKeyId)).run();
       writeApiKeyAuditLog(tx, {
         action: "api_keys.deleted",
@@ -496,14 +483,7 @@ export class ApiKeyService {
       return actorResult;
     }
 
-    const result = this.database.db.transaction((tx) => {
-      const existing = readApiKeyById(tx, apiKeyId);
-
-      if (!existing) {
-        return null;
-      }
-
-      const now = new Date().toISOString();
+    const result = this.mutateExistingApiKey(apiKeyId, (tx, existing, now) => {
       revokeApiKeyRow(tx, existing, now);
 
       const updated = readApiKeyWithPermissions(tx, apiKeyId);
@@ -524,14 +504,7 @@ export class ApiKeyService {
       return updated;
     });
 
-    if (!result) {
-      return { ok: false, status: 404, body: apiKeyNotFoundError };
-    }
-
-    return {
-      ok: true,
-      body: { status: "ok", apiKey: this.toApiKeySummary(result.apiKey, result.permissions) },
-    };
+    return this.toApiKeyMutationResult(result);
   }
 
   private replaceApiKey(
@@ -547,20 +520,12 @@ export class ApiKeyService {
     }
 
     const secret = generateApiKeySecret();
-    const result = this.database.db.transaction((tx) => {
-      const existing = readApiKeyById(tx, apiKeyId);
-
-      if (!existing) {
-        return null;
-      }
-
+    const result = this.mutateExistingApiKey(apiKeyId, (tx, existing, now) => {
       const permissions = readApiKeyPermissions(tx, apiKeyId);
 
       if (permissions.length === 0) {
         return null;
       }
-
-      const now = new Date().toISOString();
 
       revokeApiKeyRow(tx, existing, now);
 
@@ -611,6 +576,28 @@ export class ApiKeyService {
     return {
       ok: true,
       body: { apiKey: this.toApiKeySummary(result.apiKey, result.permissions), secret },
+    };
+  }
+
+  private mutateExistingApiKey<TResult>(
+    apiKeyId: string,
+    callback: (tx: DatabaseTransaction, existing: ApiKey, now: string) => TResult | null,
+  ): TResult | null {
+    return this.database.db.transaction((tx) => {
+      const existing = readApiKeyById(tx, apiKeyId);
+
+      return existing ? callback(tx, existing, new Date().toISOString()) : null;
+    });
+  }
+
+  private toApiKeyMutationResult(result: ApiKeyWithPermissions | null): ApiKeyMutationResult {
+    if (!result) {
+      return { ok: false, status: 404, body: apiKeyNotFoundError };
+    }
+
+    return {
+      ok: true,
+      body: { status: "ok", apiKey: this.toApiKeySummary(result.apiKey, result.permissions) },
     };
   }
 
@@ -711,9 +698,7 @@ type NormalizedCreateApiKeyInput = NormalizedApiKeyInput & {
   permissions: UserPermission[];
 };
 
-function normalizeCreateApiKeyInput(
-  input: CreateApiKeyRequest,
-): NormalizedCreateApiKeyInput | null {
+function normalizeCreateApiKeyInput(input: CreateApiKeyRequest): NormalizedCreateApiKeyInput | null {
   const normalizedInput = normalizeApiKeyInput(input, { requirePermissions: true });
 
   if (!normalizedInput?.name || !normalizedInput.permissions) {
@@ -840,9 +825,7 @@ function normalizeApiKeyPermissions(permissions: readonly UserPermission[]): Use
     return [];
   }
 
-  return [...new Set(permissions)].sort(
-    (left, right) => (permissionOrder.get(left) ?? 0) - (permissionOrder.get(right) ?? 0),
-  );
+  return normalizePermissionList(permissions);
 }
 
 function createApiKeyRow(input: {
@@ -1029,10 +1012,7 @@ function readPermissionGrantsByApiKeyId(
   }
 
   for (const grant of tx
-    .select({
-      apiKeyId: apiKeyPermissionGrants.apiKeyId,
-      permission: apiKeyPermissionGrants.permission,
-    })
+    .select({ apiKeyId: apiKeyPermissionGrants.apiKeyId, permission: apiKeyPermissionGrants.permission })
     .from(apiKeyPermissionGrants)
     .where(inArray(apiKeyPermissionGrants.apiKeyId, [...apiKeyIds]))
     .all()) {
@@ -1102,19 +1082,13 @@ function readEffectivePermissions(tx: DatabaseReader, user: User): UserPermissio
     }
   }
 
-  const normalizedPermissions = normalizeUserPermissions(explicitPermissions);
+  const normalizedPermissions = normalizePermissionList(explicitPermissions);
 
   if (normalizedPermissions.includes("system:admin")) {
     return [...USER_PERMISSION_VALUES];
   }
 
   return normalizedPermissions;
-}
-
-function normalizeUserPermissions(permissions: readonly UserPermission[]): UserPermission[] {
-  return [...new Set(permissions)].sort(
-    (left, right) => (permissionOrder.get(left) ?? 0) - (permissionOrder.get(right) ?? 0),
-  );
 }
 
 function createInvalidAttemptKey(context: AuthRequestContext): string {

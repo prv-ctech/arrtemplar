@@ -244,6 +244,10 @@ export const PERMISSION_CATALOG_BY_PERMISSION = new Map<UserPermission, Permissi
   PERMISSION_CATALOG.map((entry) => [entry.permission, entry]),
 );
 
+const permissionOrder = new Map<UserPermission, number>(
+  USER_PERMISSION_VALUES.map((permission, index) => [permission, index]),
+);
+
 export function isUserPermission(value: string): value is UserPermission {
   return PERMISSION_CATALOG_BY_PERMISSION.has(value as UserPermission);
 }
@@ -254,6 +258,12 @@ export function isApiKeyEligiblePermission(value: UserPermission): boolean {
 
 export function getApiKeyEligiblePermissionCatalog(): PermissionCatalogEntry[] {
   return PERMISSION_CATALOG.filter((entry) => isApiKeyEligiblePermission(entry.permission));
+}
+
+export function normalizePermissionList(permissions: readonly UserPermission[]): UserPermission[] {
+  return [...new Set(permissions)].sort(
+    (left, right) => (permissionOrder.get(left) ?? 0) - (permissionOrder.get(right) ?? 0),
+  );
 }
 
 export function hasPermissionGrant(

@@ -71,6 +71,13 @@
       "when": 1782231373848,
       "tag": "0009_daily_gargoyle",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1782232500000,
+      "tag": "0010_api_key_notification_events",
+      "breakpoints": true
     }
   ]
 }
