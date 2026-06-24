@@ -6,6 +6,8 @@ const apiKeysSettingsSourcePath = "apps/web/src/features/admin/api-keys/ApiKeysS
 const authSettingsSourcePath = "apps/web/src/features/auth-settings/AuthSettings.tsx";
 const servicesSettingsSourcePath = "apps/web/src/features/services-settings/ServicesSettings.tsx";
 const settingsPrimitivesSourcePath = "apps/web/src/features/settings/SettingsPrimitives.tsx";
+const settingsTableActionColumnSourcePath =
+  "apps/web/src/features/admin/settings-table-action-column.tsx";
 const tableSourcePath = "apps/web/src/components/ui/table.tsx";
 const usersSourcePaths = [
   "apps/web/src/features/admin/AdminUsersSettings.tsx",
@@ -47,6 +49,7 @@ describe("app settings layout", () => {
     const source = await readWorkspaceSource(servicesSettingsSourcePath);
 
     expect(source).toContain("useDownloadClientConfigsQuery");
+    expect(source).toContain("useAuthenticatedRouteUser");
     expect(source).toContain("useDownloadClientStatusQuery");
     expect(source).toContain("/services/qbittorrent.svg");
     expect(source).toContain("/services/sabnzbd.svg");
@@ -56,6 +59,15 @@ describe("app settings layout", () => {
     expect(source).toContain("DeleteServiceDialog");
     expect(source).toContain("Test connection");
     expect(source).toContain("Save settings");
+    expect(source).toContain("notify(");
+    expect(source).toContain("services.added");
+    expect(source).toContain("services.saved");
+    expect(source).toContain("services.deleted");
+    expect(source).toContain("services.tested");
+    expect(source).toContain("services.add.failed");
+    expect(source).toContain("services.save.failed");
+    expect(source).toContain("services.delete.failed");
+    expect(source).toContain("services.test.failed");
     expect(source).toContain("Connected");
     expect(source).toContain("Not configured");
     expect(source).not.toContain("This settings section is scaffolded");
@@ -71,6 +83,9 @@ describe("app settings layout", () => {
     const usersSource = await readWorkspaceSources(usersSourcePaths);
     const usersTableSource = await readWorkspaceSource(
       "apps/web/src/features/admin/admin-users-table.tsx",
+    );
+    const settingsTableActionColumnSource = await readWorkspaceSource(
+      settingsTableActionColumnSourcePath,
     );
     const hooksSource = await readWorkspaceSource(usersHooksSourcePath);
 
@@ -111,14 +126,22 @@ describe("app settings layout", () => {
     expect(usersSource).toContain('aria-label="Create user"');
     expect(usersSource).toContain('containerClassName="max-w-full bg-card"');
     expect(usersSource).toContain('className="border-separate border-spacing-0"');
-    expect(usersSource).toContain("sticky right-0 w-12 border-l border-border");
-    expect(usersSource).toContain("shadow-[-1px_0_0_0_var(--border),-12px_0_0_0_var(--card)]");
-    expect(usersSource).toContain("sm:shadow-none");
-    expect(usersSource).toContain("sm:static sm:border-l-0 sm:bg-transparent");
+    expect(usersSource).toContain("settingsTableActionHeaderClassName");
+    expect(usersSource).toContain("settingsTableActionCellClassName");
+    expect(settingsTableActionColumnSource).toContain(
+      "sticky -right-px w-12 border-l border-border",
+    );
+    expect(settingsTableActionColumnSource).not.toContain("sticky right-0 w-12");
+    expect(settingsTableActionColumnSource).toContain(
+      "shadow-[-1px_0_0_0_var(--border),-2rem_0_0_0_var(--card)]",
+    );
+    expect(settingsTableActionColumnSource).toContain("sm:shadow-none");
+    expect(settingsTableActionColumnSource).toContain(
+      "sm:static sm:border-l-0 sm:bg-transparent",
+    );
+    expect(settingsTableActionColumnSource).not.toContain("-12px_0_0_0_var(--card)");
     expect(usersSource).not.toContain("bg-card/95");
     expect(usersSource).not.toContain("backdrop-blur-sm");
-    expect(usersSource).toContain("const userActionHeaderClassName");
-    expect(usersSource).toContain("const userActionCellClassName");
     expect(usersSource).toContain("bg-primary text-primary-foreground");
     expect(usersSource).toContain("shadow-(--shadow-button)");
     expect(usersSource).toContain("pointer-events-none size-4");
@@ -174,6 +197,9 @@ describe("app settings layout", () => {
   it("uses API Keys as the real General settings surface", async () => {
     const settingsSource = await readWorkspaceSource(settingsSourcePath);
     const apiKeysSource = await readWorkspaceSource(apiKeysSettingsSourcePath);
+    const settingsTableActionColumnSource = await readWorkspaceSource(
+      settingsTableActionColumnSourcePath,
+    );
     const tableSource = await readWorkspaceSource(tableSourcePath);
 
     expect(settingsSource).toContain("ApiKeysSettings");
@@ -201,6 +227,12 @@ describe("app settings layout", () => {
     expect(apiKeysSource).toContain("api_keys.revoked");
     expect(apiKeysSource).toContain("api_keys.deleted");
     expect(apiKeysSource).toContain("api_keys.secret.copied");
+    expect(apiKeysSource).toContain("settingsTableActionHeaderClassName");
+    expect(apiKeysSource).toContain("settingsTableActionCellClassName");
+    expect(settingsTableActionColumnSource).toContain(
+      "shadow-[-1px_0_0_0_var(--border),-2rem_0_0_0_var(--card)]",
+    );
+    expect(settingsTableActionColumnSource).not.toContain("-12px_0_0_0_var(--card)");
     expect(tableSource).toContain("pb-4 sm:pb-0");
     expect(apiKeysSource).not.toContain("Refresh key");
     expect(apiKeysSource).not.toContain("Rotate key");

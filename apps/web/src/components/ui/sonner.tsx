@@ -8,7 +8,7 @@ import {
 import type * as React from "react";
 import { Toaster as Sonner, type ToasterProps } from "sonner";
 
-const toastPalette = {
+export const toastPalette = {
   greenBg: "color-mix(in srgb, var(--catppuccin-color-green) 18%, var(--popover))",
   greenBorder: "color-mix(in srgb, var(--catppuccin-color-green) 46%, var(--border))",
   greenText: "color-mix(in srgb, var(--catppuccin-color-green) 82%, white)",

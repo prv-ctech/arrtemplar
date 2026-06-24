@@ -19,6 +19,7 @@ import {
   useMarkNotificationReadMutation,
   useNotificationHistoryQuery,
 } from "@/features/notifications/notification-history";
+import { NotificationSeverityBadge } from "@/features/notifications/notification-severity-badge";
 import { cn } from "@/lib/utils";
 
 type NotificationInboxPopoverProps = {
@@ -34,7 +35,8 @@ const bellButtonClasses = [
 ].join(" ");
 
 const panelClasses = [
-  "w-[min(calc(100vw-4rem),20rem)] overflow-hidden p-0 sm:w-[min(calc(100vw-2rem),24rem)]",
+  "flex w-[min(calc(100vw-4rem),20rem)] max-h-[min(22rem,calc(100vh-4rem))] flex-col overflow-hidden p-0",
+  "sm:w-[min(calc(100vw-2rem),24rem)] sm:max-h-[min(32rem,calc(100vh-4rem))]",
   "rounded-2xl border-border bg-popover text-popover-foreground shadow-(--shadow-panel)",
 ].join(" ");
 
@@ -169,7 +171,7 @@ function NotificationInboxPanel({
         unreadCount={controls.unreadCount}
       />
       <Separator />
-      <ScrollArea className="max-h-[min(18rem,calc(100vh-14rem))] sm:max-h-[min(28rem,calc(100vh-12rem))]">
+      <ScrollArea className="min-h-0 flex-1">
         <div className="min-w-0 p-2">
           <NotificationInboxContent
             error={controls.historyError}
@@ -339,7 +341,7 @@ function NotificationHistoryMeta({ notification }: { notification: NotificationH
   return (
     <span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
       <span>{formatNotificationTime(notification.createdAt)}</span>
-      <NotificationSeverityBadge notification={notification} />
+      <NotificationSeverityBadge severity={notification.severity} />
     </span>
   );
 }
@@ -351,14 +353,6 @@ function NotificationSeverityIcon({ notification }: { notification: Notification
     <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full border border-border bg-card text-muted-foreground">
       <Icon aria-hidden="true" className="size-4" />
     </span>
-  );
-}
-
-function NotificationSeverityBadge({ notification }: { notification: NotificationHistoryItem }) {
-  return (
-    <Badge className="px-1.5 py-0 text-[10px] capitalize" variant={getSeverityBadge(notification)}>
-      {notification.severity}
-    </Badge>
   );
 }
 
@@ -452,18 +446,4 @@ function getSeverityIcon(severity: NotificationHistoryItem["severity"]) {
     case "info":
       return InfoIcon;
   }
-}
-
-function getSeverityBadge(
-  notification: NotificationHistoryItem,
-): ComponentProps<typeof Badge>["variant"] {
-  if (notification.severity === "error") {
-    return "destructive";
-  }
-
-  if (notification.importance === "important") {
-    return "default";
-  }
-
-  return notification.severity === "success" ? "secondary" : "outline";
 }

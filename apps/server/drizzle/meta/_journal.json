@@ -92,6 +92,13 @@
       "when": 1782290000000,
       "tag": "0012_download_client_instances",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1782315977000,
+      "tag": "0013_services_notification_events",
+      "breakpoints": true
     }
   ]
 }

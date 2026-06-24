@@ -49,6 +49,10 @@ import { usePermissionCatalogQuery } from "../admin-users";
 import { permissionsDialogContentClassName } from "../permission-grant-dialog";
 import { PermissionCategoryGrid } from "../permission-grant-grid";
 import {
+  settingsTableActionCellClassName,
+  settingsTableActionHeaderClassName,
+} from "../settings-table-action-column";
+import {
   useApiKeysQuery,
   useCreateApiKeyMutation,
   useDeleteApiKeyMutation,
@@ -64,15 +68,6 @@ type PendingApiKeyAction =
   | { apiKey: ApiKeySummary; kind: "delete" | "revoke" }
   | { kind: "closed" };
 type ApiKeysSettingsState = ReturnType<typeof useApiKeysSettingsState>;
-
-const apiKeyActionColumnBaseClassName = [
-  "sticky right-0 w-12 border-l border-border bg-card text-right",
-  "shadow-[-1px_0_0_0_var(--border),-12px_0_0_0_var(--card)]",
-  "sm:static sm:border-l-0 sm:bg-transparent sm:shadow-none",
-].join(" ");
-
-const apiKeyActionHeaderClassName = `${apiKeyActionColumnBaseClassName} z-30`;
-const apiKeyActionCellClassName = `${apiKeyActionColumnBaseClassName} z-20`;
 
 export function ApiKeysSettings() {
   return <ApiKeysSettingsView state={useApiKeysSettingsState()} />;
@@ -396,7 +391,7 @@ function ApiKeysTable({
           <TableHead>Permissions</TableHead>
           <TableHead>Last Used</TableHead>
           <TableHead>Expires</TableHead>
-          <TableHead className={apiKeyActionHeaderClassName}>
+          <TableHead className={settingsTableActionHeaderClassName}>
             <CreateApiKeyTableAction onCreate={onCreate} />
           </TableHead>
         </TableRow>
@@ -477,7 +472,7 @@ function ApiKeyRow({
       </TableCell>
       <TableCell>{formatDate(apiKey.lastUsedAt)}</TableCell>
       <TableCell>{apiKey.expiresAt ? formatDate(apiKey.expiresAt) : "No expiry"}</TableCell>
-      <TableCell className={apiKeyActionCellClassName}>
+      <TableCell className={settingsTableActionCellClassName}>
         <ApiKeyRowActions
           apiKey={apiKey}
           isMutating={isMutating}

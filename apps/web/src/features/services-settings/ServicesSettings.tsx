@@ -2,6 +2,7 @@ import type {
   DownloadClientKind,
   DownloadClientProbeResponse,
   DownloadClientSavedConfig,
+  NotificationPreferences,
   UpsertDownloadClientRequest,
 } from "@arrtemplar/shared";
 import { PlusIcon, TrashIcon } from "@phosphor-icons/react";
@@ -19,10 +20,12 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { notify } from "@/features/notifications/notification-gateway";
 import { SettingsAccordionCard } from "@/features/settings/SettingsAccordionCard";
 import { SettingsRow, SettingsStatus } from "@/features/settings/SettingsPrimitives";
 import { ApiClientError } from "@/lib/api-error";
 import { cn } from "@/lib/utils";
+import { useAuthenticatedRouteUser } from "@/routes/authenticated-route-user";
 import {
   type SaveDownloadClientConfigVariables,
   useDeleteDownloadClientByIdMutation,
@@ -108,6 +111,7 @@ const selectClassName =
   "h-9 rounded-xl border border-input bg-background/50 px-3 text-sm text-foreground outline-none transition-[border-color,box-shadow] focus-visible:border-primary/70 focus-visible:ring-2 focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50";
 
 export function ServicesSettings() {
+  const actor = useAuthenticatedRouteUser();
   const configsQuery = useDownloadClientConfigsQuery();
   const [drafts, setDrafts] = useState<DraftServiceInstance[]>([]);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -130,19 +134,41 @@ export function ServicesSettings() {
     const card = readCardDefinition(kind);
     const nextCount = readInstanceCount(kind) + 1;
 
-    if (!card || nextCount > maxServiceInstancesPerKind) {
+    if (!card) {
       return;
     }
+
+    if (nextCount > maxServiceInstancesPerKind) {
+      notify(
+        {
+          id: "services.add.failed",
+          title: `${card.title} limit reached.`,
+          description: `Up to ${maxServiceInstancesPerKind} instances per service type.`,
+        },
+        actor.notificationPreferences,
+      );
+      return;
+    }
+
+    const displayName = `${card.title} ${nextCount}`;
 
     setDrafts((current) => [
       ...current,
       {
-        displayName: `${card.title} ${nextCount}`,
+        displayName,
         id: `draft-${kind}-${crypto.randomUUID()}`,
         kind,
       },
     ]);
     setAddDialogOpen(false);
+    notify(
+      {
+        id: "services.added",
+        title: "Service added.",
+        description: displayName,
+      },
+      actor.notificationPreferences,
+    );
   }
 
   function removeDraft(draftId: string) {
@@ -177,6 +203,7 @@ export function ServicesSettings() {
               <DownloadClientCard
                 item={item}
                 key={item.key}
+                notificationPreferences={actor.notificationPreferences}
                 onDraftRemoved={removeDraft}
                 onDraftSaved={removeDraft}
               />
@@ -211,24 +238,33 @@ function ServicesSettingsSkeleton() {
 
 function DownloadClientCard({
   item,
+  notificationPreferences,
   onDraftRemoved,
   onDraftSaved,
 }: {
   item: ServiceListItem;
+  notificationPreferences: NotificationPreferences;
   onDraftRemoved: (draftId: string) => void;
   onDraftSaved: (draftId: string) => void;
 }) {
-  const controller = useDownloadClientCardController({ item, onDraftRemoved, onDraftSaved });
+  const controller = useDownloadClientCardController({
+    item,
+    notificationPreferences,
+    onDraftRemoved,
+    onDraftSaved,
+  });
 
   return <DownloadClientCardView controller={controller} />;
 }
 
 function useDownloadClientCardController({
   item,
+  notificationPreferences,
   onDraftRemoved,
   onDraftSaved,
 }: {
   item: ServiceListItem;
+  notificationPreferences: NotificationPreferences;
   onDraftRemoved: (draftId: string) => void;
   onDraftSaved: (draftId: string) => void;
 }) {
@@ -272,6 +308,7 @@ function useDownloadClientCardController({
       draft,
       form,
       mode,
+      notificationPreferences,
       onDraftSaved,
       saveMutation,
       setErrorMessage,
@@ -296,10 +333,28 @@ function useDownloadClientCardController({
 
   function handleTestSuccess(result: DownloadClientProbeResponse) {
     applyProbeResultStatus(result, setStatusMessage, setErrorMessage);
+    notify(
+      {
+        id: "services.tested",
+        title: "Connection test passed.",
+        description: title,
+      },
+      notificationPreferences,
+    );
   }
 
   function handleTestError(error: Error) {
-    setErrorMessage(readTestErrorMessage(error, title));
+    const message = readTestErrorMessage(error, title);
+
+    setErrorMessage(message);
+    notify(
+      {
+        id: "services.test.failed",
+        title: message,
+        description: title,
+      },
+      notificationPreferences,
+    );
   }
 
   function handleDeleteRequest() {
@@ -311,8 +366,10 @@ function useDownloadClientCardController({
       config,
       deleteMutation,
       draft,
+      notificationPreferences,
       onDraftRemoved,
       setErrorMessage,
+      setStatusMessage,
       title,
     });
   }
@@ -414,6 +471,7 @@ function submitDownloadClientForm({
   draft,
   form,
   mode,
+  notificationPreferences,
   onDraftSaved,
   saveMutation,
   setErrorMessage,
@@ -426,6 +484,7 @@ function submitDownloadClientForm({
   draft: DraftServiceInstance | undefined;
   form: DownloadClientFormState;
   mode: SaveDownloadClientConfigVariables["mode"];
+  notificationPreferences: NotificationPreferences;
   onDraftSaved: (draftId: string) => void;
   saveMutation: SaveMutation;
   setErrorMessage: (message: string | null) => void;
@@ -437,6 +496,14 @@ function submitDownloadClientForm({
 
   if (!request.ok) {
     setErrorMessage(request.message);
+    notify(
+      {
+        id: "services.save.failed",
+        title: request.message,
+        description: title,
+      },
+      notificationPreferences,
+    );
     return;
   }
 
@@ -446,11 +513,31 @@ function submitDownloadClientForm({
       onSuccess: (savedConfig) => {
         setForm(createFormState(card, savedConfig));
         setStatusMessage(`${savedConfig.displayName} settings saved.`);
+        notify(
+          {
+            id: "services.saved",
+            title: "Service settings saved.",
+            description: savedConfig.displayName,
+          },
+          notificationPreferences,
+        );
         if (draft) {
           onDraftSaved(draft.id);
         }
       },
-      onError: (error) => setErrorMessage(readSaveErrorMessage(error, title)),
+      onError: (error) => {
+        const message = readSaveErrorMessage(error, title);
+
+        setErrorMessage(message);
+        notify(
+          {
+            id: "services.save.failed",
+            title: message,
+            description: title,
+          },
+          notificationPreferences,
+        );
+      },
     },
   );
 }
@@ -505,15 +592,19 @@ function deleteDownloadClientFromCard({
   config,
   deleteMutation,
   draft,
+  notificationPreferences,
   onDraftRemoved,
   setErrorMessage,
+  setStatusMessage,
   title,
 }: {
   config: DownloadClientSavedConfig | undefined;
   deleteMutation: DeleteByIdMutation;
   draft: DraftServiceInstance | undefined;
+  notificationPreferences: NotificationPreferences;
   onDraftRemoved: (draftId: string) => void;
   setErrorMessage: (message: string | null) => void;
+  setStatusMessage: (message: string | null) => void;
   title: string;
 }) {
   if (draft) {
@@ -526,8 +617,29 @@ function deleteDownloadClientFromCard({
   }
 
   deleteMutation.mutate(config.id, {
+    onSuccess: () => {
+      setStatusMessage(`${title} removed.`);
+      notify(
+        {
+          id: "services.deleted",
+          title: "Service removed.",
+          description: title,
+        },
+        notificationPreferences,
+      );
+    },
     onError: (error) => {
-      setErrorMessage(error instanceof Error ? error.message : `${title} removal failed.`);
+      const message = error instanceof Error ? error.message : `${title} removal failed.`;
+
+      setErrorMessage(message);
+      notify(
+        {
+          id: "services.delete.failed",
+          title: message,
+          description: title,
+        },
+        notificationPreferences,
+      );
     },
   });
 }

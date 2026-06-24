@@ -10,17 +10,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  settingsTableActionCellClassName,
+  settingsTableActionHeaderClassName,
+} from "./settings-table-action-column";
 import { UserPermissionSummary } from "./user-permission-summary";
 import { type UserRowActionCapabilities, UserRowActions } from "./user-row-actions";
-
-const userActionColumnBaseClassName = [
-  "sticky right-0 w-12 border-l border-border bg-card text-right",
-  "shadow-[-1px_0_0_0_var(--border),-12px_0_0_0_var(--card)]",
-  "sm:static sm:border-l-0 sm:bg-transparent sm:shadow-none",
-].join(" ");
-
-const userActionHeaderClassName = `${userActionColumnBaseClassName} z-30`;
-const userActionCellClassName = `${userActionColumnBaseClassName} z-20`;
 
 type AdminUsersTableCapabilities = UserRowActionCapabilities & {
   canCreateUsers: boolean;
@@ -127,7 +122,7 @@ function CreateUserHeaderAction({
   onCreateUser: () => void;
 }) {
   return (
-    <TableHead className={userActionHeaderClassName}>
+    <TableHead className={settingsTableActionHeaderClassName}>
       {canCreateUsers ? (
         <Button
           aria-label="Create user"
@@ -170,7 +165,7 @@ function AdminUserTableRow({
       <TableCell>{user.disabledAt ? "Disabled" : "Active"}</TableCell>
       <TableCell>{new Date(user.createdAt).toLocaleDateString()}</TableCell>
       <TableCell>{new Date(user.updatedAt).toLocaleDateString()}</TableCell>
-      <TableCell className={userActionCellClassName}>
+      <TableCell className={settingsTableActionCellClassName}>
         <UserRowActions
           actor={actor}
           capabilities={capabilities}
