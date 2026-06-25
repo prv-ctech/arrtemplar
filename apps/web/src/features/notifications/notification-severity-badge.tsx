@@ -11,9 +11,6 @@ const notificationSeverityBadgeBaseClasses = [
   "text-[color:var(--notification-badge-text)]",
 ].join(" ");
 
-const notificationSeverityBadgeInfoClasses =
-  "px-1.5 py-0 text-[10px] border-border bg-secondary text-secondary-foreground capitalize";
-
 type NotificationSeverityBadgeProps = Omit<ComponentProps<typeof Badge>, "variant"> & {
   severity: ToastNotificationSeverity;
 };
@@ -29,12 +26,7 @@ export function NotificationSeverityBadge({
 
   return (
     <Badge
-      className={cn(
-        severity === "info"
-          ? notificationSeverityBadgeInfoClasses
-          : notificationSeverityBadgeBaseClasses,
-        className,
-      )}
+      className={cn(notificationSeverityBadgeBaseClasses, className)}
       style={severityStyle ? { ...severityStyle, ...style } : style}
       variant="outline"
       {...props}
@@ -50,24 +42,28 @@ function readNotificationSeverityBadgeStyle(
   switch (severity) {
     case "success":
       return createNotificationSeverityBadgeStyle(
-        toastPalette.greenBg,
-        toastPalette.greenBorder,
-        toastPalette.greenText,
+        toastPalette.successBg,
+        toastPalette.successBorder,
+        toastPalette.successText,
       );
     case "warning":
       return createNotificationSeverityBadgeStyle(
-        toastPalette.yellowBg,
-        toastPalette.yellowBorder,
-        toastPalette.yellowText,
+        toastPalette.warningBg,
+        toastPalette.warningBorder,
+        toastPalette.warningText,
       );
     case "error":
       return createNotificationSeverityBadgeStyle(
-        toastPalette.redBg,
-        toastPalette.redBorder,
-        toastPalette.redText,
+        toastPalette.errorBg,
+        toastPalette.errorBorder,
+        toastPalette.errorText,
       );
     case "info":
-      return undefined;
+      return createNotificationSeverityBadgeStyle(
+        toastPalette.infoBg,
+        toastPalette.infoBorder,
+        toastPalette.infoText,
+      );
   }
 }
 

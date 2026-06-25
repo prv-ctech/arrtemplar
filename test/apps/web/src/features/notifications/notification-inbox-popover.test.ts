@@ -58,10 +58,10 @@ describe("notification inbox popover", () => {
     expect(source).toContain('case "warning"');
     expect(source).toContain('case "error"');
     expect(source).toContain('case "info"');
-    expect(source).toContain("toastPalette.greenBg");
-    expect(source).toContain("toastPalette.redBg");
-    expect(source).toContain("toastPalette.yellowBg");
-    expect(source).toContain("notificationSeverityBadgeInfoClasses");
+    expect(source).toContain("toastPalette.successBg");
+    expect(source).toContain("toastPalette.errorBg");
+    expect(source).toContain("toastPalette.warningBg");
+    expect(source).toContain("toastPalette.infoBg");
   });
 
   it("covers accessible bell, badge, and panel states", async () => {

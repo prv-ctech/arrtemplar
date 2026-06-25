@@ -126,14 +126,14 @@ describe("Catppuccin stylesheet", () => {
       [".theme-park-aquamarine", "#0b3161", "#265c74", "#47918a", "#12afa0", "#ddd"],
       [".theme-park-dark", "#000000", "#2d2d2d", "#7a7a7a", "#aaaaaa", "#ddd"],
       [".theme-park-dracula", "#282a36", "#1e2029", "#6272a4", "#50fa7b", "#f8f8f2"],
-      [".theme-park-hotline", "#155fa5", "#5e61ab", "#f765b8", "#f98dc9", "#ddd"],
+      [".theme-park-hotline", "#155fa5", "#5e61ab", "#f765b8", "#f98dc9", "#f4f7ff"],
       [".theme-park-hotpink", "#004249", "#204c80", "#fb3f62", "#fb3f62", "#eee"],
       [".theme-park-maroon", "#220a25", "#4c1533", "#7b154d", "#a21c65", "#dadada"],
       [".theme-park-nord", "#2e3440", "#3b4252", "#81a1c1", "#79b8ca", "#d8dee9"],
       [".theme-park-organizr", "#1f1f1f", "#333333", "#999999", "#2cabe3", "#96a2b4"],
       [".theme-park-overseerr", "#111827", "#1f2937", "#374151", "#a78bfa", "#d1d5db"],
       [".theme-park-plex", "#000000", "#282828", "#3f3f3f", "#e5a00d", "#ddd"],
-      [".theme-park-space-gray", "#253237", "#576c75", "#607d8b", "#81a6b7", "#bbb"],
+      [".theme-park-space-gray", "#253237", "#576c75", "#607d8b", "#81a6b7", "#e6edf0"],
     ] as const;
 
     for (const [selector, base, surface, muted, accent, text] of expectedPalettes) {
@@ -146,8 +146,36 @@ describe("Catppuccin stylesheet", () => {
     }
 
     expect(source).toContain("--catppuccin-color-base: var(--theme-park-base);");
-    expect(source).toContain("--catppuccin-color-surface0: var(--theme-park-surface);");
+    expect(source).toContain(
+      "--theme-park-panel: color-mix(in srgb, var(--theme-park-surface) 72%, var(--theme-park-base));",
+    );
+    expect(source).toContain("--catppuccin-color-surface0: var(--theme-park-panel);");
     expect(source).toContain("--catppuccin-color-mauve: var(--theme-park-accent);");
+  });
+
+  it("strengthens weaker Theme Park themes for readable surfaces and action text", async () => {
+    const source = await Bun.file(stylesSourcePath).text();
+
+    expect(source).toContain(".theme-park-hotline {");
+    expect(source).toContain("--theme-park-text: #f4f7ff;");
+    expect(source).toContain(".theme-park-space-gray {");
+    expect(source).toContain("--theme-park-text: #e6edf0;");
+    expect(source).toContain(".theme-park-maroon {");
+    expect(source).toContain("--theme-park-primary-foreground: #fff1f8;");
+    expect(source).toContain(".theme-park-hotline,");
+    expect(source).toContain(".theme-park-organizr,");
+    expect(source).toContain("var(--theme-park-text) 90%");
+    expect(source).toContain("var(--theme-park-text) 96%");
+    expect(source).toContain(".theme-park-organizr {");
+    expect(source).toContain(
+      "--selected: color-mix(in srgb, var(--theme-park-accent) 9%, var(--theme-park-panel));",
+    );
+    expect(source).toContain(
+      "--primary-foreground: color-mix(in srgb, black 92%, var(--theme-park-base));",
+    );
+    expect(source).toContain(
+      "--selected: color-mix(in srgb, var(--theme-park-accent) 12%, var(--theme-park-panel));",
+    );
   });
 
   it("maps the Arrbit Radioactive palette into high-contrast shared theme variables", async () => {
@@ -216,6 +244,17 @@ describe("Catppuccin stylesheet", () => {
     expect(source).toContain(".mocha {");
     expect(source).toContain("var(--catppuccin-color-mauve) 18%");
     expect(source).toContain("var(--catppuccin-color-mauve) 58%");
+  });
+
+  it("strengthens Latte and Frappé subtext for readable muted UI copy", async () => {
+    const source = await Bun.file(stylesSourcePath).text();
+
+    expect(source).toContain(".latte {");
+    expect(source).toContain("var(--catppuccin-color-text) 96%");
+    expect(source).toContain(".frappe {");
+    expect(source).toContain("var(--catppuccin-color-text) 82%");
+    expect(source).toContain("var(--catppuccin-color-text) 100%");
+    expect(source).toContain("var(--catppuccin-color-text) 92%");
   });
 
   it("uses official guide colors for background and selection treatment", async () => {

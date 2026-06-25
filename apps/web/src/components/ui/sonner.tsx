@@ -9,15 +9,18 @@ import type * as React from "react";
 import { Toaster as Sonner, type ToasterProps } from "sonner";
 
 export const toastPalette = {
-  greenBg: "color-mix(in srgb, var(--catppuccin-color-green) 18%, var(--popover))",
-  greenBorder: "color-mix(in srgb, var(--catppuccin-color-green) 46%, var(--border))",
-  greenText: "color-mix(in srgb, var(--catppuccin-color-green) 82%, white)",
-  redBg: "color-mix(in srgb, var(--catppuccin-color-red) 18%, var(--popover))",
-  redBorder: "color-mix(in srgb, var(--catppuccin-color-red) 50%, var(--border))",
-  redText: "color-mix(in srgb, var(--catppuccin-color-red) 76%, white)",
-  yellowBg: "color-mix(in srgb, var(--catppuccin-color-yellow) 18%, var(--popover))",
-  yellowBorder: "color-mix(in srgb, var(--catppuccin-color-yellow) 50%, var(--border))",
-  yellowText: "color-mix(in srgb, var(--catppuccin-color-yellow) 82%, white)",
+  successBg: "var(--toast-success-bg)",
+  successBorder: "var(--toast-success-border)",
+  successText: "var(--toast-success-text)",
+  warningBg: "var(--toast-warning-bg)",
+  warningBorder: "var(--toast-warning-border)",
+  warningText: "var(--toast-warning-text)",
+  errorBg: "var(--toast-error-bg)",
+  errorBorder: "var(--toast-error-border)",
+  errorText: "var(--toast-error-text)",
+  infoBg: "var(--toast-info-bg)",
+  infoBorder: "var(--toast-info-border)",
+  infoText: "var(--toast-info-text)",
 } as const;
 
 export function Toaster(props: ToasterProps) {
@@ -33,18 +36,21 @@ export function Toaster(props: ToasterProps) {
       }}
       style={
         {
-          "--normal-bg": toastPalette.greenBg,
-          "--normal-text": toastPalette.greenText,
-          "--normal-border": toastPalette.greenBorder,
-          "--success-bg": toastPalette.greenBg,
-          "--success-text": toastPalette.greenText,
-          "--success-border": toastPalette.greenBorder,
-          "--error-bg": toastPalette.redBg,
-          "--error-text": toastPalette.redText,
-          "--error-border": toastPalette.redBorder,
-          "--warning-bg": toastPalette.yellowBg,
-          "--warning-text": toastPalette.yellowText,
-          "--warning-border": toastPalette.yellowBorder,
+          "--normal-bg": toastPalette.infoBg,
+          "--normal-text": toastPalette.infoText,
+          "--normal-border": toastPalette.infoBorder,
+          "--info-bg": toastPalette.infoBg,
+          "--info-text": toastPalette.infoText,
+          "--info-border": toastPalette.infoBorder,
+          "--success-bg": toastPalette.successBg,
+          "--success-text": toastPalette.successText,
+          "--success-border": toastPalette.successBorder,
+          "--error-bg": toastPalette.errorBg,
+          "--error-text": toastPalette.errorText,
+          "--error-border": toastPalette.errorBorder,
+          "--warning-bg": toastPalette.warningBg,
+          "--warning-text": toastPalette.warningText,
+          "--warning-border": toastPalette.warningBorder,
           "--border-radius": "var(--radius)",
         } as React.CSSProperties
       }

@@ -530,9 +530,11 @@ function ApiKeyIdentity({ apiKey }: { apiKey: ApiKeySummary }) {
 
 function MobileDefinition({ children, label }: { children: ReactNode; label: string }) {
   return (
-    <div className="grid gap-1">
-      <dt className="text-muted-foreground text-xs">{label}</dt>
-      <dd className="min-w-0 text-foreground">{children}</dd>
+    <div className="grid min-w-0 grid-cols-[minmax(0,0.75fr)_minmax(0,1fr)] items-start gap-3">
+      <dt className="text-muted-foreground text-xs leading-5">{label}</dt>
+      <dd className="min-w-0 justify-self-end text-right text-foreground wrap-break-word">
+        {children}
+      </dd>
     </div>
   );
 }
