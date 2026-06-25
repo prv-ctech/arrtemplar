@@ -285,7 +285,8 @@ function NotificationHistoryRow({
     <button
       className={cn(
         "flex w-full min-w-0 items-start gap-3 rounded-xl border border-transparent p-2.5 text-left outline-none transition-colors hover:border-border hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60",
-        isUnread && "bg-primary/6",
+        isUnread &&
+          "border-selected-border bg-selected hover:border-selected-border hover:bg-selected",
       )}
       disabled={isPending}
       onClick={() => onMarkRead(notification)}

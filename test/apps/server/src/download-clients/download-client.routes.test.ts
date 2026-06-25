@@ -14,7 +14,7 @@ describe("download client routes", () => {
     testState.database = null;
   });
 
-  it("requires an authenticated session and rejects API key principals", async () => {
+  it("allows full-authority API key principals on service routes", async () => {
     const { app } = await createTestApp();
     const adminCookie = await createInitialAdmin(app);
 
@@ -23,12 +23,7 @@ describe("download client routes", () => {
     expect(unauthorized.status).toBe(401);
 
     const apiKeyResponse = await app.handle(
-      jsonRequest(
-        "POST",
-        "/api/api-keys",
-        { name: "Route test", permissions: ["settings:services"] },
-        { cookie: adminCookie },
-      ),
+      jsonRequest("POST", "/api/api-keys", { name: "Route test" }, { cookie: adminCookie }),
     );
     const apiKeyBody = await apiKeyResponse.json();
     const apiKeyRequest = new Request("http://localhost/api/settings/services", {
@@ -37,7 +32,7 @@ describe("download client routes", () => {
 
     const apiKeyAttempt = await app.handle(apiKeyRequest);
 
-    expect(apiKeyAttempt.status).toBe(401);
+    expect(apiKeyAttempt.status).toBe(200);
   });
 
   it("saves, lists, tests, reports status, and deletes service configs", async () => {

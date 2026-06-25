@@ -20,6 +20,38 @@ agents: ["research", "implement", "review"]
 Use Caveman in `ultra` mode for AI-agent-facing output, status, summaries, and handoffs.
 Use `fuck-slop` for human-facing prose written during implementation: code comments, docs, UI copy, descriptions, issue/PR text, and any text humans will read. Preserve exact code symbols, commands, API names, and error strings.
 
+- `.github/skills/logtape/SKILL.md`
+- `.github/skills/logtape/references/core-preflight.md` *(read first)*
+- `.github/skills/logtape/references/core-prohibited.md`
+- `.github/skills/logtape/references/core-install.md`
+- `.github/skills/logtape/references/core-quickstart.md`
+- `.github/skills/logtape/references/core-config.md`
+- `.github/skills/logtape/references/core-config-from-object.md`
+- `.github/skills/logtape/references/core-categories.md`
+- `.github/skills/logtape/references/core-levels.md`
+- `.github/skills/logtape/references/core-logging-api.md`
+- `.github/skills/logtape/references/core-contexts.md`
+- `.github/skills/logtape/references/core-lazy.md`
+- `.github/skills/logtape/references/core-filters.md`
+- `.github/skills/logtape/references/core-formatters.md`
+- `.github/skills/logtape/references/core-redaction.md`
+- `.github/skills/logtape/references/core-disposal.md`
+- `.github/skills/logtape/references/sinks-console-stream.md`
+- `.github/skills/logtape/references/sinks-file.md`
+- `.github/skills/logtape/references/sinks-fingers-crossed.md`
+- `.github/skills/logtape/references/sinks-custom-async.md`
+- `.github/skills/logtape/references/sinks-external.md`
+- `.github/skills/logtape/references/integrations-elysia.md`
+- `.github/skills/logtape/references/integrations-drizzle.md`
+- `.github/skills/logtape/references/integrations-frameworks.md`
+- `.github/skills/logtape/references/integrations-adaptors.md`
+- `.github/skills/logtape/references/lint-rules.md`
+- `.github/skills/logtape/references/testing.md`
+- `.github/skills/logtape/references/debug.md`
+- `.github/skills/logtape/references/library.md`
+
+**LogTape is this repo's logging library — everything logs-related.** **Always add LogTape logs when working a feature.** Every new code path (route, handler, job, module, error branch) must emit appropriate structured logs via `getLogger(["app", …])` — never `console.log`. Use named placeholders (`"User {userId} …"` with a properties object), never template-literal interpolation (`${userId}`). Reuse the repo's existing setup in `apps/server/src/logging/` (`configureServerLogging`, `createRedactedSink`). Read `core-prohibited.md` first to avoid banned patterns.
+
 ### Agent Skills — Load After Core Skills
 
 These skills are required for the agent to fulfill its purpose. Always load them:

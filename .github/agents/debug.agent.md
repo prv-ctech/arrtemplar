@@ -33,6 +33,7 @@ Use `browser-testing` to replicate and verify any user-facing (frontend) error t
 Load these skills when their trigger criteria apply to the current task:
 
 - `.github/skills/doubt-driven-development/SKILL.md` — load when the failure is in unfamiliar code, on a production/security-sensitive path, or involves an irreversible operation.
+- `.github/skills/logtape/SKILL.md` (with every file under `.github/skills/logtape/references/` — start with `core-preflight.md`, then `core-prohibited.md`) — **load when the bug requires logging to diagnose or fix.** Specifically load it when you need to read existing logs to localize the failure, when the failure path is missing logs (silent failures are often the root cause of undiagnosable bugs), or when the fix must add or correct LogTape logging. **Do not load it for small fixes unrelated to logging** (e.g. change a font size, rename a file, tweak copy, adjust spacing). When loaded, never use `console.log` to debug or patch — always wire the logger (`getLogger(["app", …])`) with named placeholders and a properties object.
 
 ### Completion Gate
 

@@ -1,14 +1,7 @@
-import {
-  type ApiKeyReveal,
-  type ApiKeySummary,
-  isApiKeyEligiblePermission,
-  type NotificationPreferences,
-  PERMISSION_CATALOG_BY_PERMISSION,
-  type UserPermission,
-} from "@arrtemplar/shared";
+import type { ApiKeyReveal, ApiKeySummary, NotificationPreferences } from "@arrtemplar/shared";
 import { CaretDownIcon, KeyIcon, PlusIcon } from "@phosphor-icons/react";
 import type { FormEvent, ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,10 +37,6 @@ import { notify } from "@/features/notifications/notification-gateway";
 import { SettingsStatus } from "@/features/settings/SettingsPrimitives";
 import { cn } from "@/lib/utils";
 import { useAuthenticatedRouteUser } from "@/routes/authenticated-route-user";
-import { togglePermissionSelection } from "../../user/permission-selection";
-import { usePermissionCatalogQuery } from "../admin-users";
-import { permissionsDialogContentClassName } from "../permission-grant-dialog";
-import { PermissionCategoryGrid } from "../permission-grant-grid";
 import {
   settingsTableActionCellClassName,
   settingsTableActionHeaderClassName,
@@ -56,17 +45,13 @@ import {
   useApiKeysQuery,
   useCreateApiKeyMutation,
   useDeleteApiKeyMutation,
-  useRevokeApiKeyMutation,
-  useUpdateApiKeyMutation,
+  useRotateApiKeyMutation,
 } from "./api-keys";
 
-type ApiKeyDialogMode =
-  | { kind: "create" }
-  | { apiKey: ApiKeySummary; kind: "edit" }
-  | { kind: "closed" };
 type PendingApiKeyAction =
-  | { apiKey: ApiKeySummary; kind: "delete" | "revoke" }
+  | { apiKey: ApiKeySummary; kind: "delete" | "rotate" }
   | { kind: "closed" };
+
 type ApiKeysSettingsState = ReturnType<typeof useApiKeysSettingsState>;
 
 export function ApiKeysSettings() {
@@ -76,55 +61,90 @@ export function ApiKeysSettings() {
 function useApiKeysSettingsState() {
   const actor = useAuthenticatedRouteUser();
   const apiKeysQuery = useApiKeysQuery();
-  const revokeMutation = useRevokeApiKeyMutation();
+  const createMutation = useCreateApiKeyMutation();
+  const rotateMutation = useRotateApiKeyMutation();
   const deleteMutation = useDeleteApiKeyMutation();
-  const [dialogMode, setDialogMode] = useState<ApiKeyDialogMode>({ kind: "closed" });
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(true);
   const [pendingAction, setPendingAction] = useState<PendingApiKeyAction>({ kind: "closed" });
   const [revealedKey, setRevealedKey] = useState<ApiKeyReveal | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const rows = apiKeysQuery.data ?? [];
 
-  function revokeApiKey(apiKey: ApiKeySummary) {
+  function handleCreate(input: { description: string | null; name: string }) {
     setErrorMessage(null);
-    revokeMutation.mutate(apiKey.id, {
-      onSuccess: () => {
-        setStatusMessage("API key revoked.");
+    createMutation.mutate(input, {
+      onSuccess: (result) => {
+        setIsCreateOpen(false);
+        setRevealedKey(result);
+        setStatusMessage("API key created.");
         notify(
           {
-            id: "api_keys.revoked",
-            title: "API key revoked.",
-            description: apiKey.name,
+            id: "api_keys.created",
+            title: "API key created.",
+            description: result.apiKey.name,
           },
           actor.notificationPreferences,
         );
       },
       onError: (error) => {
-        const message = error instanceof Error ? error.message : "Revoke failed.";
+        const message = error instanceof Error ? error.message : "Create failed.";
 
         setErrorMessage(message);
-        notify(
-          {
-            id: "api_keys.revoke.failed",
-            title: message,
-            description: apiKey.name,
-          },
-          actor.notificationPreferences,
-        );
+        notify({ id: "api_keys.create.failed", title: message }, actor.notificationPreferences);
       },
     });
   }
 
-  function deleteApiKey(apiKey: ApiKeySummary) {
+  function confirmPendingAction() {
+    if (pendingAction.kind === "closed") {
+      return;
+    }
+
+    const currentAction = pendingAction;
+    setPendingAction({ kind: "closed" });
     setErrorMessage(null);
-    deleteMutation.mutate(apiKey.id, {
-      onSuccess: () => {
+
+    if (currentAction.kind === "rotate") {
+      rotateMutation.mutate(currentAction.apiKey.id, {
+        onSuccess: (result) => {
+          setRevealedKey(result);
+          setStatusMessage("API key rotated.");
+          notify(
+            {
+              id: "api_keys.updated",
+              title: "API key rotated.",
+              description: result.apiKey.name,
+            },
+            actor.notificationPreferences,
+          );
+        },
+        onError: (error) => {
+          const message = error instanceof Error ? error.message : "Rotate failed.";
+
+          setErrorMessage(message);
+          notify(
+            {
+              id: "api_keys.update.failed",
+              title: message,
+              description: currentAction.apiKey.name,
+            },
+            actor.notificationPreferences,
+          );
+        },
+      });
+
+      return;
+    }
+
+    deleteMutation.mutate(currentAction.apiKey.id, {
+      onSuccess: (result) => {
         setStatusMessage("API key deleted.");
         notify(
           {
             id: "api_keys.deleted",
             title: "API key deleted.",
-            description: apiKey.name,
+            description: result.name,
           },
           actor.notificationPreferences,
         );
@@ -137,7 +157,7 @@ function useApiKeysSettingsState() {
           {
             id: "api_keys.delete.failed",
             title: message,
-            description: apiKey.name,
+            description: currentAction.apiKey.name,
           },
           actor.notificationPreferences,
         );
@@ -145,68 +165,56 @@ function useApiKeysSettingsState() {
     });
   }
 
-  function confirmPendingAction() {
-    if (pendingAction.kind === "closed") {
-      return;
-    }
-
-    const apiKey = pendingAction.apiKey;
-    const action = pendingAction.kind;
-    setPendingAction({ kind: "closed" });
-
-    getPendingActionHandler(action, {
-      deleteApiKey,
-      revokeApiKey,
-    })(apiKey);
-  }
-
   return {
     apiKeysQuery,
+    createMutation,
     deleteMutation,
-    dialogMode,
     errorMessage,
+    isCreateOpen,
+    isExpanded,
     notificationPreferences: actor.notificationPreferences,
     pendingAction,
     revealedKey,
-    revokeMutation,
-    rows,
-    setDialogMode,
+    rotateMutation,
     setErrorMessage,
+    setIsCreateOpen,
+    setIsExpanded,
     setPendingAction,
     setRevealedKey,
     setStatusMessage,
     statusMessage,
     confirmPendingAction,
+    handleCreate,
   };
 }
 
 function ApiKeysSettingsView({ state }: { state: ApiKeysSettingsState }) {
-  const [isExpanded, setIsExpanded] = useState(true);
-  const isLifecycleMutationPending =
-    state.revokeMutation.isPending || state.deleteMutation.isPending;
+  const isActionPending =
+    state.createMutation.isPending ||
+    state.rotateMutation.isPending ||
+    state.deleteMutation.isPending;
 
   return (
     <div className="space-y-3">
       <ApiKeyServiceCard
-        isExpanded={isExpanded}
-        onToggle={() => setIsExpanded((current) => !current)}
+        isExpanded={state.isExpanded}
+        onToggle={() => state.setIsExpanded((current) => !current)}
       >
         <div className="space-y-3">
-          <ApiKeyStatusMessage
+          <SettingsStatus
             errorMessage={state.errorMessage}
+            statusId="api-keys-status"
             statusMessage={state.statusMessage}
           />
           <ApiKeysQueryContent state={state} />
         </div>
       </ApiKeyServiceCard>
 
-      <ApiKeyFormDialog
-        mode={state.dialogMode}
-        onClose={() => state.setDialogMode({ kind: "closed" })}
-        onError={state.setErrorMessage}
-        notificationPreferences={state.notificationPreferences}
-        onReveal={state.setRevealedKey}
-        onStatus={state.setStatusMessage}
+      <CreateApiKeyDialog
+        isOpen={state.isCreateOpen}
+        isPending={state.createMutation.isPending}
+        onClose={() => state.setIsCreateOpen(false)}
+        onSubmit={state.handleCreate}
       />
       <ApiKeySecretDialog
         notificationPreferences={state.notificationPreferences}
@@ -215,7 +223,7 @@ function ApiKeysSettingsView({ state }: { state: ApiKeysSettingsState }) {
       />
       <ConfirmApiKeyActionDialog
         action={state.pendingAction}
-        isPending={isLifecycleMutationPending}
+        isPending={isActionPending}
         onClose={() => state.setPendingAction({ kind: "closed" })}
         onConfirm={state.confirmPendingAction}
       />
@@ -237,11 +245,34 @@ function ApiKeyServiceCard({
   return (
     <Card className="w-full overflow-hidden rounded-2xl bg-card/50 shadow-none">
       <CardHeader className="p-0">
-        <ApiKeyServiceToggleButton
-          contentId={contentId}
-          isExpanded={isExpanded}
-          onToggle={onToggle}
-        />
+        <button
+          aria-controls={contentId}
+          aria-expanded={isExpanded}
+          aria-label={`${isExpanded ? "Collapse" : "Expand"} API key settings`}
+          className={cn(
+            "flex w-full min-w-0 cursor-pointer items-start gap-3 p-3 text-left transition-colors duration-200",
+            "hover:bg-accent/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          )}
+          onClick={onToggle}
+          type="button"
+        >
+          <div
+            aria-hidden="true"
+            className="grid size-10 shrink-0 place-items-center rounded-xl border border-border bg-secondary text-secondary-foreground"
+          >
+            <KeyIcon className="size-5" />
+          </div>
+          <div className="min-w-0 flex-1 py-2.5">
+            <CardTitle className="text-sm leading-5 sm:text-base">API Keys</CardTitle>
+          </div>
+          <CaretDownIcon
+            aria-hidden="true"
+            className={cn(
+              "mt-3 size-4 shrink-0 text-muted-foreground transition-transform duration-200",
+              isExpanded && "rotate-180",
+            )}
+          />
+        </button>
       </CardHeader>
       {isExpanded ? (
         <>
@@ -252,47 +283,6 @@ function ApiKeyServiceCard({
         </>
       ) : null}
     </Card>
-  );
-}
-
-function ApiKeyServiceToggleButton({
-  contentId,
-  isExpanded,
-  onToggle,
-}: {
-  contentId: string;
-  isExpanded: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      aria-controls={contentId}
-      aria-expanded={isExpanded}
-      aria-label={`${isExpanded ? "Collapse" : "Expand"} API key settings`}
-      className={cn(
-        "flex w-full min-w-0 cursor-pointer items-start gap-3 p-3 text-left transition-colors duration-200",
-        "hover:bg-accent/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-      )}
-      onClick={onToggle}
-      type="button"
-    >
-      <div
-        aria-hidden="true"
-        className="grid size-10 shrink-0 place-items-center rounded-xl border border-border bg-secondary text-secondary-foreground"
-      >
-        <KeyIcon className="size-5" />
-      </div>
-      <div className="min-w-0 flex-1 py-2.5">
-        <CardTitle className="text-sm leading-5 sm:text-base">API Keys</CardTitle>
-      </div>
-      <CaretDownIcon
-        aria-hidden="true"
-        className={cn(
-          "mt-3 size-4 shrink-0 text-muted-foreground transition-transform duration-200",
-          isExpanded && "rotate-180",
-        )}
-      />
-    </button>
   );
 }
 
@@ -307,42 +297,11 @@ function ApiKeysQueryContent({ state }: { state: ApiKeysSettingsState }) {
 
   return (
     <ApiKeysTable
-      isMutating={state.revokeMutation.isPending || state.deleteMutation.isPending}
-      onCreate={() => state.setDialogMode({ kind: "create" })}
+      isMutating={state.rotateMutation.isPending || state.deleteMutation.isPending}
+      onCreate={() => state.setIsCreateOpen(true)}
       onDelete={(apiKey) => state.setPendingAction({ apiKey, kind: "delete" })}
-      onEdit={(apiKey) => state.setDialogMode({ apiKey, kind: "edit" })}
-      onRevoke={(apiKey) => state.setPendingAction({ apiKey, kind: "revoke" })}
-      rows={state.rows}
-    />
-  );
-}
-
-function getPendingActionHandler(
-  action: PendingApiKeyAction["kind"],
-  handlers: {
-    deleteApiKey: (apiKey: ApiKeySummary) => void;
-    revokeApiKey: (apiKey: ApiKeySummary) => void;
-  },
-) {
-  return {
-    closed: () => undefined,
-    delete: handlers.deleteApiKey,
-    revoke: handlers.revokeApiKey,
-  }[action];
-}
-
-function ApiKeyStatusMessage({
-  errorMessage,
-  statusMessage,
-}: {
-  errorMessage: string | null;
-  statusMessage: string | null;
-}) {
-  return (
-    <SettingsStatus
-      errorMessage={errorMessage}
-      statusId="api-keys-status"
-      statusMessage={statusMessage}
+      onRotate={(apiKey) => state.setPendingAction({ apiKey, kind: "rotate" })}
+      rows={state.apiKeysQuery.data ?? []}
     />
   );
 }
@@ -371,52 +330,98 @@ function ApiKeysTable({
   isMutating,
   onCreate,
   onDelete,
-  onEdit,
-  onRevoke,
+  onRotate,
   rows,
 }: {
   isMutating: boolean;
   onCreate: () => void;
   onDelete: (apiKey: ApiKeySummary) => void;
-  onEdit: (apiKey: ApiKeySummary) => void;
-  onRevoke: (apiKey: ApiKeySummary) => void;
+  onRotate: (apiKey: ApiKeySummary) => void;
   rows: readonly ApiKeySummary[];
 }) {
   return (
-    <Table className="border-separate border-spacing-0" containerClassName="max-w-full bg-card">
-      <TableHeader>
-        <TableRow>
-          <TableHead>Key</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Permissions</TableHead>
-          <TableHead>Last Used</TableHead>
-          <TableHead>Expires</TableHead>
-          <TableHead className={settingsTableActionHeaderClassName}>
-            <CreateApiKeyTableAction onCreate={onCreate} />
-          </TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.length > 0 ? (
-          rows.map((apiKey) => (
-            <ApiKeyRow
+    <>
+      <ApiKeysMobileList
+        isMutating={isMutating}
+        onCreate={onCreate}
+        onDelete={onDelete}
+        onRotate={onRotate}
+        rows={rows}
+      />
+      <div className="hidden lg:block">
+        <Table className="border-separate border-spacing-0" containerClassName="max-w-full bg-card">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Key</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Last used</TableHead>
+              <TableHead>Rotated</TableHead>
+              <TableHead>Created</TableHead>
+              <TableHead className={settingsTableActionHeaderClassName}>
+                <CreateApiKeyTableAction onCreate={onCreate} />
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.length > 0 ? (
+              rows.map((apiKey) => (
+                <ApiKeyRow
+                  apiKey={apiKey}
+                  isMutating={isMutating}
+                  key={apiKey.id}
+                  onDelete={onDelete}
+                  onRotate={onRotate}
+                />
+              ))
+            ) : (
+              <TableRow>
+                <TableCell className="text-center text-muted-foreground" colSpan={6}>
+                  No API keys yet.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </>
+  );
+}
+
+function ApiKeysMobileList({
+  isMutating,
+  onCreate,
+  onDelete,
+  onRotate,
+  rows,
+}: {
+  isMutating: boolean;
+  onCreate: () => void;
+  onDelete: (apiKey: ApiKeySummary) => void;
+  onRotate: (apiKey: ApiKeySummary) => void;
+  rows: readonly ApiKeySummary[];
+}) {
+  return (
+    <div className="rounded-2xl border border-border bg-card lg:hidden">
+      <div className="flex items-center justify-between gap-3 border-border border-b px-3 py-2.5">
+        <span className="text-sm font-medium text-foreground">API keys</span>
+        <CreateApiKeyTableAction onCreate={onCreate} />
+      </div>
+      {rows.length > 0 ? (
+        <div className="divide-y divide-border">
+          {rows.map((apiKey) => (
+            <ApiKeyMobileCard
               apiKey={apiKey}
               isMutating={isMutating}
               key={apiKey.id}
               onDelete={onDelete}
-              onEdit={onEdit}
-              onRevoke={onRevoke}
+              onRotate={onRotate}
             />
-          ))
-        ) : (
-          <TableRow>
-            <TableCell className="text-center text-muted-foreground" colSpan={6}>
-              No API keys yet.
-            </TableCell>
-          </TableRow>
-        )}
-      </TableBody>
-    </Table>
+          ))}
+        </div>
+      ) : (
+        <p className="px-3 py-6 text-center text-muted-foreground text-sm">No API keys yet.</p>
+      )}
+    </div>
   );
 }
 
@@ -424,7 +429,7 @@ function CreateApiKeyTableAction({ onCreate }: { onCreate: () => void }) {
   return (
     <Button
       aria-label="Create API key"
-      className="size-8 rounded-xl border border-primary/35 bg-primary text-primary-foreground shadow-(--shadow-button) hover:translate-y-0 hover:bg-primary/90 hover:text-primary-foreground active:translate-y-0 focus-visible:ring-0 focus-visible:shadow-none"
+      className="size-8 rounded-xl border border-primary/35 bg-primary text-primary-foreground shadow-(--shadow-button) hover:translate-y-0 hover:bg-primary/90 hover:text-primary-foreground active:translate-y-0"
       onClick={onCreate}
       size="icon"
       type="button"
@@ -442,46 +447,93 @@ function ApiKeyRow({
   apiKey,
   isMutating,
   onDelete,
-  onEdit,
-  onRevoke,
+  onRotate,
 }: {
   apiKey: ApiKeySummary;
   isMutating: boolean;
   onDelete: (apiKey: ApiKeySummary) => void;
-  onEdit: (apiKey: ApiKeySummary) => void;
-  onRevoke: (apiKey: ApiKeySummary) => void;
+  onRotate: (apiKey: ApiKeySummary) => void;
 }) {
   return (
     <TableRow>
       <TableCell className="min-w-56">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 font-medium text-foreground">
-            <KeyIcon aria-hidden="true" className="size-4 text-primary" />
-            <span className="truncate">{apiKey.name}</span>
-          </div>
-          <div className="mt-1 truncate font-mono text-xs text-muted-foreground">
-            {apiKey.maskedKey}
-          </div>
-        </div>
+        <ApiKeyIdentity apiKey={apiKey} />
       </TableCell>
       <TableCell>
         <ApiKeyStatusBadge status={apiKey.status} />
       </TableCell>
-      <TableCell className="min-w-44 max-w-72 text-sm text-muted-foreground">
-        <ApiKeyPermissionSummary permissions={apiKey.permissions} />
-      </TableCell>
       <TableCell>{formatDate(apiKey.lastUsedAt)}</TableCell>
-      <TableCell>{apiKey.expiresAt ? formatDate(apiKey.expiresAt) : "No expiry"}</TableCell>
+      <TableCell>{formatDate(apiKey.rotatedAt)}</TableCell>
+      <TableCell>{formatDate(apiKey.createdAt)}</TableCell>
       <TableCell className={settingsTableActionCellClassName}>
         <ApiKeyRowActions
           apiKey={apiKey}
           isMutating={isMutating}
           onDelete={onDelete}
-          onEdit={onEdit}
-          onRevoke={onRevoke}
+          onRotate={onRotate}
         />
       </TableCell>
     </TableRow>
+  );
+}
+
+function ApiKeyMobileCard({
+  apiKey,
+  isMutating,
+  onDelete,
+  onRotate,
+}: {
+  apiKey: ApiKeySummary;
+  isMutating: boolean;
+  onDelete: (apiKey: ApiKeySummary) => void;
+  onRotate: (apiKey: ApiKeySummary) => void;
+}) {
+  return (
+    <article className="p-3">
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <ApiKeyIdentity apiKey={apiKey} />
+        </div>
+        <ApiKeyRowActions
+          apiKey={apiKey}
+          isMutating={isMutating}
+          onDelete={onDelete}
+          onRotate={onRotate}
+        />
+      </div>
+      <dl className="mt-3 grid gap-2 text-sm">
+        <MobileDefinition label="Status">
+          <ApiKeyStatusBadge status={apiKey.status} />
+        </MobileDefinition>
+        <MobileDefinition label="Last used">{formatDate(apiKey.lastUsedAt)}</MobileDefinition>
+        <MobileDefinition label="Rotated">{formatDate(apiKey.rotatedAt)}</MobileDefinition>
+        <MobileDefinition label="Created">{formatDate(apiKey.createdAt)}</MobileDefinition>
+      </dl>
+    </article>
+  );
+}
+
+function ApiKeyIdentity({ apiKey }: { apiKey: ApiKeySummary }) {
+  return (
+    <div className="min-w-0">
+      <div className="flex items-center gap-2 font-medium text-foreground">
+        <KeyIcon aria-hidden="true" className="size-4 text-primary" />
+        <span className="truncate">{apiKey.name}</span>
+      </div>
+      <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-muted-foreground text-xs">
+        <span className="truncate font-mono">{apiKey.maskedKey}</span>
+        <span className="font-mono">#{apiKey.fingerprint}</span>
+      </div>
+    </div>
+  );
+}
+
+function MobileDefinition({ children, label }: { children: ReactNode; label: string }) {
+  return (
+    <div className="grid gap-1">
+      <dt className="text-muted-foreground text-xs">{label}</dt>
+      <dd className="min-w-0 text-foreground">{children}</dd>
+    </div>
   );
 }
 
@@ -489,22 +541,18 @@ function ApiKeyRowActions({
   apiKey,
   isMutating,
   onDelete,
-  onEdit,
-  onRevoke,
+  onRotate,
 }: {
   apiKey: ApiKeySummary;
   isMutating: boolean;
   onDelete: (apiKey: ApiKeySummary) => void;
-  onEdit: (apiKey: ApiKeySummary) => void;
-  onRevoke: (apiKey: ApiKeySummary) => void;
+  onRotate: (apiKey: ApiKeySummary) => void;
 }) {
-  const isActive = apiKey.status === "active";
-
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label={`Open API key actions for ${apiKey.name}`}
-        className="grid size-9 cursor-pointer place-items-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-0 focus-visible:shadow-none"
+        className="grid size-9 cursor-pointer place-items-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         type="button"
       >
         <span className="sr-only">Open API key actions</span>
@@ -513,14 +561,10 @@ function ApiKeyRowActions({
         </span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuLabel>API key actions</DropdownMenuLabel>
-        <DropdownMenuItem onSelect={() => onEdit(apiKey)}>Edit permissions</DropdownMenuItem>
-        {isActive ? <DropdownMenuSeparator /> : null}
-        {isActive ? (
-          <DropdownMenuItem disabled={isMutating} onSelect={() => onRevoke(apiKey)}>
-            Revoke key
-          </DropdownMenuItem>
-        ) : null}
+        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+        <DropdownMenuItem disabled={isMutating} onSelect={() => onRotate(apiKey)}>
+          Rotate key
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           disabled={isMutating}
@@ -535,233 +579,64 @@ function ApiKeyRowActions({
 }
 
 function ApiKeyStatusBadge({ status }: { status: ApiKeySummary["status"] }) {
-  if (status === "active") {
-    return <Badge>Active</Badge>;
-  }
-
-  return <Badge variant={status === "revoked" ? "destructive" : "secondary"}>{status}</Badge>;
+  return status === "active" ? <Badge>Active</Badge> : <Badge variant="secondary">Deleted</Badge>;
 }
 
-function ApiKeyPermissionSummary({ permissions }: { permissions: readonly UserPermission[] }) {
-  const visiblePermissions = permissions.slice(0, 3);
-  const hiddenCount = permissions.length - visiblePermissions.length;
-
-  if (permissions.length === 0) {
-    return <Badge variant="secondary">No grants</Badge>;
-  }
-
-  return (
-    <div className="flex max-w-full flex-wrap gap-1.5">
-      {visiblePermissions.map((permission) => (
-        <Badge key={permission} title={permission} variant="outline">
-          {PERMISSION_CATALOG_BY_PERMISSION.get(permission)?.label ?? permission}
-        </Badge>
-      ))}
-      {hiddenCount > 0 ? <Badge variant="outline">+{hiddenCount} more</Badge> : null}
-    </div>
-  );
-}
-
-function ApiKeyFormDialog({
-  mode,
-  notificationPreferences,
+function CreateApiKeyDialog({
+  isOpen,
+  isPending,
   onClose,
-  onError,
-  onReveal,
-  onStatus,
+  onSubmit,
 }: {
-  mode: ApiKeyDialogMode;
-  notificationPreferences: NotificationPreferences;
+  isOpen: boolean;
+  isPending: boolean;
   onClose: () => void;
-  onError: (message: string | null) => void;
-  onReveal: (reveal: ApiKeyReveal) => void;
-  onStatus: (message: string | null) => void;
+  onSubmit: (input: { description: string | null; name: string }) => void;
 }) {
-  const createMutation = useCreateApiKeyMutation();
-  const updateMutation = useUpdateApiKeyMutation();
-  const permissionCatalogQuery = usePermissionCatalogQuery();
-  const apiKey = mode.kind === "edit" ? mode.apiKey : null;
-  const [permissionDraft, setPermissionDraft] = useState<Set<UserPermission> | null>(null);
-  const basePermissions = useMemo(() => new Set(apiKey?.permissions ?? []), [apiKey]);
-  const selectedPermissions = permissionDraft ?? basePermissions;
-  const eligiblePermissions = useMemo(
-    () =>
-      (permissionCatalogQuery.data ?? []).filter((entry) =>
-        isApiKeyEligiblePermission(entry.permission),
-      ),
-    [permissionCatalogQuery.data],
-  );
-
-  function handleOpenChange(open: boolean) {
-    if (!open) {
-      onClose();
-      setPermissionDraft(null);
-    }
-  }
-
-  function togglePermission(permission: UserPermission) {
-    setPermissionDraft((current) =>
-      togglePermissionSelection(current ?? selectedPermissions, permission),
-    );
-  }
-
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const permissions = [...selectedPermissions];
-    const input = readApiKeyFormInput(new FormData(event.currentTarget), permissions);
 
-    if (permissions.length === 0) {
-      const message = "Select at least one permission.";
+    const formData = new FormData(event.currentTarget);
+    const name = String(formData.get("name") ?? "").trim();
+    const descriptionValue = String(formData.get("description") ?? "").trim();
 
-      onError(message);
-      notify(
-        {
-          id: mode.kind === "create" ? "api_keys.create.failed" : "api_keys.update.failed",
-          title: message,
-        },
-        notificationPreferences,
-      );
+    if (!name) {
       return;
     }
 
-    onError(null);
-    if (mode.kind === "create") {
-      createMutation.mutate(input, {
-        onSuccess: (result) => {
-          onReveal(result);
-          onStatus("API key created.");
-          notify(
-            {
-              id: "api_keys.created",
-              title: "API key created.",
-              description: result.apiKey.name,
-            },
-            notificationPreferences,
-          );
-          handleOpenChange(false);
-        },
-        onError: (error) => {
-          const message = error instanceof Error ? error.message : "Create failed.";
-
-          onError(message);
-          notify(
-            {
-              id: "api_keys.create.failed",
-              title: message,
-            },
-            notificationPreferences,
-          );
-        },
-      });
-      return;
-    }
-
-    if (apiKey) {
-      updateMutation.mutate(
-        { apiKeyId: apiKey.id, input },
-        {
-          onSuccess: () => {
-            onStatus("API key updated.");
-            notify(
-              {
-                id: "api_keys.updated",
-                title: "API key updated.",
-                description: apiKey.name,
-              },
-              notificationPreferences,
-            );
-            handleOpenChange(false);
-          },
-          onError: (error) => {
-            const message = error instanceof Error ? error.message : "Update failed.";
-
-            onError(message);
-            notify(
-              {
-                id: "api_keys.update.failed",
-                title: message,
-                description: apiKey.name,
-              },
-              notificationPreferences,
-            );
-          },
-        },
-      );
-    }
+    onSubmit({
+      name,
+      description: descriptionValue || null,
+    });
   }
 
   return (
-    <Dialog onOpenChange={handleOpenChange} open={mode.kind !== "closed"}>
-      <DialogContent className={permissionsDialogContentClassName}>
-        <DialogHeader className="pr-8">
-          <DialogTitle>{mode.kind === "create" ? "Create API Key" : "Edit API Key"}</DialogTitle>
-          <DialogDescription>
-            {selectedPermissions.size} selected grant{selectedPermissions.size === 1 ? "" : "s"}.
-            High-risk grants are marked.
-          </DialogDescription>
+    <Dialog onOpenChange={(open) => !open && onClose()} open={isOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>New API key</DialogTitle>
+          <DialogDescription>Shown once after save.</DialogDescription>
         </DialogHeader>
-        <form
-          className="min-h-0 space-y-3 overflow-y-auto pr-1"
-          id="api-key-form"
-          onSubmit={handleSubmit}
-        >
-          <ApiKeyMetadataFields apiKey={apiKey} />
-          <PermissionCategoryGrid
-            entries={eligiblePermissions}
-            onTogglePermission={togglePermission}
-            selectedPermissions={selectedPermissions}
-          />
+        <form className="space-y-3" id="create-api-key-form" onSubmit={handleSubmit}>
+          <div className="space-y-1.5">
+            <Label htmlFor="api-key-name">Name</Label>
+            <Input id="api-key-name" name="name" required />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="api-key-description">Description</Label>
+            <Input id="api-key-description" name="description" />
+          </div>
         </form>
-        <DialogFooter className="border-t border-border pt-3">
-          <Button
-            disabled={createMutation.isPending || updateMutation.isPending}
-            form="api-key-form"
-            type="submit"
-          >
-            {createMutation.isPending || updateMutation.isPending ? "Saving" : "Save Key"}
+        <DialogFooter>
+          <Button onClick={onClose} type="button" variant="outline">
+            Cancel
+          </Button>
+          <Button disabled={isPending} form="create-api-key-form" type="submit">
+            {isPending ? "Saving" : "Save"}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function ApiKeyMetadataFields({ apiKey }: { apiKey: ApiKeySummary | null }) {
-  const idPrefix = apiKey ? `api-key-${apiKey.id}` : "api-key-new";
-
-  return (
-    <div className="grid gap-3 rounded-xl border border-border bg-card/35 p-3 sm:grid-cols-2">
-      <div className="space-y-1.5">
-        <Label htmlFor={`${idPrefix}-name`}>Key name</Label>
-        <Input id={`${idPrefix}-name`} defaultValue={apiKey?.name ?? ""} name="name" required />
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor={`${idPrefix}-description`}>Description</Label>
-        <Input
-          id={`${idPrefix}-description`}
-          defaultValue={apiKey?.description ?? ""}
-          name="description"
-        />
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor={`${idPrefix}-expires-at`}>Expires at</Label>
-        <Input
-          id={`${idPrefix}-expires-at`}
-          defaultValue={toDateTimeLocalValue(apiKey?.expiresAt)}
-          name="expiresAt"
-          type="datetime-local"
-        />
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor={`${idPrefix}-ip-allowlist`}>IP allowlist</Label>
-        <Input
-          id={`${idPrefix}-ip-allowlist`}
-          defaultValue={apiKey?.ipAllowlist.join(", ") ?? ""}
-          name="ipAllowlist"
-          placeholder="192.0.2.10, 198.51.100.0/24"
-        />
-      </div>
-    </div>
   );
 }
 
@@ -777,19 +652,10 @@ function ApiKeySecretDialog({
   function copySecret(secret: string) {
     void navigator.clipboard.writeText(secret).then(
       () =>
-        notify(
-          {
-            id: "api_keys.secret.copied",
-            title: "API key copied.",
-          },
-          notificationPreferences,
-        ),
+        notify({ id: "api_keys.secret.copied", title: "API key copied." }, notificationPreferences),
       () =>
         notify(
-          {
-            id: "api_keys.secret.copy.failed",
-            title: "Copy failed.",
-          },
+          { id: "api_keys.secret.copy.failed", title: "Copy failed." },
           notificationPreferences,
         ),
     );
@@ -799,8 +665,8 @@ function ApiKeySecretDialog({
     <Dialog onOpenChange={(open) => !open && onClose()} open={Boolean(reveal)}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Copy API Key</DialogTitle>
-          <DialogDescription>This secret is shown once. Store it before closing.</DialogDescription>
+          <DialogTitle>Copy API key</DialogTitle>
+          <DialogDescription>Shown once.</DialogDescription>
         </DialogHeader>
         {reveal ? <Input className="font-mono text-xs" readOnly value={reveal.secret} /> : null}
         <DialogFooter>
@@ -836,7 +702,7 @@ function ConfirmApiKeyActionDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{copy.title}</DialogTitle>
-          <DialogDescription>{copy.description}</DialogDescription>
+          {copy.description ? <DialogDescription>{copy.description}</DialogDescription> : null}
         </DialogHeader>
         <DialogFooter>
           <Button disabled={isPending} onClick={onClose} type="button" variant="outline">
@@ -853,70 +719,32 @@ function ConfirmApiKeyActionDialog({
 
 function readConfirmActionCopy(action: PendingApiKeyAction): {
   actionLabel: string;
-  description: string;
+  description: string | null;
   title: string;
 } {
-  if (action.kind === "revoke") {
+  if (action.kind === "rotate") {
     return {
-      actionLabel: "Revoke Key",
-      description: "External apps using this key will lose access immediately.",
-      title: "Revoke this API key?",
+      actionLabel: "Rotate",
+      description: action.apiKey.name,
+      title: "Rotate key?",
     };
   }
 
   if (action.kind === "delete") {
     return {
-      actionLabel: "Delete Key",
-      description: "The key and its permission grants will be deleted from storage.",
-      title: "Delete this API key?",
+      actionLabel: "Delete",
+      description: action.apiKey.name,
+      title: "Delete key?",
     };
   }
 
   return {
     actionLabel: "Confirm",
-    description: "Confirm this API-key action.",
-    title: "Confirm action",
+    description: null,
+    title: "Confirm",
   };
-}
-
-function readApiKeyFormInput(formData: FormData, permissions: UserPermission[]) {
-  const description = String(formData.get("description") ?? "").trim();
-  const expiresAtValue = String(formData.get("expiresAt") ?? "");
-  const ipAllowlist = String(formData.get("ipAllowlist") ?? "")
-    .split(/[\n,]/)
-    .flatMap((entry) => {
-      const trimmedEntry = entry.trim();
-
-      return trimmedEntry ? [trimmedEntry] : [];
-    });
-
-  return {
-    name: String(formData.get("name") ?? "").trim(),
-    permissions,
-    description: description || null,
-    expiresAt: expiresAtValue ? readDateTimeLocalIso(expiresAtValue) : null,
-    ipAllowlist,
-  };
-}
-
-function toDateTimeLocalValue(value: string | null | undefined): string {
-  if (!value) {
-    return "";
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
-}
-
-function readDateTimeLocalIso(value: string): string {
-  return new Date(value).toISOString();
 }
 
 function formatDate(value: string | null): string {
-  return value ? new Date(value).toLocaleDateString() : "Never";
+  return value ? new Date(value).toLocaleString() : "Never";
 }

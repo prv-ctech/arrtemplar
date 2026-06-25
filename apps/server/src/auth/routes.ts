@@ -1,8 +1,6 @@
 import type {
   ApiErrorResponse,
   ApiKeyListResponse,
-  ApiKeyMeResponse,
-  ApiKeyMutationResponse,
   ApiKeyResponse,
   AuthPatchProviderRequest,
   AuthProviderSlug,
@@ -30,10 +28,7 @@ import type {
   NotificationPreferencesResponse,
   PermissionCatalogResponse,
   PublicUser,
-  RefreshApiKeyResponse,
-  RevokeApiKeyResponse,
   RotateApiKeyResponse,
-  UpdateApiKeyRequest,
   UpdateNotificationPreferencesResponse,
   UpdateUserProfileRequest,
   UpdateUserProfileResponse,
@@ -45,7 +40,6 @@ import {
   AUTH_METHOD_VALUES,
   AUTH_PROVIDER_KIND_VALUES,
   AUTH_PROVIDER_SLUGS,
-  hasPermissionGrant,
   isProfileAvatarId,
   isProfileBannerId,
   isToastNotificationId,
@@ -79,6 +73,7 @@ import { AuthService } from "./auth.service";
 import { OAuthService } from "./oauth/oauth.service";
 import { MIN_PASSWORD_LENGTH } from "./password";
 import type { LoginRateLimiter } from "./rate-limit";
+import { resolveRoutePrincipal } from "./route-principal";
 import { SESSION_COOKIE_NAME, SESSION_DURATION_SECONDS } from "./session-token";
 
 const publicUserIdSchema = t.String({ minLength: 9, maxLength: 9, pattern: "^[A-Za-z0-9]{9}$" });
@@ -248,20 +243,18 @@ const apiKeySummarySchema = t.Object({
   id: t.String({ minLength: 1, maxLength: 80 }),
   name: t.String(),
   description: t.Union([t.String(), t.Null()]),
-  prefix: t.String(),
+  keyPrefix: t.String(),
+  fingerprint: t.String(),
   maskedKey: t.String(),
   status: apiKeyStatusSchema,
-  permissions: t.Array(userPermissionSchema),
-  permissionCount: t.Number({ minimum: 0 }),
-  expiresAt: t.Union([t.String({ format: "date-time" }), t.Null()]),
-  ipAllowlist: t.Array(t.String()),
   lastUsedAt: t.Union([t.String({ format: "date-time" }), t.Null()]),
   lastUsedIpAddress: t.Union([t.String(), t.Null()]),
   lastUsedUserAgent: t.Union([t.String(), t.Null()]),
   createdBy: t.Union([apiKeyCreatedBySchema, t.Null()]),
   createdAt: t.String({ format: "date-time" }),
   updatedAt: t.String({ format: "date-time" }),
-  revokedAt: t.Union([t.String({ format: "date-time" }), t.Null()]),
+  rotatedAt: t.Union([t.String({ format: "date-time" }), t.Null()]),
+  deletedAt: t.Union([t.String({ format: "date-time" }), t.Null()]),
 });
 
 const authProviderSummarySchema = t.Object({
@@ -443,23 +436,10 @@ const apiKeyIdParamsSchema = t.Object({
 
 const apiKeyNameSchema = t.String({ minLength: 1, maxLength: 80, pattern: ".*\\S.*" });
 const apiKeyDescriptionSchema = t.Optional(t.Union([t.String({ maxLength: 500 }), t.Null()]));
-const apiKeyExpiresAtSchema = t.Optional(t.Union([t.String({ format: "date-time" }), t.Null()]));
-const apiKeyIpAllowlistSchema = t.Optional(t.Array(t.String({ minLength: 1, maxLength: 80 })));
 
 const createApiKeyRequestSchema = t.Object({
   name: apiKeyNameSchema,
   description: apiKeyDescriptionSchema,
-  permissions: t.Array(userPermissionSchema, { minItems: 1 }),
-  expiresAt: apiKeyExpiresAtSchema,
-  ipAllowlist: apiKeyIpAllowlistSchema,
-});
-
-const updateApiKeyRequestSchema = t.Object({
-  name: t.Optional(apiKeyNameSchema),
-  description: apiKeyDescriptionSchema,
-  permissions: t.Optional(t.Array(userPermissionSchema, { minItems: 1 })),
-  expiresAt: apiKeyExpiresAtSchema,
-  ipAllowlist: apiKeyIpAllowlistSchema,
 });
 
 const managedUserStatusRequestSchema = t.Object({
@@ -488,18 +468,6 @@ const apiKeyRevealResponseSchema = t.Object({
 const apiKeyMutationResponseSchema = t.Object({
   status: t.Literal("ok"),
   apiKey: apiKeySummarySchema,
-});
-const apiKeyMeResponseSchema = t.Object({
-  apiKey: t.Object({
-    id: t.String({ minLength: 1, maxLength: 80 }),
-    name: t.String(),
-    prefix: t.String(),
-    maskedKey: t.String(),
-    status: apiKeyStatusSchema,
-    permissions: t.Array(userPermissionSchema),
-    expiresAt: t.Union([t.String({ format: "date-time" }), t.Null()]),
-    lastUsedAt: t.Union([t.String({ format: "date-time" }), t.Null()]),
-  }),
 });
 const authSetupStatusResponseSchema = t.Object({ required: t.Boolean() });
 const authUserResponseSchema = t.Object({ user: t.Union([publicUserSchema, t.Null()]) });
@@ -1107,30 +1075,6 @@ function createSessionRoutes(
 function createApiKeyRoutes(authService: AuthService, apiKeyService: ApiKeyService) {
   return new Elysia()
     .get(
-      "/api-keys/me",
-      ({ request, server, status }) => {
-        const result = apiKeyService.resolveBearerApiKey(
-          readBearerApiKey(request.headers),
-          createRequestContext(request, server),
-        );
-
-        return result.ok
-          ? (apiKeyService.toMeResponse(result.principal) satisfies ApiKeyMeResponse)
-          : status(result.status, result.body);
-      },
-      {
-        response: {
-          200: apiKeyMeResponseSchema,
-          ...apiKeyErrorResponseSchemas,
-        },
-        detail: {
-          summary: "Inspect current API key",
-          description: "Returns safe metadata for the bearer API key used on this request.",
-          tags: ["Auth"],
-        },
-      },
-    )
-    .get(
       "/api-keys",
       ({ cookie, status }) =>
         withSettingsGeneral(authService, cookie[SESSION_COOKIE_NAME].value, status, (user) => {
@@ -1148,7 +1092,8 @@ function createApiKeyRoutes(authService: AuthService, apiKeyService: ApiKeyServi
         },
         detail: {
           summary: "List API keys",
-          description: "Returns masked API key metadata for settings administrators.",
+          description:
+            "Returns masked full-authority API key metadata for settings administrators.",
           tags: ["Auth"],
         },
       },
@@ -1182,7 +1127,7 @@ function createApiKeyRoutes(authService: AuthService, apiKeyService: ApiKeyServi
         },
         detail: {
           summary: "Create API key",
-          description: "Creates a least-privilege API key and reveals the secret once.",
+          description: "Creates a full-authority external API key and reveals the secret once.",
           tags: ["Auth"],
         },
       },
@@ -1211,70 +1156,6 @@ function createApiKeyRoutes(authService: AuthService, apiKeyService: ApiKeyServi
         },
       },
     )
-    .put(
-      "/api-keys/:apiKeyId",
-      ({ body, cookie, params, request, server, status }) =>
-        withSettingsGeneral(authService, cookie[SESSION_COOKIE_NAME].value, status, (user) => {
-          const input = normalizeUpdateApiKeyRouteRequest(body);
-
-          if (!input) {
-            return status(422, invalidApiKeyInputResponse());
-          }
-
-          const result = apiKeyService.updateApiKey(
-            params.apiKeyId,
-            input,
-            user,
-            createRequestContext(request, server),
-          );
-
-          return result.ok
-            ? (result.body satisfies ApiKeyMutationResponse)
-            : status(result.status, result.body);
-        }),
-      {
-        params: apiKeyIdParamsSchema,
-        body: updateApiKeyRequestSchema,
-        cookie: sessionCookieSchema,
-        response: {
-          200: apiKeyMutationResponseSchema,
-          ...apiKeyErrorResponseSchemas,
-        },
-        detail: {
-          summary: "Update API key",
-          description: "Updates API key metadata and explicit grants without returning the secret.",
-          tags: ["Auth"],
-        },
-      },
-    )
-    .post(
-      "/api-keys/:apiKeyId/revoke",
-      ({ cookie, params, request, server, status }) =>
-        withSettingsGeneral(authService, cookie[SESSION_COOKIE_NAME].value, status, (user) => {
-          const result = apiKeyService.revokeApiKey(
-            params.apiKeyId,
-            user,
-            createRequestContext(request, server),
-          );
-
-          return result.ok
-            ? (result.body satisfies RevokeApiKeyResponse)
-            : status(result.status, result.body);
-        }),
-      {
-        params: apiKeyIdParamsSchema,
-        cookie: sessionCookieSchema,
-        response: {
-          200: apiKeyMutationResponseSchema,
-          ...apiKeyErrorResponseSchemas,
-        },
-        detail: {
-          summary: "Revoke API key",
-          description: "Soft-revokes an API key so external apps lose access.",
-          tags: ["Auth"],
-        },
-      },
-    )
     .post(
       "/api-keys/:apiKeyId/rotate",
       ({ cookie, params, request, server, status }) =>
@@ -1298,35 +1179,7 @@ function createApiKeyRoutes(authService: AuthService, apiKeyService: ApiKeyServi
         },
         detail: {
           summary: "Rotate API key",
-          description: "Revokes the old API key and reveals a replacement secret once.",
-          tags: ["Auth"],
-        },
-      },
-    )
-    .post(
-      "/api-keys/:apiKeyId/refresh",
-      ({ cookie, params, request, server, status }) =>
-        withSettingsGeneral(authService, cookie[SESSION_COOKIE_NAME].value, status, (user) => {
-          const result = apiKeyService.refreshApiKey(
-            params.apiKeyId,
-            user,
-            createRequestContext(request, server),
-          );
-
-          return result.ok
-            ? (result.body satisfies RefreshApiKeyResponse)
-            : status(result.status, result.body);
-        }),
-      {
-        params: apiKeyIdParamsSchema,
-        cookie: sessionCookieSchema,
-        response: {
-          200: apiKeyRevealResponseSchema,
-          ...apiKeyErrorResponseSchemas,
-        },
-        detail: {
-          summary: "Refresh API key",
-          description: "Creates a replacement API key with the same grants and metadata.",
+          description: "Replaces the secret in place and reveals the new secret once.",
           tags: ["Auth"],
         },
       },
@@ -2148,49 +2001,28 @@ type SessionOrApiKeyPermissionInput = {
 };
 
 function withSessionOrApiKeyPermission<T>(
-  input: SessionOrApiKeyPermissionInput,
+  options: SessionOrApiKeyPermissionInput,
   status: StatusHandler,
   onSessionAllowed: (user: PublicUser) => T,
   onApiKeyAllowed: () => T,
 ): T | ReturnType<StatusHandler> {
-  const bearerApiKey = readBearerApiKey(input.request.headers);
-
-  if (bearerApiKey) {
-    const principalResult = input.apiKeyService.resolveBearerApiKey(
-      bearerApiKey,
-      createRequestContext(input.request, input.server),
-    );
-
-    if (!principalResult.ok) {
-      return status(principalResult.status, principalResult.body);
-    }
-
-    if (!hasPermissionGrant(principalResult.principal.permissions, input.requiredPermission)) {
-      return status(403, forbiddenPermissionResponse(input.requiredPermission));
-    }
-
-    return onApiKeyAllowed();
-  }
-
-  const permissionResult = input.authService.requirePermission(
-    readSessionToken(input.sessionCookieValue),
-    input.requiredPermission,
-  );
-
-  if (!permissionResult.ok) {
-    return status(permissionResult.status, permissionResult.body);
-  }
-
-  return onSessionAllowed(permissionResult.user);
-}
-
-function forbiddenPermissionResponse(permission: UserPermission): ApiErrorResponse {
-  return {
-    error: {
-      code: "FORBIDDEN",
-      message: `${permission} permission is required.`,
-    },
+  const routePrincipalInput = {
+    apiKeyService: options.apiKeyService,
+    authService: options.authService,
+    context: createRequestContext(options.request, options.server),
+    request: options.request,
+    requiredPermission: options.requiredPermission,
+    sessionToken: readSessionToken(options.sessionCookieValue),
   };
+  const principalResult = resolveRoutePrincipal(routePrincipalInput);
+
+  if (!principalResult.ok) {
+    return status(principalResult.status, principalResult.body);
+  }
+
+  return principalResult.principal.kind === "apiKey"
+    ? onApiKeyAllowed()
+    : onSessionAllowed(principalResult.principal.user);
 }
 
 function withSystemAdmin<T>(
@@ -2493,106 +2325,30 @@ function normalizeUpdateUserProfileRequest(input: {
   };
 }
 
-function readBearerApiKey(headers: Headers): string | null {
-  const authorization = headers.get("authorization");
-
-  if (!authorization) {
-    return null;
-  }
-
-  const match = /^Bearer\s+(\S+)$/i.exec(authorization.trim());
-
-  return match?.[1] ?? null;
-}
-
 function normalizeCreateApiKeyRouteRequest(input: unknown): CreateApiKeyRequest | null {
   if (!isRecord(input)) {
     return null;
   }
 
   const name = readRequiredString(input.name);
-  const permissions = readRoutePermissions(input.permissions);
 
-  if (!name || !permissions) {
+  if (!name) {
     return null;
   }
 
-  const request: CreateApiKeyRequest = { name, permissions };
+  const request: CreateApiKeyRequest = { name };
 
-  if (!applyOptionalApiKeyFields(request, input)) {
-    return null;
-  }
-
-  return request;
-}
-
-function normalizeUpdateApiKeyRouteRequest(input: unknown): UpdateApiKeyRequest | null {
-  if (!isRecord(input)) {
-    return null;
-  }
-
-  const request: UpdateApiKeyRequest = {};
-
-  if ("name" in input) {
-    const name = readRequiredString(input.name);
-
-    if (!name) {
-      return null;
-    }
-
-    request.name = name;
-  }
-
-  if ("permissions" in input) {
-    const permissions = readRoutePermissions(input.permissions);
-
-    if (!permissions) {
-      return null;
-    }
-
-    request.permissions = permissions;
-  }
-
-  if (!applyOptionalApiKeyFields(request, input)) {
-    return null;
-  }
-
-  return request;
-}
-
-function applyOptionalApiKeyFields(
-  output: UpdateApiKeyRequest,
-  input: Record<string, unknown>,
-): boolean {
   if ("description" in input) {
     const description = readNullableString(input.description);
 
     if (description === undefined) {
-      return false;
+      return null;
     }
 
-    output.description = description;
+    request.description = description;
   }
 
-  if ("expiresAt" in input) {
-    const expiresAt = readNullableString(input.expiresAt);
-
-    if (expiresAt === undefined) {
-      return false;
-    }
-
-    output.expiresAt = expiresAt;
-  }
-
-  if ("ipAllowlist" in input) {
-    if (!isStringArray(input.ipAllowlist)) {
-      return false;
-    }
-
-    output.ipAllowlist = input.ipAllowlist;
-  }
-
-  return true;
+  return request;
 }
 
 function readRequiredString(value: unknown): string | null {
@@ -2609,19 +2365,6 @@ function readNullableString(value: unknown): string | null | undefined {
   }
 
   return undefined;
-}
-
-function readRoutePermissions(value: unknown): UserPermission[] | null {
-  if (!Array.isArray(value) || value.length === 0) {
-    return null;
-  }
-
-  const permissions = value.filter(
-    (permission): permission is UserPermission =>
-      typeof permission === "string" && isUserPermission(permission),
-  );
-
-  return permissions.length === value.length ? permissions : null;
 }
 
 function invalidApiKeyInputResponse(): ApiErrorResponse {
@@ -2709,10 +2452,12 @@ export function createRequestContext(
   server: RequestIpReader | null = null,
 ): {
   ipAddress: string | null;
+  path: string;
   userAgent: string | null;
 } {
   return {
     ipAddress: server?.requestIP(request)?.address ?? null,
+    path: new URL(request.url).pathname,
     userAgent: request.headers.get("user-agent"),
   };
 }

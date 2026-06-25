@@ -78,8 +78,45 @@ describe("Catppuccin stylesheet", () => {
     }
 
     expect(source).toContain("--catppuccin-color-base: var(--color-hunt-base);");
-    expect(source).toContain("--catppuccin-color-surface0: var(--color-hunt-surface);");
+    expect(source).toContain(
+      "--color-hunt-panel: color-mix(in srgb, var(--color-hunt-surface) 78%, var(--color-hunt-base));",
+    );
+    expect(source).toContain("--catppuccin-color-surface0: var(--color-hunt-panel);");
     expect(source).toContain("--catppuccin-color-mauve: var(--color-hunt-accent);");
+    expect(source).toContain(
+      "--selected: color-mix(in srgb, var(--color-hunt-accent) 12%, var(--color-hunt-panel));",
+    );
+    expect(source).toContain("var(--color-hunt-accent) 28%");
+    expect(source).toContain(
+      "--color-hunt-subtext: color-mix(in srgb, var(--color-hunt-text) 88%, var(--color-hunt-base));",
+    );
+    expect(source).toContain(
+      "--primary-foreground: color-mix(in srgb, black 92%, var(--color-hunt-base));",
+    );
+  });
+
+  it("strengthens the delicate Color Hunt themes for readable body and action text", async () => {
+    const source = await Bun.file(stylesSourcePath).text();
+
+    expect(source).toContain(".color-hunt-soft-sky {");
+    expect(source).toContain(
+      "--color-hunt-text: color-mix(in srgb, var(--color-hunt-swatch-4) 28%, black);",
+    );
+    expect(source).toContain(".color-hunt-blush-cream {");
+    expect(source).toContain(
+      "--color-hunt-text: color-mix(in srgb, var(--color-hunt-swatch-4) 38%, black);",
+    );
+    expect(source).toContain(".color-hunt-cloud-peach {");
+    expect(source).toContain(
+      "--color-hunt-text: color-mix(in srgb, var(--color-hunt-swatch-1) 24%, black);",
+    );
+    expect(source).toContain(".color-hunt-neon-tide {");
+    expect(source).toContain(
+      "--color-hunt-subtext: color-mix(in srgb, var(--color-hunt-text) 90%, var(--color-hunt-base));",
+    );
+    expect(source).toContain("var(--color-hunt-text) 96%");
+    expect(source).toContain(".color-hunt-ruby-dusk {");
+    expect(source).toContain(".color-hunt-rose-noir {");
   });
 
   it("maps official Theme Park styles into the shared theme variables", async () => {
@@ -184,12 +221,13 @@ describe("Catppuccin stylesheet", () => {
   it("uses official guide colors for background and selection treatment", async () => {
     const source = await Bun.file(stylesSourcePath).text();
 
+    expect(source).toContain("--page-background-start: var(--catppuccin-color-mantle);");
+    expect(source).toContain("--page-grid-opacity: 0.18;");
     expect(source).toContain("background: linear-gradient(");
-    expect(source).toContain("var(--catppuccin-color-mantle)");
-    expect(source).toContain("var(--catppuccin-color-base) 48%");
-    expect(source).toContain("var(--catppuccin-color-crust)");
-    expect(source).toContain(
-      "background: color-mix(in srgb, var(--catppuccin-color-overlay2) 28%, transparent);",
-    );
+    expect(source).toContain("var(--page-background-start)");
+    expect(source).toContain("var(--page-background-mid) 48%");
+    expect(source).toContain("var(--page-background-end)");
+    expect(source).toContain("linear-gradient(var(--page-grid-line-y) 1px, transparent 1px)");
+    expect(source).toContain("opacity: var(--page-grid-opacity);");
   });
 });

@@ -107,8 +107,9 @@ const downloadClientCards: readonly DownloadClientCardDefinition[] = [
   },
 ] as const;
 
-const selectClassName =
-  "h-9 rounded-xl border border-input bg-background/50 px-3 text-sm text-foreground outline-none transition-[border-color,box-shadow] focus-visible:border-primary/70 focus-visible:ring-2 focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50";
+const compactDownloadClientFieldClassName = "h-9 w-full min-w-0 rounded-xl px-3 text-sm sm:w-52";
+
+const selectClassName = `${compactDownloadClientFieldClassName} border border-input bg-background/50 text-foreground shadow-[inset_0_1px_0_hsl(0_0%_100%/0.04)] outline-none transition-[border-color,box-shadow] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] focus-visible:border-primary/70 focus-visible:ring-2 focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm`;
 
 export function ServicesSettings() {
   const actor = useAuthenticatedRouteUser();
@@ -807,7 +808,7 @@ function DownloadClientFormFields({
     <div className="overflow-hidden rounded-xl border border-border bg-card/40">
       <SettingsRow controlId={`${itemKey}-display-name`} density="compact" label="Service name">
         <Input
-          className="h-9 min-w-0 rounded-xl px-3 text-sm"
+          className={compactDownloadClientFieldClassName}
           disabled={isBusy}
           id={`${itemKey}-display-name`}
           onChange={(event) => updateForm({ displayName: event.currentTarget.value })}
@@ -817,7 +818,7 @@ function DownloadClientFormFields({
       </SettingsRow>
       <SettingsRow controlId={`${itemKey}-host`} density="compact" label="Host">
         <Input
-          className="h-9 min-w-0 rounded-xl px-3 text-sm"
+          className={compactDownloadClientFieldClassName}
           disabled={isBusy}
           id={`${itemKey}-host`}
           onChange={(event) => updateForm({ host: event.currentTarget.value })}
@@ -849,7 +850,7 @@ function DownloadClientFormFields({
       </SettingsRow>
       <SettingsRow controlId={`${itemKey}-url-base`} density="compact" label="URL base">
         <Input
-          className="h-9 min-w-0 rounded-xl px-3 text-sm"
+          className={compactDownloadClientFieldClassName}
           disabled={isBusy}
           id={`${itemKey}-url-base`}
           onChange={(event) => updateForm({ urlBase: event.currentTarget.value })}
@@ -859,7 +860,7 @@ function DownloadClientFormFields({
       </SettingsRow>
       <SettingsRow controlId={`${itemKey}-auth-mode`} density="compact" label="Auth mode">
         <select
-          className={cn(selectClassName, "min-w-0")}
+          className={selectClassName}
           disabled={isBusy}
           id={`${itemKey}-auth-mode`}
           onChange={(event) =>
@@ -908,7 +909,7 @@ function DownloadClientCredentialFields({
       <>
         <SettingsRow controlId={`${itemKey}-username`} density="compact" label="Username">
           <Input
-            className="h-9 min-w-0 rounded-xl px-3 text-sm"
+            className={compactDownloadClientFieldClassName}
             disabled={isBusy}
             id={`${itemKey}-username`}
             onChange={(event) => updateForm({ username: event.currentTarget.value })}
@@ -959,7 +960,7 @@ function ApiKeyField({
     >
       <Input
         autoComplete="off"
-        className="h-9 min-w-0 rounded-xl px-3 text-sm"
+        className={compactDownloadClientFieldClassName}
         disabled={isBusy}
         id={`${itemKey}-api-key`}
         onChange={(event) => updateForm({ apiKey: event.currentTarget.value })}
@@ -993,7 +994,7 @@ function PasswordField({
     >
       <Input
         autoComplete="off"
-        className="h-9 min-w-0 rounded-xl px-3 text-sm"
+        className={compactDownloadClientFieldClassName}
         disabled={isBusy}
         id={`${itemKey}-password`}
         onChange={(event) => updateForm({ password: event.currentTarget.value })}

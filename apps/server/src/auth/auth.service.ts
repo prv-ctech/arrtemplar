@@ -73,6 +73,7 @@ import { createSessionExpiresAt, generateSessionToken, hashSessionToken } from "
 
 export type AuthRequestContext = {
   ipAddress: string | null;
+  path: string;
   userAgent: string | null;
 };
 

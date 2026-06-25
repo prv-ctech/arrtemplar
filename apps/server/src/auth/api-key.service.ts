@@ -1,26 +1,25 @@
+import { Buffer } from "node:buffer";
 import {
-  API_KEY_PREFIX,
+  API_KEY_HEADER_NAME,
+  API_KEY_QUERY_PARAMETER_NAME,
+  APP_LOG_CATEGORY,
   type ApiErrorResponse,
-  type ApiKeyMeResponse,
   type ApiKeyMutationResponse,
   type ApiKeyReveal,
   type ApiKeyStatus,
   type ApiKeySummary,
   type CreateApiKeyRequest,
   hasPermissionGrant,
-  isApiKeyEligiblePermission,
-  isUserPermission,
+  isApiKeySecret,
   normalizePermissionList,
   type PublicUser,
-  type UpdateApiKeyRequest,
   USER_PERMISSION_VALUES,
-  type UserPermission,
 } from "@arrtemplar/shared";
-import { eq, inArray } from "drizzle-orm";
+import { getLogger } from "@logtape/logtape";
+import { eq, isNull } from "drizzle-orm";
 import type { DatabaseClient } from "../db/client";
 import {
   type ApiKey,
-  apiKeyPermissionGrants,
   apiKeys,
   auditLogs,
   type User,
@@ -29,11 +28,10 @@ import {
 } from "../db/schema";
 import type { AuthRequestContext } from "./auth.service";
 import { LoginRateLimiter } from "./rate-limit";
-import { generateSessionToken, hashSessionToken } from "./session-token";
+import { hashSessionToken } from "./session-token";
 
 type DatabaseTransaction = Parameters<Parameters<DatabaseClient["db"]["transaction"]>[0]>[0];
 type DatabaseReader = DatabaseClient["db"] | DatabaseTransaction;
-type ApiKeyWithPermissions = { apiKey: ApiKey; permissions: UserPermission[] };
 
 type ApiKeyFailure = {
   ok: false;
@@ -70,15 +68,16 @@ type ApiKeyMutationResult =
 export type ApiKeyPrincipal = {
   kind: "apiKey";
   apiKey: ApiKeySummary;
-  permissions: UserPermission[];
 };
 
-export type ApiKeyPrincipalResult =
+export type ResolveRequestApiKeyResult =
   | {
       ok: true;
-      principal: ApiKeyPrincipal;
+      principal: ApiKeyPrincipal | null;
     }
   | ApiKeyFailure;
+
+const logger = getLogger([APP_LOG_CATEGORY, "auth", "api-key"]);
 
 const apiKeyUnauthenticatedError: ApiErrorResponse = {
   error: {
@@ -128,16 +127,12 @@ export class ApiKeyService {
       return actorResult;
     }
 
-    const rows = this.database.db.select().from(apiKeys).all();
-    const grants = readPermissionGrantsByApiKeyId(
-      this.database.db,
-      rows.map((row) => row.id),
-    );
+    const rows = this.database.db.select().from(apiKeys).where(isNull(apiKeys.deletedAt)).all();
 
     return {
       ok: true,
       apiKeys: rows
-        .map((row) => this.toApiKeySummary(row, grants.get(row.id) ?? []))
+        .map((row) => this.toApiKeySummary(row))
         .sort((left, right) => right.createdAt.localeCompare(left.createdAt)),
     };
   }
@@ -151,13 +146,13 @@ export class ApiKeyService {
 
     const apiKey = this.readApiKey(apiKeyId);
 
-    if (!apiKey) {
+    if (!apiKey || apiKey.deletedAt) {
       return { ok: false, status: 404, body: apiKeyNotFoundError };
     }
 
     return {
       ok: true,
-      apiKey: this.toApiKeySummary(apiKey, readApiKeyPermissions(this.database.db, apiKey.id)),
+      apiKey: this.toApiKeySummary(apiKey),
     };
   }
 
@@ -180,118 +175,49 @@ export class ApiKeyService {
 
     const secret = generateApiKeySecret();
     const now = new Date().toISOString();
-    const created = this.database.db.transaction((tx) => {
-      const apiKey = createApiKeyRow({
-        actorUserId: actorResult.actor.id,
-        input: normalizedInput,
-        now,
-        secret,
-      });
 
-      tx.insert(apiKeys).values(apiKey).run();
-      insertApiKeyPermissionGrants(tx, {
-        apiKeyId: apiKey.id,
-        grantedByUserId: actorResult.actor.id,
-        now,
-        permissions: normalizedInput.permissions,
-      });
-      writeApiKeyAuditLog(tx, {
-        action: "api_keys.created",
-        actorUserId: actorResult.actor.id,
-        context,
-        createdAt: now,
-        metadata: {
-          permissionCount: normalizedInput.permissions.length,
-          prefix: apiKey.prefix,
-        },
-        targetId: apiKey.id,
-      });
-
-      return apiKey;
-    });
-
-    return {
-      ok: true,
-      body: {
-        apiKey: this.toApiKeySummary(created, normalizedInput.permissions),
-        secret,
-      },
-    };
-  }
-
-  updateApiKey(
-    apiKeyId: string,
-    input: UpdateApiKeyRequest,
-    actor: PublicUser,
-    context: AuthRequestContext,
-  ): ApiKeyMutationResult {
-    const actorResult = this.readManagementActor(actor);
-
-    if (!actorResult.ok) {
-      return actorResult;
-    }
-    const normalizedInput = normalizeApiKeyInput(input, { requirePermissions: false });
-
-    if (!normalizedInput) {
-      return { ok: false, status: 422, body: invalidApiKeyInputError };
-    }
-
-    const result = this.mutateExistingApiKey(apiKeyId, (tx, _existing, now) => {
-      tx.update(apiKeys)
-        .set({
-          ...(normalizedInput.name ? { name: normalizedInput.name } : {}),
-          ...(normalizedInput.hasDescription ? { description: normalizedInput.description } : {}),
-          ...(normalizedInput.hasExpiresAt ? { expiresAt: normalizedInput.expiresAt } : {}),
-          ...(normalizedInput.hasIpAllowlist
-            ? { ipAllowlistJson: JSON.stringify(normalizedInput.ipAllowlist) }
-            : {}),
-          updatedAt: now,
-        })
-        .where(eq(apiKeys.id, apiKeyId))
-        .run();
-
-      if (normalizedInput.permissions) {
-        tx.delete(apiKeyPermissionGrants)
-          .where(eq(apiKeyPermissionGrants.apiKeyId, apiKeyId))
-          .run();
-        insertApiKeyPermissionGrants(tx, {
-          apiKeyId,
-          grantedByUserId: actorResult.actor.id,
+    try {
+      const created = this.database.db.transaction((tx) => {
+        const apiKey = createApiKeyRow({
+          actorUserId: actorResult.actor.id,
+          input: normalizedInput,
           now,
-          permissions: normalizedInput.permissions,
+          secret,
         });
-      }
 
-      const updated = readApiKeyWithPermissions(tx, apiKeyId);
+        tx.insert(apiKeys).values(apiKey).run();
+        writeApiKeyAuditLog(tx, {
+          action: "api_keys.created",
+          actorUserId: actorResult.actor.id,
+          context,
+          createdAt: now,
+          metadata: buildAuditMetadata(apiKey, context),
+          targetId: apiKey.id,
+        });
 
-      if (!updated) {
-        return null;
-      }
-
-      writeApiKeyAuditLog(tx, {
-        action: "api_keys.updated",
-        actorUserId: actorResult.actor.id,
-        context,
-        createdAt: now,
-        metadata: {
-          permissionCount: updated.permissions.length,
-          prefix: updated.apiKey.prefix,
-        },
-        targetId: updated.apiKey.id,
+        return apiKey;
       });
 
-      return updated;
-    });
+      logger.info("API key {apiKeyId} created.", {
+        actorUserId: actorResult.actor.id,
+        apiKeyId: created.id,
+        fingerprint: created.fingerprint,
+        keyPrefix: created.keyPrefix,
+      });
 
-    return this.toApiKeyMutationResult(result);
-  }
-
-  revokeApiKey(
-    apiKeyId: string,
-    actor: PublicUser,
-    context: AuthRequestContext,
-  ): ApiKeyMutationResult {
-    return this.markApiKeyRevoked(apiKeyId, actor, context, "api_keys.revoked");
+      return {
+        ok: true,
+        body: {
+          apiKey: this.toApiKeySummary(created),
+          secret,
+        },
+      };
+    } catch (error) {
+      logger.error(error instanceof Error ? error : new Error("API key creation failed."), {
+        actorUserId: actorResult.actor.id,
+      });
+      throw error;
+    }
   }
 
   deleteApiKey(
@@ -305,209 +231,61 @@ export class ApiKeyService {
       return actorResult;
     }
 
-    const result = this.database.db.transaction((tx) => {
-      const existing = readApiKeyWithPermissions(tx, apiKeyId);
+    try {
+      const result = this.database.db.transaction((tx) => {
+        const existing = readApiKeyById(tx, apiKeyId);
 
-      if (!existing) {
-        return null;
-      }
+        if (!existing || existing.deletedAt) {
+          return null;
+        }
 
-      const now = new Date().toISOString();
-      const deletedSummary = this.toApiKeySummary(
-        { ...existing.apiKey, revokedAt: existing.apiKey.revokedAt ?? now, updatedAt: now },
-        existing.permissions,
-      );
+        const now = new Date().toISOString();
+        const deletedKey: ApiKey = { ...existing, deletedAt: now, updatedAt: now };
 
-      tx.delete(apiKeyPermissionGrants).where(eq(apiKeyPermissionGrants.apiKeyId, apiKeyId)).run();
-      tx.delete(apiKeys).where(eq(apiKeys.id, apiKeyId)).run();
-      writeApiKeyAuditLog(tx, {
-        action: "api_keys.deleted",
-        actorUserId: actorResult.actor.id,
-        context,
-        createdAt: now,
-        metadata: {
-          permissionCount: existing.permissions.length,
-          prefix: existing.apiKey.prefix,
-        },
-        targetId: existing.apiKey.id,
+        tx.update(apiKeys)
+          .set({ deletedAt: now, updatedAt: now })
+          .where(eq(apiKeys.id, apiKeyId))
+          .run();
+        writeApiKeyAuditLog(tx, {
+          action: "api_keys.deleted",
+          actorUserId: actorResult.actor.id,
+          context,
+          createdAt: now,
+          metadata: buildAuditMetadata(deletedKey, context),
+          targetId: existing.id,
+        });
+
+        return this.toApiKeySummary(deletedKey);
       });
 
-      return deletedSummary;
-    });
+      if (!result) {
+        return { ok: false, status: 404, body: apiKeyNotFoundError };
+      }
 
-    if (!result) {
-      return { ok: false, status: 404, body: apiKeyNotFoundError };
+      logger.info("API key {apiKeyId} deleted.", {
+        actorUserId: actorResult.actor.id,
+        apiKeyId: result.id,
+        fingerprint: result.fingerprint,
+        keyPrefix: result.keyPrefix,
+      });
+
+      return {
+        ok: true,
+        body: { status: "ok", apiKey: result },
+      };
+    } catch (error) {
+      logger.error(error instanceof Error ? error : new Error("API key deletion failed."), {
+        actorUserId: actorResult.actor.id,
+        apiKeyId,
+      });
+      throw error;
     }
-
-    return {
-      ok: true,
-      body: { status: "ok", apiKey: result },
-    };
-  }
-
-  refreshApiKey(
-    apiKeyId: string,
-    actor: PublicUser,
-    context: AuthRequestContext,
-  ): ApiKeyRevealResult {
-    return this.replaceApiKey(apiKeyId, actor, context, "api_keys.refreshed");
   }
 
   rotateApiKey(
     apiKeyId: string,
     actor: PublicUser,
     context: AuthRequestContext,
-  ): ApiKeyRevealResult {
-    return this.replaceApiKey(apiKeyId, actor, context, "api_keys.rotated");
-  }
-
-  resolveBearerApiKey(secret: string | null, context: AuthRequestContext): ApiKeyPrincipalResult {
-    if (!secret) {
-      return { ok: false, status: 401, body: apiKeyUnauthenticatedError };
-    }
-
-    const rateLimitKey = createInvalidAttemptKey(context);
-
-    if (this.invalidAttemptLimiter.isBlocked(rateLimitKey)) {
-      this.writeDeniedApiKeyAuditLog({
-        action: "api_keys.auth.rate_limited",
-        context,
-        prefix: readSecretDisplayPrefix(secret),
-      });
-
-      return { ok: false, status: 429, body: apiKeyRateLimitedError };
-    }
-
-    const secretHash = hashSessionToken(secret);
-    const apiKey = this.database.db
-      .select()
-      .from(apiKeys)
-      .where(eq(apiKeys.secretHash, secretHash))
-      .get();
-
-    if (!apiKey) {
-      this.invalidAttemptLimiter.recordFailure(rateLimitKey);
-      this.writeDeniedApiKeyAuditLog({
-        action: "api_keys.auth.invalid",
-        context,
-        prefix: readSecretDisplayPrefix(secret),
-      });
-
-      return { ok: false, status: 401, body: apiKeyUnauthenticatedError };
-    }
-
-    const permissions = readApiKeyPermissions(this.database.db, apiKey.id);
-    const status = getApiKeyStatus(apiKey);
-
-    if (status !== "active") {
-      this.invalidAttemptLimiter.recordFailure(rateLimitKey);
-      this.writeDeniedApiKeyAuditLog({
-        action: `api_keys.auth.${status}`,
-        context,
-        prefix: apiKey.prefix,
-        targetId: apiKey.id,
-      });
-
-      return { ok: false, status: 401, body: apiKeyUnauthenticatedError };
-    }
-
-    if (!isIpAllowed(context.ipAddress, readIpAllowlist(apiKey.ipAllowlistJson))) {
-      this.invalidAttemptLimiter.recordFailure(rateLimitKey);
-      this.writeDeniedApiKeyAuditLog({
-        action: "api_keys.auth.ip_denied",
-        context,
-        prefix: apiKey.prefix,
-        targetId: apiKey.id,
-      });
-
-      return { ok: false, status: 401, body: apiKeyUnauthenticatedError };
-    }
-
-    const now = new Date().toISOString();
-    this.database.db
-      .update(apiKeys)
-      .set({
-        lastUsedAt: now,
-        lastUsedIpAddress: context.ipAddress,
-        lastUsedUserAgent: context.userAgent,
-        updatedAt: apiKey.updatedAt,
-      })
-      .where(eq(apiKeys.id, apiKey.id))
-      .run();
-    this.invalidAttemptLimiter.clear(rateLimitKey);
-
-    const summary = this.toApiKeySummary(
-      {
-        ...apiKey,
-        lastUsedAt: now,
-        lastUsedIpAddress: context.ipAddress,
-        lastUsedUserAgent: context.userAgent,
-      },
-      permissions,
-    );
-
-    return {
-      ok: true,
-      principal: { kind: "apiKey", apiKey: summary, permissions },
-    };
-  }
-
-  toMeResponse(principal: ApiKeyPrincipal): ApiKeyMeResponse {
-    return {
-      apiKey: {
-        id: principal.apiKey.id,
-        name: principal.apiKey.name,
-        prefix: principal.apiKey.prefix,
-        maskedKey: principal.apiKey.maskedKey,
-        status: principal.apiKey.status,
-        permissions: principal.permissions,
-        expiresAt: principal.apiKey.expiresAt,
-        lastUsedAt: principal.apiKey.lastUsedAt,
-      },
-    };
-  }
-
-  private markApiKeyRevoked(
-    apiKeyId: string,
-    actor: PublicUser,
-    context: AuthRequestContext,
-    action: string,
-  ): ApiKeyMutationResult {
-    const actorResult = this.readManagementActor(actor);
-
-    if (!actorResult.ok) {
-      return actorResult;
-    }
-
-    const result = this.mutateExistingApiKey(apiKeyId, (tx, existing, now) => {
-      revokeApiKeyRow(tx, existing, now);
-
-      const updated = readApiKeyWithPermissions(tx, apiKeyId);
-
-      if (!updated) {
-        return null;
-      }
-
-      writeApiKeyAuditLog(tx, {
-        action,
-        actorUserId: actorResult.actor.id,
-        context,
-        createdAt: now,
-        metadata: { prefix: updated.apiKey.prefix, permissionCount: updated.permissions.length },
-        targetId: updated.apiKey.id,
-      });
-
-      return updated;
-    });
-
-    return this.toApiKeyMutationResult(result);
-  }
-
-  private replaceApiKey(
-    apiKeyId: string,
-    actor: PublicUser,
-    context: AuthRequestContext,
-    action: string,
   ): ApiKeyRevealResult {
     const actorResult = this.readManagementActor(actor);
 
@@ -516,85 +294,216 @@ export class ApiKeyService {
     }
 
     const secret = generateApiKeySecret();
-    const result = this.mutateExistingApiKey(apiKeyId, (tx, existing, now) => {
-      const permissions = readApiKeyPermissions(tx, apiKeyId);
+    const secretFields = buildApiKeySecretFields(secret);
 
-      if (permissions.length === 0) {
-        return null;
+    try {
+      const result = this.database.db.transaction((tx) => {
+        const existing = readApiKeyById(tx, apiKeyId);
+
+        if (!existing || existing.deletedAt) {
+          return null;
+        }
+
+        const now = new Date().toISOString();
+        const rotatedKey: ApiKey = {
+          ...existing,
+          ...secretFields,
+          rotatedAt: now,
+          updatedAt: now,
+        };
+
+        tx.update(apiKeys)
+          .set({
+            secretHash: rotatedKey.secretHash,
+            keyPrefix: rotatedKey.keyPrefix,
+            fingerprint: rotatedKey.fingerprint,
+            maskedKey: rotatedKey.maskedKey,
+            rotatedAt: now,
+            updatedAt: now,
+          })
+          .where(eq(apiKeys.id, apiKeyId))
+          .run();
+        writeApiKeyAuditLog(tx, {
+          action: "api_keys.rotated",
+          actorUserId: actorResult.actor.id,
+          context,
+          createdAt: now,
+          metadata: buildAuditMetadata(rotatedKey, context),
+          targetId: apiKeyId,
+        });
+
+        return rotatedKey;
+      });
+
+      if (!result) {
+        return { ok: false, status: 404, body: apiKeyNotFoundError };
       }
 
-      revokeApiKeyRow(tx, existing, now);
-
-      const nextApiKey = createApiKeyRow({
+      logger.info("API key {apiKeyId} rotated.", {
         actorUserId: actorResult.actor.id,
-        input: {
-          name: existing.name,
-          description: existing.description,
-          hasDescription: true,
-          expiresAt: existing.expiresAt,
-          hasExpiresAt: true,
-          ipAllowlist: readIpAllowlist(existing.ipAllowlistJson),
-          hasIpAllowlist: true,
-          permissions,
+        apiKeyId: result.id,
+        fingerprint: result.fingerprint,
+        keyPrefix: result.keyPrefix,
+      });
+
+      return {
+        ok: true,
+        body: {
+          apiKey: this.toApiKeySummary(result),
+          secret,
         },
-        now,
-        secret,
-      });
-
-      tx.insert(apiKeys).values(nextApiKey).run();
-      insertApiKeyPermissionGrants(tx, {
-        apiKeyId: nextApiKey.id,
-        grantedByUserId: actorResult.actor.id,
-        now,
-        permissions,
-      });
-      writeApiKeyAuditLog(tx, {
-        action,
+      };
+    } catch (error) {
+      logger.error(error instanceof Error ? error : new Error("API key rotation failed."), {
         actorUserId: actorResult.actor.id,
+        apiKeyId,
+      });
+      throw error;
+    }
+  }
+
+  resolveRequestApiKey(request: Request, context: AuthRequestContext): ResolveRequestApiKeyResult {
+    const requestUrl = new URL(request.url);
+
+    if (requestUrl.searchParams.has(API_KEY_QUERY_PARAMETER_NAME)) {
+      const rejectedQuerySecret = requestUrl.searchParams.get(API_KEY_QUERY_PARAMETER_NAME) ?? "";
+      const keyPrefix = readSecretDisplayPrefix(rejectedQuerySecret);
+
+      this.invalidAttemptLimiter.recordFailure(createInvalidAttemptKey(context));
+      this.writeDeniedApiKeyAuditLog({
+        action: "api_keys.auth.query_transport_rejected",
         context,
-        createdAt: now,
-        metadata: {
-          oldApiKeyId: existing.id,
-          oldPrefix: existing.prefix,
-          permissionCount: permissions.length,
-          prefix: nextApiKey.prefix,
-        },
-        targetId: nextApiKey.id,
+        keyPrefix,
+      });
+      logger.warn("Rejected API key query transport.", {
+        ipAddress: context.ipAddress,
+        keyPrefix,
+        path: context.path,
+        userAgent: context.userAgent,
       });
 
-      return { apiKey: nextApiKey, permissions };
+      return { ok: false, status: 401, body: apiKeyUnauthenticatedError };
+    }
+
+    const secret = readRequestApiKeySecret(request.headers);
+
+    if (!secret) {
+      return { ok: true, principal: null };
+    }
+
+    const rateLimitKey = createInvalidAttemptKey(context);
+
+    if (this.invalidAttemptLimiter.isBlocked(rateLimitKey)) {
+      const keyPrefix = readSecretDisplayPrefix(secret);
+
+      this.writeDeniedApiKeyAuditLog({
+        action: "api_keys.auth.rate_limited",
+        context,
+        keyPrefix,
+      });
+      logger.warn("API key authentication rate limited.", {
+        ipAddress: context.ipAddress,
+        keyPrefix,
+        path: context.path,
+        userAgent: context.userAgent,
+      });
+
+      return { ok: false, status: 429, body: apiKeyRateLimitedError };
+    }
+
+    if (!isApiKeySecret(secret)) {
+      return this.rejectInvalidApiKeyAttempt(secret, context, "api_keys.auth.invalid");
+    }
+
+    const apiKey = this.database.db
+      .select()
+      .from(apiKeys)
+      .where(eq(apiKeys.secretHash, hashSessionToken(secret)))
+      .get();
+
+    if (!apiKey) {
+      return this.rejectInvalidApiKeyAttempt(secret, context, "api_keys.auth.invalid");
+    }
+
+    if (apiKey.deletedAt) {
+      this.invalidAttemptLimiter.recordFailure(rateLimitKey);
+      this.writeDeniedApiKeyAuditLog({
+        action: "api_keys.auth.deleted",
+        context,
+        keyPrefix: apiKey.keyPrefix,
+        targetId: apiKey.id,
+      });
+      logger.warn("Deleted API key used for authentication.", {
+        apiKeyId: apiKey.id,
+        ipAddress: context.ipAddress,
+        keyPrefix: apiKey.keyPrefix,
+        path: context.path,
+        userAgent: context.userAgent,
+      });
+
+      return { ok: false, status: 401, body: apiKeyUnauthenticatedError };
+    }
+
+    const now = new Date().toISOString();
+    const shouldLogFirstSuccess =
+      !apiKey.lastUsedAt || Boolean(apiKey.rotatedAt && apiKey.rotatedAt > apiKey.lastUsedAt);
+
+    this.database.db
+      .update(apiKeys)
+      .set({
+        lastUsedAt: now,
+        lastUsedIpAddress: context.ipAddress,
+        lastUsedUserAgent: context.userAgent,
+      })
+      .where(eq(apiKeys.id, apiKey.id))
+      .run();
+    this.invalidAttemptLimiter.clear(rateLimitKey);
+
+    const summary = this.toApiKeySummary({
+      ...apiKey,
+      lastUsedAt: now,
+      lastUsedIpAddress: context.ipAddress,
+      lastUsedUserAgent: context.userAgent,
     });
 
-    if (!result) {
-      return { ok: false, status: 404, body: apiKeyNotFoundError };
+    if (shouldLogFirstSuccess) {
+      logger.info("API key {apiKeyId} authenticated.", {
+        apiKeyId: apiKey.id,
+        keyPrefix: apiKey.keyPrefix,
+        path: context.path,
+      });
     }
 
     return {
       ok: true,
-      body: { apiKey: this.toApiKeySummary(result.apiKey, result.permissions), secret },
+      principal: {
+        kind: "apiKey",
+        apiKey: summary,
+      },
     };
   }
 
-  private mutateExistingApiKey<TResult>(
-    apiKeyId: string,
-    callback: (tx: DatabaseTransaction, existing: ApiKey, now: string) => TResult | null,
-  ): TResult | null {
-    return this.database.db.transaction((tx) => {
-      const existing = readApiKeyById(tx, apiKeyId);
+  private rejectInvalidApiKeyAttempt(
+    secret: string,
+    context: AuthRequestContext,
+    action: string,
+  ): ResolveRequestApiKeyResult {
+    const keyPrefix = readSecretDisplayPrefix(secret);
 
-      return existing ? callback(tx, existing, new Date().toISOString()) : null;
+    this.invalidAttemptLimiter.recordFailure(createInvalidAttemptKey(context));
+    this.writeDeniedApiKeyAuditLog({
+      action,
+      context,
+      keyPrefix,
     });
-  }
+    logger.warn("Invalid API key attempt.", {
+      ipAddress: context.ipAddress,
+      keyPrefix,
+      path: context.path,
+      userAgent: context.userAgent,
+    });
 
-  private toApiKeyMutationResult(result: ApiKeyWithPermissions | null): ApiKeyMutationResult {
-    if (!result) {
-      return { ok: false, status: 404, body: apiKeyNotFoundError };
-    }
-
-    return {
-      ok: true,
-      body: { status: "ok", apiKey: this.toApiKeySummary(result.apiKey, result.permissions) },
-    };
+    return { ok: false, status: 401, body: apiKeyUnauthenticatedError };
   }
 
   private readManagementActor(actor: PublicUser):
@@ -626,7 +535,7 @@ export class ApiKeyService {
     return this.database.db.select().from(apiKeys).where(eq(apiKeys.id, apiKeyId)).get();
   }
 
-  private toApiKeySummary(apiKey: ApiKey, permissions: UserPermission[]): ApiKeySummary {
+  private toApiKeySummary(apiKey: ApiKey): ApiKeySummary {
     const createdBy = apiKey.createdByUserId
       ? this.database.db
           .select({ id: users.publicId, username: users.username })
@@ -639,27 +548,25 @@ export class ApiKeyService {
       id: apiKey.id,
       name: apiKey.name,
       description: apiKey.description,
-      prefix: apiKey.prefix,
+      keyPrefix: apiKey.keyPrefix,
+      fingerprint: apiKey.fingerprint,
       maskedKey: apiKey.maskedKey,
       status: getApiKeyStatus(apiKey),
-      permissions,
-      permissionCount: permissions.length,
-      expiresAt: apiKey.expiresAt,
-      ipAllowlist: readIpAllowlist(apiKey.ipAllowlistJson),
       lastUsedAt: apiKey.lastUsedAt,
       lastUsedIpAddress: apiKey.lastUsedIpAddress,
       lastUsedUserAgent: apiKey.lastUsedUserAgent,
       createdBy: createdBy ?? null,
       createdAt: apiKey.createdAt,
       updatedAt: apiKey.updatedAt,
-      revokedAt: apiKey.revokedAt,
+      rotatedAt: apiKey.rotatedAt,
+      deletedAt: apiKey.deletedAt,
     };
   }
 
   private writeDeniedApiKeyAuditLog(input: {
     action: string;
     context: AuthRequestContext;
-    prefix: string;
+    keyPrefix: string;
     targetId?: string;
   }): void {
     this.database.db
@@ -670,7 +577,7 @@ export class ApiKeyService {
         action: input.action,
         targetType: "api_key",
         targetId: input.targetId ?? null,
-        metadataJson: JSON.stringify({ prefix: input.prefix }),
+        metadataJson: JSON.stringify({ keyPrefix: input.keyPrefix, path: input.context.path }),
         ipAddress: input.context.ipAddress,
         createdAt: new Date().toISOString(),
       })
@@ -678,103 +585,27 @@ export class ApiKeyService {
   }
 }
 
-type NormalizedApiKeyInput = {
-  name?: string;
+type NormalizedCreateApiKeyInput = {
   description: string | null;
-  hasDescription: boolean;
-  expiresAt: string | null;
-  hasExpiresAt: boolean;
-  ipAllowlist: string[];
-  hasIpAllowlist: boolean;
-  permissions?: UserPermission[];
-};
-
-type NormalizedCreateApiKeyInput = NormalizedApiKeyInput & {
   name: string;
-  permissions: UserPermission[];
 };
 
 function normalizeCreateApiKeyInput(
   input: CreateApiKeyRequest,
 ): NormalizedCreateApiKeyInput | null {
-  const normalizedInput = normalizeApiKeyInput(input, { requirePermissions: true });
-
-  if (!normalizedInput?.name || !normalizedInput.permissions) {
-    return null;
-  }
-
-  return {
-    ...normalizedInput,
-    name: normalizedInput.name,
-    permissions: normalizedInput.permissions,
-  };
-}
-
-function normalizeApiKeyInput(
-  input: CreateApiKeyRequest | UpdateApiKeyRequest,
-  options: { requirePermissions: boolean },
-): NormalizedApiKeyInput | null {
-  const fields = normalizeApiKeyMetadataInput(input);
-  const permissions = normalizeApiKeyPermissionInput(input.permissions);
-
-  if (!fields || !isApiKeyPermissionInputAllowed(input, permissions, options.requirePermissions)) {
-    return null;
-  }
-
-  return {
-    ...fields,
-    ...(permissions ? { permissions } : {}),
-  };
-}
-
-function normalizeApiKeyMetadataInput(
-  input: CreateApiKeyRequest | UpdateApiKeyRequest,
-): Omit<NormalizedApiKeyInput, "permissions"> | null {
-  const name = typeof input.name === "string" ? input.name.trim() : undefined;
+  const name = typeof input.name === "string" ? input.name.trim() : "";
   const description = normalizeNullableText(input.description, 500);
-  const expiresAt = normalizeExpiresAt(input.expiresAt);
-  const ipAllowlist = normalizeIpAllowlist(input.ipAllowlist);
 
-  if (input.name !== undefined && (!name || name.length > 80)) {
+  if (!name || name.length > 80 || description === undefined) {
     return null;
   }
 
-  if (expiresAt === undefined || ipAllowlist === null) {
-    return null;
-  }
-
-  return {
-    ...(name ? { name } : {}),
-    description: description ?? null,
-    hasDescription: "description" in input,
-    expiresAt,
-    hasExpiresAt: "expiresAt" in input,
-    ipAllowlist: ipAllowlist ?? [],
-    hasIpAllowlist: "ipAllowlist" in input,
-  };
-}
-
-function normalizeApiKeyPermissionInput(
-  permissions: CreateApiKeyRequest["permissions"] | undefined,
-): UserPermission[] | undefined {
-  return permissions ? normalizeApiKeyPermissions(permissions.filter(isUserPermission)) : undefined;
-}
-
-function isApiKeyPermissionInputAllowed(
-  input: CreateApiKeyRequest | UpdateApiKeyRequest,
-  permissions: UserPermission[] | undefined,
-  requirePermissions: boolean,
-): boolean {
-  if (requirePermissions && !permissions?.length) {
-    return false;
-  }
-
-  return !(input.permissions && !permissions?.length);
+  return { description, name };
 }
 
 function normalizeNullableText(value: unknown, maxLength: number): string | null | undefined {
   if (value === undefined) {
-    return undefined;
+    return null;
   }
 
   if (value === null) {
@@ -782,7 +613,7 @@ function normalizeNullableText(value: unknown, maxLength: number): string | null
   }
 
   if (typeof value !== "string") {
-    return null;
+    return undefined;
   }
 
   const trimmed = value.trim();
@@ -790,295 +621,85 @@ function normalizeNullableText(value: unknown, maxLength: number): string | null
   return trimmed ? trimmed.slice(0, maxLength) : null;
 }
 
-function normalizeExpiresAt(value: unknown): string | null | undefined {
-  if (value === undefined || value === null || value === "") {
-    return null;
-  }
-
-  if (typeof value !== "string") {
-    return undefined;
-  }
-
-  const date = new Date(value);
-
-  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
-}
-
-function normalizeIpAllowlist(value: unknown): string[] | null | undefined {
-  if (value === undefined || value === null) {
-    return [];
-  }
-
-  if (!Array.isArray(value)) {
-    return null;
-  }
-
-  const entries = [...new Set(value.map((entry) => String(entry).trim()).filter(Boolean))];
-
-  return entries.every(isValidIpAllowlistEntry) ? entries : null;
-}
-
-function normalizeApiKeyPermissions(permissions: readonly UserPermission[]): UserPermission[] {
-  if (!permissions.every(isApiKeyEligiblePermission)) {
-    return [];
-  }
-
-  return normalizePermissionList(permissions);
-}
-
 function createApiKeyRow(input: {
   actorUserId: string;
-  input: NormalizedApiKeyInput & { name: string; permissions: UserPermission[] };
+  input: NormalizedCreateApiKeyInput;
   now: string;
   secret: string;
 }): ApiKey {
-  const prefix = readSecretDisplayPrefix(input.secret);
-
   return {
     id: Bun.randomUUIDv7(),
     name: input.input.name,
     description: input.input.description,
-    secretHash: hashSessionToken(input.secret),
-    prefix,
-    maskedKey: `${prefix}••••${input.secret.slice(-4)}`,
+    ...buildApiKeySecretFields(input.secret),
     createdByUserId: input.actorUserId,
-    expiresAt: input.input.expiresAt,
-    ipAllowlistJson: JSON.stringify(input.input.ipAllowlist),
     lastUsedAt: null,
     lastUsedIpAddress: null,
     lastUsedUserAgent: null,
-    revokedAt: null,
+    rotatedAt: null,
+    deletedAt: null,
     createdAt: input.now,
     updatedAt: input.now,
   };
 }
 
-function insertApiKeyPermissionGrants(
-  tx: DatabaseTransaction,
-  input: {
-    apiKeyId: string;
-    grantedByUserId: string;
-    now: string;
-    permissions: readonly UserPermission[];
-  },
-): void {
-  if (input.permissions.length === 0) {
-    return;
-  }
+function buildApiKeySecretFields(
+  secret: string,
+): Pick<ApiKey, "secretHash" | "keyPrefix" | "fingerprint" | "maskedKey"> {
+  const secretHash = hashSessionToken(secret);
+  const keyPrefix = readSecretDisplayPrefix(secret);
 
-  tx.insert(apiKeyPermissionGrants)
-    .values(
-      input.permissions.map((permission) => ({
-        id: Bun.randomUUIDv7(),
-        apiKeyId: input.apiKeyId,
-        permission,
-        grantedByUserId: input.grantedByUserId,
-        createdAt: input.now,
-        updatedAt: input.now,
-      })),
-    )
-    .run();
+  return {
+    secretHash,
+    keyPrefix,
+    fingerprint: secretHash.slice(0, 12),
+    maskedKey: `${keyPrefix}••••${secret.slice(-4)}`,
+  };
 }
 
 function generateApiKeySecret(): string {
-  return `${API_KEY_PREFIX}${generateSessionToken()}`;
+  return Buffer.from(crypto.getRandomValues(new Uint8Array(16))).toString("hex");
 }
 
 function readSecretDisplayPrefix(secret: string): string {
-  return secret.startsWith(API_KEY_PREFIX) ? secret.slice(0, API_KEY_PREFIX.length + 8) : "unknown";
+  return secret.slice(0, 8);
 }
 
 function getApiKeyStatus(apiKey: ApiKey): ApiKeyStatus {
-  if (apiKey.revokedAt) {
-    return "revoked";
-  }
-
-  if (apiKey.expiresAt && new Date(apiKey.expiresAt).getTime() <= Date.now()) {
-    return "expired";
-  }
-
-  return "active";
+  return apiKey.deletedAt ? "deleted" : "active";
 }
 
-function readIpAllowlist(value: string | null): string[] {
-  if (!value) {
-    return [];
+function readRequestApiKeySecret(headers: Headers): string | null {
+  const headerSecret = headers.get(API_KEY_HEADER_NAME);
+
+  if (headerSecret?.trim()) {
+    return headerSecret.trim();
   }
 
-  try {
-    const parsed: unknown = JSON.parse(value);
+  const authorization = headers.get("authorization");
 
-    return Array.isArray(parsed)
-      ? parsed.filter((entry): entry is string => typeof entry === "string")
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-function isIpAllowed(ipAddress: string | null, allowlist: readonly string[]): boolean {
-  if (allowlist.length === 0) {
-    return true;
-  }
-
-  if (!ipAddress) {
-    return false;
-  }
-
-  return allowlist.some((entry) => ipMatchesAllowlistEntry(ipAddress, entry));
-}
-
-function ipMatchesAllowlistEntry(ipAddress: string, entry: string): boolean {
-  if (!entry.includes("/")) {
-    return ipAddress === entry;
-  }
-
-  const [network, prefixLengthValue] = entry.split("/");
-  const prefixLength = Number(prefixLengthValue);
-
-  if (!network || !Number.isInteger(prefixLength)) {
-    return false;
-  }
-
-  const ipNumber = readIpv4Number(ipAddress);
-  const networkNumber = readIpv4Number(network);
-
-  if (ipNumber === null || networkNumber === null || prefixLength < 0 || prefixLength > 32) {
-    return false;
-  }
-
-  const mask = prefixLength === 0 ? 0 : (0xffffffff << (32 - prefixLength)) >>> 0;
-
-  return (ipNumber & mask) === (networkNumber & mask);
-}
-
-function isValidIpAllowlistEntry(entry: string): boolean {
-  if (!entry.includes("/")) {
-    return readIpv4Number(entry) !== null || isLikelyIpv6Address(entry);
-  }
-
-  const [network, prefixLengthValue] = entry.split("/");
-  const prefixLength = Number(prefixLengthValue);
-
-  return Boolean(
-    network &&
-      Number.isInteger(prefixLength) &&
-      prefixLength >= 0 &&
-      prefixLength <= 32 &&
-      readIpv4Number(network) !== null,
-  );
-}
-
-function readIpv4Number(value: string): number | null {
-  const parts = value.split(".");
-
-  if (parts.length !== 4) {
+  if (!authorization) {
     return null;
   }
 
-  let result = 0;
+  const match = /^Bearer\s+(\S+)$/i.exec(authorization.trim());
 
-  for (const part of parts) {
-    if (!/^\d+$/.test(part)) {
-      return null;
-    }
-
-    const octet = Number(part);
-
-    if (!Number.isInteger(octet) || octet < 0 || octet > 255) {
-      return null;
-    }
-
-    result = (result << 8) + octet;
-  }
-
-  return result >>> 0;
-}
-
-function isLikelyIpv6Address(value: string): boolean {
-  return /^[0-9a-f:]+$/i.test(value) && value.includes(":") && value.length <= 45;
-}
-
-function readPermissionGrantsByApiKeyId(
-  tx: DatabaseReader,
-  apiKeyIds: readonly string[],
-): Map<string, UserPermission[]> {
-  const grantsByApiKeyId = new Map<string, UserPermission[]>();
-
-  if (apiKeyIds.length === 0) {
-    return grantsByApiKeyId;
-  }
-
-  for (const grant of tx
-    .select({
-      apiKeyId: apiKeyPermissionGrants.apiKeyId,
-      permission: apiKeyPermissionGrants.permission,
-    })
-    .from(apiKeyPermissionGrants)
-    .where(inArray(apiKeyPermissionGrants.apiKeyId, [...apiKeyIds]))
-    .all()) {
-    if (!isUserPermission(grant.permission)) {
-      continue;
-    }
-
-    grantsByApiKeyId.set(grant.apiKeyId, [
-      ...(grantsByApiKeyId.get(grant.apiKeyId) ?? []),
-      grant.permission,
-    ]);
-  }
-
-  for (const [apiKeyId, permissions] of grantsByApiKeyId) {
-    grantsByApiKeyId.set(apiKeyId, normalizeApiKeyPermissions(permissions));
-  }
-
-  return grantsByApiKeyId;
-}
-
-function readApiKeyPermissions(tx: DatabaseReader, apiKeyId: string): UserPermission[] {
-  return normalizeApiKeyPermissions(
-    tx
-      .select({ permission: apiKeyPermissionGrants.permission })
-      .from(apiKeyPermissionGrants)
-      .where(eq(apiKeyPermissionGrants.apiKeyId, apiKeyId))
-      .all()
-      .map((grant) => grant.permission)
-      .filter(isUserPermission),
-  );
+  return match?.[1] ?? null;
 }
 
 function readApiKeyById(tx: DatabaseReader, apiKeyId: string): ApiKey | undefined {
   return tx.select().from(apiKeys).where(eq(apiKeys.id, apiKeyId)).get();
 }
 
-function readApiKeyWithPermissions(
-  tx: DatabaseReader,
-  apiKeyId: string,
-): ApiKeyWithPermissions | null {
-  const apiKey = readApiKeyById(tx, apiKeyId);
-
-  if (!apiKey) {
-    return null;
-  }
-
-  return { apiKey, permissions: readApiKeyPermissions(tx, apiKeyId) };
-}
-
-function revokeApiKeyRow(tx: DatabaseTransaction, apiKey: ApiKey, now: string): void {
-  tx.update(apiKeys)
-    .set({ revokedAt: apiKey.revokedAt ?? now, updatedAt: now })
-    .where(eq(apiKeys.id, apiKey.id))
-    .run();
-}
-
-function readEffectivePermissions(tx: DatabaseReader, user: User): UserPermission[] {
-  const explicitPermissions: UserPermission[] = [];
+function readEffectivePermissions(tx: DatabaseReader, user: User) {
+  const explicitPermissions: (typeof USER_PERMISSION_VALUES)[number][] = [];
 
   for (const grant of tx
     .select({ permission: userPermissionGrants.permission })
     .from(userPermissionGrants)
     .where(eq(userPermissionGrants.userId, user.id))
     .all()) {
-    if (isUserPermission(grant.permission)) {
+    if (grant.permission) {
       explicitPermissions.push(grant.permission);
     }
   }
@@ -1094,6 +715,14 @@ function readEffectivePermissions(tx: DatabaseReader, user: User): UserPermissio
 
 function createInvalidAttemptKey(context: AuthRequestContext): string {
   return ["api-key", context.ipAddress ?? "unknown"].join(":");
+}
+
+function buildAuditMetadata(apiKey: ApiKey, context: AuthRequestContext) {
+  return {
+    fingerprint: apiKey.fingerprint,
+    keyPrefix: apiKey.keyPrefix,
+    path: context.path,
+  };
 }
 
 function writeApiKeyAuditLog(

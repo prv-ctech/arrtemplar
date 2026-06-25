@@ -18,6 +18,8 @@ import { enforceCsrfPolicy } from "./security/csrf";
 import { handleSafeError } from "./security/errors";
 import { appendSupplementalCspDirectives, securityHeaderConfig } from "./security/headers";
 
+const requestIdPattern = /^[A-Za-z0-9._:-]{1,128}$/;
+
 const healthResponseSchema = t.Object({
   name: t.Literal(APP_NAME),
   version: t.String(),
@@ -49,6 +51,15 @@ type BackendRootResponse = {
   };
 };
 
+type RequestLogContext = {
+  path: string;
+  request: Request;
+  set: {
+    headers: Record<string, string | undefined>;
+    status?: number | string;
+  };
+};
+
 export type CreateAppOptions = {
   database?: DatabaseClient;
   loginRateLimiter?: LoginRateLimiter;
@@ -75,12 +86,20 @@ export function createApp(options: CreateAppOptions = {}) {
         level: "info",
         logRequest: false,
         scope: "global",
+        context: {
+          requestId: {
+            generate: () => Bun.randomUUIDv7(),
+            normalize: normalizeRequestId,
+          },
+        },
         skip: ({ path }) => path === "/health",
-        format: (context, responseTime) => ({
+        format: (context: RequestLogContext, responseTime: number) => ({
+          event: "http.request",
           method: context.request.method,
           url: context.path,
           path: context.path,
           status: normalizeStatusCode(context.set.status, readResponseValue(context)),
+          durationMs: responseTime,
           responseTime,
           contentLength: context.set.headers["content-length"],
         }),
@@ -201,4 +220,10 @@ function readCustomStatusCode(responseValue: unknown): number | null {
   }
 
   return typeof responseValue.code === "number" ? responseValue.code : null;
+}
+
+function normalizeRequestId(value: string): string | null {
+  const requestId = value.trim();
+
+  return requestIdPattern.test(requestId) ? requestId : null;
 }

@@ -20,6 +20,7 @@ export async function configureServerLogging(runtimeEnv: RuntimeEnv = env): Prom
 
   await ensureParentDirectory(logFilePath);
   await configure({
+    reset: true,
     contextLocalStorage: new AsyncLocalStorage(),
     filters: {
       runtimeLevel: runtimeEnv.logLevel,
@@ -56,7 +57,7 @@ export async function configureServerLogging(runtimeEnv: RuntimeEnv = env): Prom
     },
     loggers: [
       {
-        category: [APP_LOG_CATEGORY, "meta"],
+        category: ["logtape", "meta"],
         filters: ["metaWarnings"],
         sinks: ["meta"],
       },

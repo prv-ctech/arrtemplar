@@ -154,12 +154,10 @@ describe("api key api client", () => {
 
     expect(source).toContain("ApiKeySummary");
     expect(source).toContain("CreateApiKeyRequest");
-    expect(source).toContain("UpdateApiKeyRequest");
     expect(source).toContain("export async function listApiKeys");
     expect(source).toContain('path: "/api/api-keys"');
     expect(source).toContain("export async function createApiKey");
-    expect(source).toContain("export async function updateApiKey");
-    expect(source).toContain("export async function revokeApiKey");
+    expect(source).toContain("export async function rotateApiKey");
     expect(source).toContain("export async function deleteApiKey");
     expect(source).toContain("normalizeApiKeyListResponse");
     expect(source).toContain("normalizeApiKeyReveal");
@@ -221,20 +219,18 @@ function createApiKeyListResponse(overrides: Record<string, unknown> = {}) {
         id: "api-key-test",
         name: "Test key",
         description: null,
-        prefix: "artk_abc12345",
-        maskedKey: "artk_abc12345••••wxyz",
+        keyPrefix: "abc12345",
+        fingerprint: "0123456789ab",
+        maskedKey: "abc12345••••wxyz",
         status: "active",
-        permissions: ["settings:services"],
-        permissionCount: 1,
-        expiresAt: null,
-        ipAllowlist: [],
         lastUsedAt: null,
         lastUsedIpAddress: null,
         lastUsedUserAgent: null,
         createdBy: { id: "Abc123xyz", username: "admin" },
         createdAt: "2026-06-23T12:00:00.000Z",
         updatedAt: "2026-06-23T12:01:00.000Z",
-        revokedAt: null,
+        rotatedAt: null,
+        deletedAt: null,
         ...overrides,
       },
     ],

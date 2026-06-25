@@ -79,5 +79,6 @@ describe("notification inbox popover", () => {
     expect(source).toContain("Read notification");
     expect(source).toContain("wrap-break-word");
     expect(source).toContain("min-w-0");
+    expect(source).toContain("border-selected-border bg-selected");
   });
 });

@@ -106,7 +106,7 @@ function UserActionsTrigger({ username }: { username: string }) {
     <DropdownMenuTrigger
       aria-label={`Open user actions for ${username}`}
       className={cn(
-        "grid size-9 cursor-pointer place-items-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-0 focus-visible:shadow-none",
+        "grid size-9 cursor-pointer place-items-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
       )}
       type="button"
     >

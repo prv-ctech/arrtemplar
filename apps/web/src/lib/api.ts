@@ -45,7 +45,6 @@ import type {
   NotificationPreferences,
   PermissionCatalogEntry,
   PublicUser,
-  UpdateApiKeyRequest,
   UpdateManagedUserProfileRequest,
   UpdateNotificationPreferencesRequest,
   UpdateUserProfileRequest,
@@ -337,29 +336,15 @@ export async function createApiKey(input: CreateApiKeyRequest): Promise<ApiKeyRe
   return normalizeApiKeyReveal(response);
 }
 
-export async function updateApiKey(
-  apiKeyId: string,
-  input: UpdateApiKeyRequest,
-): Promise<ApiKeySummary> {
-  const response = await requestApiJson({
-    body: input,
-    fallback: "API key update failed.",
-    method: "PUT",
-    path: `/api/api-keys/${encodeURIComponent(apiKeyId)}`,
-  });
-
-  return normalizeApiKeyMutationResponse(response).apiKey;
-}
-
-export async function revokeApiKey(apiKeyId: string): Promise<ApiKeySummary> {
+export async function rotateApiKey(apiKeyId: string): Promise<ApiKeyReveal> {
   const response = await requestApiJson({
     body: {},
-    fallback: "API key revoke failed.",
+    fallback: "API key rotation failed.",
     method: "POST",
-    path: `/api/api-keys/${encodeURIComponent(apiKeyId)}/revoke`,
+    path: `/api/api-keys/${encodeURIComponent(apiKeyId)}/rotate`,
   });
 
-  return normalizeApiKeyMutationResponse(response).apiKey;
+  return normalizeApiKeyReveal(response);
 }
 
 export async function deleteApiKey(apiKeyId: string): Promise<ApiKeySummary> {
@@ -963,20 +948,18 @@ function normalizeApiKeySummary(value: unknown): ApiKeySummary {
     typeof value.id !== "string" ||
     typeof value.name !== "string" ||
     !isNullableString(value.description) ||
-    typeof value.prefix !== "string" ||
+    typeof value.keyPrefix !== "string" ||
+    typeof value.fingerprint !== "string" ||
     typeof value.maskedKey !== "string" ||
     !isApiKeyStatus(value.status) ||
-    !Array.isArray(value.permissions) ||
-    typeof value.permissionCount !== "number" ||
-    !isNullableDateTime(value.expiresAt) ||
-    !isStringArray(value.ipAllowlist) ||
     !isNullableDateTime(value.lastUsedAt) ||
     !isNullableString(value.lastUsedIpAddress) ||
     !isNullableString(value.lastUsedUserAgent) ||
     !isApiKeyCreatedBy(value.createdBy) ||
     !isDateTime(value.createdAt) ||
     !isDateTime(value.updatedAt) ||
-    !isNullableDateTime(value.revokedAt)
+    !isNullableDateTime(value.rotatedAt) ||
+    !isNullableDateTime(value.deletedAt)
   ) {
     throwInvalidApiKeyResponse();
   }
@@ -985,20 +968,18 @@ function normalizeApiKeySummary(value: unknown): ApiKeySummary {
     id: value.id,
     name: value.name,
     description: value.description,
-    prefix: value.prefix,
+    keyPrefix: value.keyPrefix,
+    fingerprint: value.fingerprint,
     maskedKey: value.maskedKey,
     status: value.status,
-    permissions: normalizePermissions(value.permissions),
-    permissionCount: value.permissionCount,
-    expiresAt: normalizeNullableDateTime(value.expiresAt),
-    ipAllowlist: value.ipAllowlist,
     lastUsedAt: normalizeNullableDateTime(value.lastUsedAt),
     lastUsedIpAddress: value.lastUsedIpAddress,
     lastUsedUserAgent: value.lastUsedUserAgent,
     createdBy: value.createdBy,
     createdAt: normalizeDateTime(value.createdAt),
     updatedAt: normalizeDateTime(value.updatedAt),
-    revokedAt: normalizeNullableDateTime(value.revokedAt),
+    rotatedAt: normalizeNullableDateTime(value.rotatedAt),
+    deletedAt: normalizeNullableDateTime(value.deletedAt),
   };
 }
 
@@ -1147,10 +1128,6 @@ function isDownloadClientOperationError(
 
 function isApiKeyStatus(value: unknown): value is ApiKeyStatus {
   return API_KEY_STATUS_VALUES.some((status) => status === value);
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((entry) => typeof entry === "string");
 }
 
 function throwInvalidApiKeyResponse(): never {

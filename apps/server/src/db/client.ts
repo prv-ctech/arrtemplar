@@ -33,6 +33,7 @@ export function createDatabase(databaseUrl = env.databaseUrl): DatabaseClient {
       logger: getDrizzleLogger({
         category: [APP_LOG_CATEGORY, "database", "query"],
         level: "debug",
+        dialect: "sqlite",
       }),
     }),
     sqlite,

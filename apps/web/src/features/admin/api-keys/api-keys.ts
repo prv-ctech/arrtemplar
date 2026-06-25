@@ -1,6 +1,6 @@
-import type { CreateApiKeyRequest, UpdateApiKeyRequest } from "@arrtemplar/shared";
+import type { CreateApiKeyRequest } from "@arrtemplar/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createApiKey, deleteApiKey, listApiKeys, revokeApiKey, updateApiKey } from "@/lib/api";
+import { createApiKey, deleteApiKey, listApiKeys, rotateApiKey } from "@/lib/api";
 
 const apiKeyQueryKeys = {
   all: ["api-keys"] as const,
@@ -26,23 +26,11 @@ export function useCreateApiKeyMutation() {
   });
 }
 
-export function useUpdateApiKeyMutation() {
+export function useRotateApiKeyMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ apiKeyId, input }: { apiKeyId: string; input: UpdateApiKeyRequest }) =>
-      updateApiKey(apiKeyId, input),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: apiKeyQueryKeys.all });
-    },
-  });
-}
-
-export function useRevokeApiKeyMutation() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (apiKeyId: string) => revokeApiKey(apiKeyId),
+    mutationFn: (apiKeyId: string) => rotateApiKey(apiKeyId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: apiKeyQueryKeys.all });
     },

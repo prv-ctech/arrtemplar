@@ -633,7 +633,7 @@ function ThemeOptionButton({
         "h-auto min-h-11 justify-start gap-2 rounded-xl px-2.5 py-2 text-left",
         "cursor-pointer shadow-none hover:translate-y-0 active:translate-y-0",
         isSelected
-          ? "border-primary/50 bg-primary/12 text-foreground hover:bg-primary/16"
+          ? "border-selected-border bg-selected text-foreground hover:bg-selected"
           : "border-border bg-card/72 text-muted-foreground hover:bg-accent hover:text-foreground",
       )}
       onClick={() => onThemeChange(option.value)}

@@ -118,7 +118,7 @@ describe("app settings layout", () => {
     expect(usersSource).toContain("Delete user");
     expect(usersSource).toContain("DeleteUserDialog");
     expect(usersSource).toContain("Delete this user?");
-    expect(usersTableSource.match(/onDeleteUser=\{onDeleteUser\}/g)).toHaveLength(3);
+    expect(usersTableSource.match(/onDeleteUser=\{onDeleteUser\}/g)).toHaveLength(6);
     expect(usersSource).toContain("Default: admin");
     expect(usersSource).toContain("canToggleUserStatus");
     expect(usersSource).toContain("canDeleteUser");
@@ -128,18 +128,13 @@ describe("app settings layout", () => {
     expect(usersSource).toContain('className="border-separate border-spacing-0"');
     expect(usersSource).toContain("settingsTableActionHeaderClassName");
     expect(usersSource).toContain("settingsTableActionCellClassName");
-    expect(settingsTableActionColumnSource).toContain(
-      "sticky -right-px w-12 border-l border-border",
-    );
-    expect(settingsTableActionColumnSource).not.toContain("sticky right-0 w-12");
-    expect(settingsTableActionColumnSource).toContain(
-      "shadow-[-1px_0_0_0_var(--border),-2rem_0_0_0_var(--card)]",
-    );
-    expect(settingsTableActionColumnSource).toContain("sm:shadow-none");
-    expect(settingsTableActionColumnSource).toContain(
-      "sm:static sm:border-l-0 sm:bg-transparent",
-    );
-    expect(settingsTableActionColumnSource).not.toContain("-12px_0_0_0_var(--card)");
+    expect(usersSource).toContain("AdminUsersMobileList");
+    expect(usersSource).toContain("AdminUserMobileCard");
+    expect(usersSource).toContain('className="hidden lg:block"');
+    expect(settingsTableActionColumnSource).toContain('"w-12 text-right"');
+    expect(settingsTableActionColumnSource).not.toContain("sticky");
+    expect(settingsTableActionColumnSource).not.toContain("shadow-[");
+    expect(settingsTableActionColumnSource).not.toContain("absolute -inset-y-px");
     expect(usersSource).not.toContain("bg-card/95");
     expect(usersSource).not.toContain("backdrop-blur-sm");
     expect(usersSource).toContain("bg-primary text-primary-foreground");
@@ -161,8 +156,7 @@ describe("app settings layout", () => {
     expect(usersSource).not.toContain('to="/Users/$publicUserId/settings/main"');
     expect(usersSource).not.toContain("lucide-react");
     expect(usersSource).not.toContain("UserRoundPlus");
-    expect(usersSource).toContain("focus-visible:ring-0");
-    expect(usersSource).toContain("focus-visible:shadow-none");
+    expect(usersSource).toContain("focus-visible:ring-2");
     expect(usersSource).toContain("hover:translate-y-0");
     expect(usersSource).toContain("active:translate-y-0");
     expect(usersSource).not.toContain(
@@ -214,30 +208,29 @@ describe("app settings layout", () => {
     expect(apiKeysSource).toContain("PlusIcon");
     expect(apiKeysSource).toContain("Open API key actions");
     expect(apiKeysSource).toContain("DropdownMenuItem");
-    expect(apiKeysSource).toContain("PermissionCategoryGrid");
-    expect(apiKeysSource).toContain("permissionsDialogContentClassName");
-    expect(apiKeysSource).toContain("Copy API Key");
-    expect(apiKeysSource).toContain("External apps using this key will lose access immediately.");
-    expect(apiKeysSource).toContain("Key name");
-    expect(apiKeysSource).toContain("readDateTimeLocalIso");
-    expect(apiKeysSource).toContain("isApiKeyEligiblePermission");
+    expect(apiKeysSource).toContain("Copy API key");
+    expect(apiKeysSource).toContain("Rotate key");
+    expect(apiKeysSource).toContain("Delete key");
+    expect(apiKeysSource).toContain("New API key");
+    expect(apiKeysSource).toContain("Shown once.");
+    expect(apiKeysSource).toContain("fingerprint");
     expect(apiKeysSource).toContain("notify(");
     expect(apiKeysSource).toContain("api_keys.created");
     expect(apiKeysSource).toContain("api_keys.updated");
-    expect(apiKeysSource).toContain("api_keys.revoked");
     expect(apiKeysSource).toContain("api_keys.deleted");
     expect(apiKeysSource).toContain("api_keys.secret.copied");
     expect(apiKeysSource).toContain("settingsTableActionHeaderClassName");
     expect(apiKeysSource).toContain("settingsTableActionCellClassName");
-    expect(settingsTableActionColumnSource).toContain(
-      "shadow-[-1px_0_0_0_var(--border),-2rem_0_0_0_var(--card)]",
-    );
-    expect(settingsTableActionColumnSource).not.toContain("-12px_0_0_0_var(--card)");
+    expect(apiKeysSource).toContain("ApiKeysMobileList");
+    expect(apiKeysSource).toContain("ApiKeyMobileCard");
+    expect(apiKeysSource).toContain('className="hidden lg:block"');
+    expect(settingsTableActionColumnSource).toContain('"w-12 text-right"');
+    expect(settingsTableActionColumnSource).not.toContain("sticky");
+    expect(settingsTableActionColumnSource).not.toContain("shadow-[");
+    expect(settingsTableActionColumnSource).not.toContain("absolute -inset-y-px");
     expect(tableSource).toContain("pb-4 sm:pb-0");
     expect(apiKeysSource).not.toContain("Refresh key");
-    expect(apiKeysSource).not.toContain("Rotate key");
     expect(apiKeysSource).not.toContain("useRefreshApiKeyMutation");
-    expect(apiKeysSource).not.toContain("useRotateApiKeyMutation");
     expect(apiKeysSource).not.toContain('containerClassName="max-w-full bg-card pt-12"');
     expect(apiKeysSource).not.toContain("absolute top-3 left-3");
     expect(apiKeysSource).not.toContain("Create scoped credentials for external apps.");
@@ -293,6 +286,9 @@ describe("app settings layout", () => {
     expect(source).toContain("Unlink all");
     expect(source).toContain("identity.displayName");
     expect(source).toContain("AUTH_PROVIDER_KIND_VALUES");
+    expect(source).not.toContain("min-h-20");
+    expect(source).not.toContain("sm:w-96");
+    expect(source).not.toContain("<textarea");
     expect(source).not.toContain("Link another OIDC account");
     expect(source).not.toContain("AUTHENTIK_LOGO_SRC");
     expect(source).not.toContain("AuthMethodStatusBadges");

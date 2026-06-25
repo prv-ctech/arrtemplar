@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { configure } from "@logtape/logtape";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { configure, getLogger } from "@logtape/logtape";
 import { createApp } from "../../../../apps/server/src/app";
 import { APP_LOG_CATEGORY, APP_NAME, APP_VERSION } from "../../../../packages/shared/src";
 import { resetAndOpenTestDatabase } from "../../../helpers/database";
@@ -64,8 +65,12 @@ describe("GET /health", () => {
     const app = createApp({ database });
 
     await configure({
-      sinks: { buffer: sink },
-      loggers: [{ category: [APP_LOG_CATEGORY, "http"], sinks: ["buffer"] }],
+      contextLocalStorage: new AsyncLocalStorage(),
+      sinks: { buffer: sink, meta: () => undefined },
+      loggers: [
+        { category: ["logtape", "meta"], sinks: ["meta"] },
+        { category: [APP_LOG_CATEGORY, "http"], sinks: ["buffer"] },
+      ],
     });
 
     try {
@@ -80,6 +85,7 @@ describe("GET /health", () => {
           {
             authorization: "Bearer raw-authorization-token",
             cookie: "arrtemplar_session=raw-cookie-value",
+            "x-request-id": "login-request-id",
           },
         ),
       );
@@ -91,17 +97,112 @@ describe("GET /health", () => {
 
       expect(healthResponse.status).toBe(200);
       expect(loginResponse.status).toBe(401);
+      expect(loginResponse.headers.get("x-request-id")).toBe("login-request-id");
       expect(httpLogs).toHaveLength(1);
       expect(httpLogs[0]?.properties).toMatchObject({
+        event: "http.request",
+        requestId: "login-request-id",
         method: "POST",
         url: "/api/auth/login",
         path: "/api/auth/login",
         status: 401,
       });
       expect(httpLogs[0]?.properties).toHaveProperty("responseTime");
+      expect(httpLogs[0]?.properties).toHaveProperty("durationMs");
+      expect(httpLogs[0]?.properties).toHaveProperty("contentLength");
       expect(serializedLogs).not.toContain("correct-horse-battery-staple");
       expect(serializedLogs).not.toContain("raw-authorization-token");
       expect(serializedLogs).not.toContain("raw-cookie-value");
+    } finally {
+      await resetLogTape();
+      database.close();
+    }
+  });
+
+  it("propagates request IDs to handler logs and generated response headers", async () => {
+    const { records, sink } = createLogBuffer();
+    const database = await resetAndOpenTestDatabase();
+    const app = createApp({ database });
+    const handlerLogger = getLogger([APP_LOG_CATEGORY, "request-context-test"]);
+
+    app.get("/api/request-context-log", () => {
+      handlerLogger.info("Handled request context check");
+      return { ok: true };
+    });
+
+    await configure({
+      contextLocalStorage: new AsyncLocalStorage(),
+      sinks: { buffer: sink, meta: () => undefined },
+      loggers: [
+        { category: ["logtape", "meta"], sinks: ["meta"] },
+        { category: [APP_LOG_CATEGORY], sinks: ["buffer"] },
+      ],
+    });
+
+    try {
+      const response = await app.handle(new Request("http://localhost/api/request-context-log"));
+      const handlerLog = records.find(
+        (record) => record.category.join(".") === `${APP_LOG_CATEGORY}.request-context-test`,
+      );
+      const requestLog = records.find(
+        (record) => record.category.join(".") === `${APP_LOG_CATEGORY}.http`,
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("x-request-id")).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
+      expect(handlerLog?.properties).toMatchObject({
+        requestId: response.headers.get("x-request-id"),
+      });
+      expect(requestLog?.properties).toMatchObject({
+        event: "http.request",
+        requestId: response.headers.get("x-request-id"),
+        method: "GET",
+        url: "/api/request-context-log",
+        path: "/api/request-context-log",
+        status: 200,
+      });
+      expect(requestLog?.properties).toHaveProperty("responseTime");
+      expect(requestLog?.properties).toHaveProperty("durationMs");
+      expect(requestLog?.properties).toHaveProperty("contentLength");
+    } finally {
+      await resetLogTape();
+      database.close();
+    }
+  });
+
+  it("rejects invalid incoming request IDs before echoing them", async () => {
+    const { records, sink } = createLogBuffer();
+    const database = await resetAndOpenTestDatabase();
+    const app = createApp({ database });
+
+    await configure({
+      contextLocalStorage: new AsyncLocalStorage(),
+      sinks: { buffer: sink, meta: () => undefined },
+      loggers: [
+        { category: ["logtape", "meta"], sinks: ["meta"] },
+        { category: [APP_LOG_CATEGORY], sinks: ["buffer"] },
+      ],
+    });
+
+    try {
+      const response = await app.handle(
+        new Request("http://localhost/", {
+          headers: { "x-request-id": "invalid request id with spaces" },
+        }),
+      );
+      const requestLog = records.find(
+        (record) => record.category.join(".") === `${APP_LOG_CATEGORY}.http`,
+      );
+      const responseRequestId = response.headers.get("x-request-id");
+
+      expect(response.status).toBe(200);
+      expect(responseRequestId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
+      expect(responseRequestId).not.toBe("invalid request id with spaces");
+      expect(requestLog?.properties).toMatchObject({ requestId: responseRequestId });
     } finally {
       await resetLogTape();
       database.close();

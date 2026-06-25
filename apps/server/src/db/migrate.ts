@@ -22,7 +22,14 @@ export function migrateDatabase(databaseUrl = env.databaseUrl): void {
 
 if (import.meta.main) {
   await configureServerLogging();
-  migrateDatabase();
-  serverLogger.info("Database migrations applied.");
-  await dispose();
+
+  try {
+    migrateDatabase();
+    serverLogger.info("Database migrations applied.", {
+      event: "database.migrations_applied",
+      database: "primary",
+    });
+  } finally {
+    await dispose();
+  }
 }

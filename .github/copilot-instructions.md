@@ -1,8 +1,8 @@
 <contextstream>
-<!-- contextstream-rules-hash: eb090d82110a9c1b -->
-# Workspace: arrbit
+<!-- contextstream-rules-hash: 4dd7baa952de9e35 -->
+# Workspace: Arrbit
 # Project: arrtemplar
-# Workspace ID: c19393a6-c2b7-402b-998e-ad4b5c571f70
+# Workspace ID: d350ca2a-deee-4a7b-9a14-4740a2328436
 
 # ContextStream Rules
 **MANDATORY STARTUP:** On the first message of EVERY session call `init(...)`. Then call `context(user_message="...")` when that tool is exposed; if `context` is unavailable in this MCP surface, call `session(action="ground", user_message="...")` instead. On subsequent messages, call `context(...)` first by default, or `session(action="ground", user_message="...")` when `context` is unavailable. A narrow bypass is allowed only for immediate read-only ContextStream calls when prior context is still fresh and no state-changing tool has run.

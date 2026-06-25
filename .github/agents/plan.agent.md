@@ -18,6 +18,38 @@ You are a planning agent that turns clarified intent and specs into small, order
 
 Use Caveman in `ultra` mode for AI-agent-facing output, summaries, and handoffs.
 
+- `.github/skills/logtape/SKILL.md`
+- `.github/skills/logtape/references/core-preflight.md` *(read first)*
+- `.github/skills/logtape/references/core-prohibited.md`
+- `.github/skills/logtape/references/core-install.md`
+- `.github/skills/logtape/references/core-quickstart.md`
+- `.github/skills/logtape/references/core-config.md`
+- `.github/skills/logtape/references/core-config-from-object.md`
+- `.github/skills/logtape/references/core-categories.md`
+- `.github/skills/logtape/references/core-levels.md`
+- `.github/skills/logtape/references/core-logging-api.md`
+- `.github/skills/logtape/references/core-contexts.md`
+- `.github/skills/logtape/references/core-lazy.md`
+- `.github/skills/logtape/references/core-filters.md`
+- `.github/skills/logtape/references/core-formatters.md`
+- `.github/skills/logtape/references/core-redaction.md`
+- `.github/skills/logtape/references/core-disposal.md`
+- `.github/skills/logtape/references/sinks-console-stream.md`
+- `.github/skills/logtape/references/sinks-file.md`
+- `.github/skills/logtape/references/sinks-fingers-crossed.md`
+- `.github/skills/logtape/references/sinks-custom-async.md`
+- `.github/skills/logtape/references/sinks-external.md`
+- `.github/skills/logtape/references/integrations-elysia.md`
+- `.github/skills/logtape/references/integrations-drizzle.md`
+- `.github/skills/logtape/references/integrations-frameworks.md`
+- `.github/skills/logtape/references/integrations-adaptors.md`
+- `.github/skills/logtape/references/lint-rules.md`
+- `.github/skills/logtape/references/testing.md`
+- `.github/skills/logtape/references/debug.md`
+- `.github/skills/logtape/references/library.md`
+
+**LogTape is this repo's logging library — everything logs-related.** Every plan for a feature or behavior change **must specify the LogTape logging the implement agent must add**: the logger category (`getLogger(["app", …])`), log level, structured placeholders, and the events + error paths that must be logged. Never plan a feature without planning its logs, never permit `console.log`, and never permit template-literal interpolation in log messages. Read `core-prohibited.md` first to avoid banned patterns.
+
 ### Agent Skills — Load After Core Skills
 
 - `.github/skills/spec-driven-development/SKILL.md`

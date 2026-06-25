@@ -8,7 +8,9 @@ import {
   type UpsertDownloadClientRequest,
 } from "@arrtemplar/shared";
 import { Elysia, t } from "elysia";
+import { ApiKeyService } from "../auth/api-key.service";
 import { AuthService } from "../auth/auth.service";
+import { resolveRoutePrincipal } from "../auth/route-principal";
 import { createRequestContext } from "../auth/routes";
 import { SESSION_COOKIE_NAME } from "../auth/session-token";
 import type { DatabaseClient } from "../db/client";
@@ -43,16 +45,8 @@ type InstanceBodyRouteContext = BaseRouteContext & {
 };
 type KindRequestRouteContext = BaseRouteContext & { params: { kind: unknown } };
 type InstanceRequestRouteContext = BaseRouteContext & { params: { clientId: unknown } };
-type KindStatusRouteContext = {
-  cookie: Record<string, { value?: unknown } | undefined>;
-  params: { kind: unknown };
-  status: unknown;
-};
-type InstanceStatusRouteContext = {
-  cookie: Record<string, { value?: unknown } | undefined>;
-  params: { clientId: unknown };
-  status: unknown;
-};
+type KindStatusRouteContext = BaseRouteContext & { params: { kind: unknown } };
+type InstanceStatusRouteContext = BaseRouteContext & { params: { clientId: unknown } };
 
 const downloadClientKindSchema = t.Union(
   DOWNLOAD_CLIENT_KIND_VALUES.map((kind) => t.Literal(kind)) as [
@@ -215,113 +209,129 @@ const downloadClientInstanceStatusResponseSchemas = {
 } as const;
 
 function createKindBodyRouteHandler<T>(
+  apiKeyService: ApiKeyService,
   authService: AuthService,
   action: (
     kind: DownloadClientKind,
     input: UpsertDownloadClientRequest,
-    user: PublicUser,
+    actor: PublicUser | undefined,
     context: RouteRequestContext,
   ) => MaybePromise<ServiceResponse<T>>,
 ) {
   return async ({ body, cookie, params, request, server, status }: KindBodyRouteContext) =>
     await withSettingsRequestResultAsync(
+      apiKeyService,
       authService,
       readRouteSessionCookie(cookie),
-      status as StatusHandler,
       request,
       server,
-      (user, context) =>
+      status as StatusHandler,
+      (actor, context) =>
         action(
           params.kind as DownloadClientKind,
           body as UpsertDownloadClientRequest,
-          user,
+          actor,
           context,
         ),
     );
 }
 
 function createInstanceBodyRouteHandler<T>(
+  apiKeyService: ApiKeyService,
   authService: AuthService,
   action: (
     id: string,
     input: UpsertDownloadClientRequest,
-    user: PublicUser,
+    actor: PublicUser | undefined,
     context: RouteRequestContext,
   ) => MaybePromise<ServiceResponse<T>>,
 ) {
   return async ({ body, cookie, params, request, server, status }: InstanceBodyRouteContext) =>
     await withSettingsRequestResultAsync(
+      apiKeyService,
       authService,
       readRouteSessionCookie(cookie),
-      status as StatusHandler,
       request,
       server,
-      (user, context) =>
-        action(params.clientId as string, body as UpsertDownloadClientRequest, user, context),
+      status as StatusHandler,
+      (actor, context) =>
+        action(params.clientId as string, body as UpsertDownloadClientRequest, actor, context),
     );
 }
 
 function createKindRequestRouteHandler<T>(
+  apiKeyService: ApiKeyService,
   authService: AuthService,
   action: (
     kind: DownloadClientKind,
-    user: PublicUser,
+    actor: PublicUser | undefined,
     context: RouteRequestContext,
   ) => MaybePromise<ServiceResponse<T>>,
 ) {
   return async ({ cookie, params, request, server, status }: KindRequestRouteContext) =>
     await withSettingsRequestResultAsync(
+      apiKeyService,
       authService,
       readRouteSessionCookie(cookie),
-      status as StatusHandler,
       request,
       server,
-      (user, context) => action(params.kind as DownloadClientKind, user, context),
+      status as StatusHandler,
+      (actor, context) => action(params.kind as DownloadClientKind, actor, context),
     );
 }
 
 function createInstanceRequestRouteHandler<T>(
+  apiKeyService: ApiKeyService,
   authService: AuthService,
   action: (
     id: string,
-    user: PublicUser,
+    actor: PublicUser | undefined,
     context: RouteRequestContext,
   ) => MaybePromise<ServiceResponse<T>>,
 ) {
   return async ({ cookie, params, request, server, status }: InstanceRequestRouteContext) =>
     await withSettingsRequestResultAsync(
+      apiKeyService,
       authService,
       readRouteSessionCookie(cookie),
-      status as StatusHandler,
       request,
       server,
-      (user, context) => action(params.clientId as string, user, context),
+      status as StatusHandler,
+      (actor, context) => action(params.clientId as string, actor, context),
     );
 }
 
 function createKindStatusRouteHandler<T>(
+  apiKeyService: ApiKeyService,
   authService: AuthService,
   action: (kind: DownloadClientKind) => MaybePromise<ServiceResponse<T>>,
 ) {
-  return async ({ cookie, params, status }: KindStatusRouteContext) =>
-    await withSettingsServiceResultAsync(
+  return async ({ cookie, params, request, server, status }: KindStatusRouteContext) =>
+    await withSettingsRequestResultAsync(
+      apiKeyService,
       authService,
       readRouteSessionCookie(cookie),
+      request,
+      server,
       status as StatusHandler,
-      () => action(params.kind as DownloadClientKind),
+      async () => await action(params.kind as DownloadClientKind),
     );
 }
 
 function createInstanceStatusRouteHandler<T>(
+  apiKeyService: ApiKeyService,
   authService: AuthService,
   action: (id: string) => MaybePromise<ServiceResponse<T>>,
 ) {
-  return async ({ cookie, params, status }: InstanceStatusRouteContext) =>
-    await withSettingsServiceResultAsync(
+  return async ({ cookie, params, request, server, status }: InstanceStatusRouteContext) =>
+    await withSettingsRequestResultAsync(
+      apiKeyService,
       authService,
       readRouteSessionCookie(cookie),
+      request,
+      server,
       status as StatusHandler,
-      () => action(params.clientId as string),
+      async () => await action(params.clientId as string),
     );
 }
 
@@ -331,46 +341,67 @@ function readRouteSessionCookie(cookie: Record<string, { value?: unknown } | und
 
 export function createDownloadClientRoutes(options: DownloadClientRoutesOptions) {
   const authService = new AuthService(options.database);
+  const apiKeyService = new ApiKeyService(options.database);
   const downloadClientService = new DownloadClientService(options.database, {
     secretEncryptionKey: options.secretEncryptionKey,
   });
-  const createInstance = createKindBodyRouteHandler(authService, (kind, input, user, context) =>
-    downloadClientService.createConfig(kind, input, user, context),
+  const createInstance = createKindBodyRouteHandler(
+    apiKeyService,
+    authService,
+    (kind, input, actor, context) =>
+      downloadClientService.createConfig(kind, input, actor, context),
   );
-  const saveDefault = createKindBodyRouteHandler(authService, (kind, input, user, context) =>
-    downloadClientService.upsertConfig(kind, input, user, context),
+  const saveDefault = createKindBodyRouteHandler(
+    apiKeyService,
+    authService,
+    (kind, input, actor, context) =>
+      downloadClientService.upsertConfig(kind, input, actor, context),
   );
-  const saveInstance = createInstanceBodyRouteHandler(authService, (id, input, user, context) =>
-    downloadClientService.updateConfigById(id, input, user, context),
+  const saveInstance = createInstanceBodyRouteHandler(
+    apiKeyService,
+    authService,
+    (id, input, actor, context) =>
+      downloadClientService.updateConfigById(id, input, actor, context),
   );
-  const deleteDefault = createKindRequestRouteHandler(authService, (kind, user, context) =>
-    downloadClientService.deleteConfig(kind, user, context),
+  const deleteDefault = createKindRequestRouteHandler(
+    apiKeyService,
+    authService,
+    (kind, actor, context) => downloadClientService.deleteConfig(kind, actor, context),
   );
-  const deleteInstance = createInstanceRequestRouteHandler(authService, (id, user, context) =>
-    downloadClientService.deleteConfigById(id, user, context),
+  const deleteInstance = createInstanceRequestRouteHandler(
+    apiKeyService,
+    authService,
+    (id, actor, context) => downloadClientService.deleteConfigById(id, actor, context),
   );
-  const testDefault = createKindRequestRouteHandler(authService, (kind, user, context) =>
-    downloadClientService.testConfig(kind, user, context),
+  const testDefault = createKindRequestRouteHandler(
+    apiKeyService,
+    authService,
+    (kind, actor, context) => downloadClientService.testConfig(kind, actor, context),
   );
-  const testInstance = createInstanceRequestRouteHandler(authService, (id, user, context) =>
-    downloadClientService.testConfigById(id, user, context),
+  const testInstance = createInstanceRequestRouteHandler(
+    apiKeyService,
+    authService,
+    (id, actor, context) => downloadClientService.testConfigById(id, actor, context),
   );
-  const readDefaultStatus = createKindStatusRouteHandler(authService, (kind) =>
+  const readDefaultStatus = createKindStatusRouteHandler(apiKeyService, authService, (kind) =>
     downloadClientService.getStatus(kind),
   );
-  const readInstanceStatus = createInstanceStatusRouteHandler(authService, (id) =>
+  const readInstanceStatus = createInstanceStatusRouteHandler(apiKeyService, authService, (id) =>
     downloadClientService.getStatusById(id),
   );
 
   return new Elysia({ prefix: "/api" })
     .get(
       "/settings/services",
-      ({ cookie, status }) =>
-        withSettingsServices(
+      async ({ cookie, request, server, status }) =>
+        await withSettingsRequestResultAsync(
+          apiKeyService,
           authService,
-          cookie[SESSION_COOKIE_NAME]?.value,
+          readRouteSessionCookie(cookie),
+          request,
+          server,
           status as StatusHandler,
-          () => downloadClientService.listConfigs(),
+          async () => ({ ok: true, body: downloadClientService.listConfigs() }),
         ),
       {
         cookie: sessionCookieSchema,
@@ -384,12 +415,18 @@ export function createDownloadClientRoutes(options: DownloadClientRoutesOptions)
     )
     .get(
       "/settings/services/:kind",
-      ({ cookie, params, status }) =>
-        withSettingsServices(
+      async ({ cookie, params, request, server, status }) =>
+        await withSettingsRequestResultAsync(
+          apiKeyService,
           authService,
-          cookie[SESSION_COOKIE_NAME]?.value,
+          readRouteSessionCookie(cookie),
+          request,
+          server,
           status as StatusHandler,
-          () => downloadClientService.getConfig(params.kind as DownloadClientKind),
+          async () => ({
+            ok: true,
+            body: downloadClientService.getConfig(params.kind as DownloadClientKind),
+          }),
         ),
       {
         params: downloadClientParamsSchema,
@@ -502,67 +539,39 @@ export function createDownloadClientRoutes(options: DownloadClientRoutesOptions)
     });
 }
 
-async function withSettingsServiceResultAsync<T>(
-  authService: AuthService,
-  sessionCookieValue: unknown,
-  status: StatusHandler,
-  onAllowed: (user: PublicUser) => MaybePromise<ServiceResponse<T>>,
-): Promise<T | ReturnType<StatusHandler>> {
-  return await withSettingsServicesAsync(authService, sessionCookieValue, status, async (user) =>
-    responseOrStatus(await onAllowed(user), status),
-  );
-}
-
 async function withSettingsRequestResultAsync<T>(
+  apiKeyService: ApiKeyService,
   authService: AuthService,
   sessionCookieValue: unknown,
-  status: StatusHandler,
   request: Request,
   server: RequestContextServer,
+  status: StatusHandler,
   onAllowed: (
-    user: PublicUser,
+    actor: PublicUser | undefined,
     context: ReturnType<typeof createRequestContext>,
   ) => MaybePromise<ServiceResponse<T>>,
 ): Promise<T | ReturnType<StatusHandler>> {
-  return await withSettingsServiceResultAsync(authService, sessionCookieValue, status, (user) =>
-    onAllowed(user, createRequestContext(request, server)),
-  );
-}
+  const context = createRequestContext(request, server);
+  const principalResult = resolveRoutePrincipal({
+    apiKeyService,
+    authService,
+    context,
+    request,
+    requiredPermission: "settings:services",
+    sessionToken: readSessionToken(sessionCookieValue),
+  });
 
-function withSettingsServices<T>(
-  authService: AuthService,
-  sessionCookieValue: unknown,
-  status: StatusHandler,
-  onAllowed: (user: PublicUser) => T,
-): T | ReturnType<StatusHandler> {
-  const permissionResult = authService.requirePermission(
-    readSessionToken(sessionCookieValue),
-    "settings:services",
-  );
-
-  if (!permissionResult.ok) {
-    return status(permissionResult.status, permissionResult.body);
+  if (!principalResult.ok) {
+    return status(principalResult.status, principalResult.body);
   }
 
-  return onAllowed(permissionResult.user);
-}
-
-async function withSettingsServicesAsync<T>(
-  authService: AuthService,
-  sessionCookieValue: unknown,
-  status: StatusHandler,
-  onAllowed: (user: PublicUser) => Promise<T>,
-): Promise<T | ReturnType<StatusHandler>> {
-  const permissionResult = authService.requirePermission(
-    readSessionToken(sessionCookieValue),
-    "settings:services",
+  return responseOrStatus(
+    await onAllowed(
+      principalResult.principal.kind === "session" ? principalResult.principal.user : undefined,
+      context,
+    ),
+    status,
   );
-
-  if (!permissionResult.ok) {
-    return status(permissionResult.status, permissionResult.body);
-  }
-
-  return await onAllowed(permissionResult.user);
 }
 
 function responseOrStatus<T>(

@@ -451,9 +451,8 @@ function ProviderConfigRows({
         />
       </SettingsRow>
       <SettingsRow controlId="auth-provider-redirect-uris" density="compact" label="Redirect URIs">
-        <textarea
-          aria-label="Redirect URIs"
-          className="min-h-20 w-full min-w-0 rounded-xl border border-input bg-background/50 px-3 py-2 text-sm text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted-foreground focus-visible:border-primary/70 focus-visible:ring-2 focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50 sm:w-96"
+        <Input
+          className={fieldClassName}
           disabled={disabled}
           id="auth-provider-redirect-uris"
           onChange={(event) => onChange({ redirectUris: event.currentTarget.value })}
@@ -727,7 +726,7 @@ function createFormState(provider: AuthProviderSummary | undefined): AuthProvide
     clientId: provider.clientId,
     clientSecret: "",
     scopes: provider.scopes,
-    redirectUris: provider.redirectUris.join("\n"),
+    redirectUris: provider.redirectUris.join(" "),
     enabled: provider.enabled,
     buttonText: provider.buttonText,
     autoRegister: provider.autoRegister,
@@ -747,7 +746,7 @@ function createProviderFormKey(provider: AuthProviderSummary | undefined): strin
 }
 
 function createProviderRequest(form: AuthProviderFormState): AuthUpsertProviderRequest | null {
-  const redirectUris = form.redirectUris.split(/\r?\n/u).flatMap((uri) => {
+  const redirectUris = form.redirectUris.split(/\s+/u).flatMap((uri) => {
     const trimmedUri = uri.trim();
     return trimmedUri ? [trimmedUri] : [];
   });

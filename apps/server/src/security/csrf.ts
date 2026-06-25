@@ -1,5 +1,6 @@
 import {
-  API_KEY_BEARER_CSRF_EXEMPT_PATHS,
+  API_KEY_CSRF_EXEMPT_PATH_PREFIXES,
+  API_KEY_HEADER_NAME,
   API_KEY_MANAGEMENT_PATH_PREFIX,
   type ApiErrorResponse,
   CSRF_HEADER_NAME,
@@ -67,12 +68,16 @@ function requiresCsrfProtection(request: Request): boolean {
 
 function isBearerCsrfExemptRequest(pathname: string, headers: Headers): boolean {
   return (
-    API_KEY_BEARER_CSRF_EXEMPT_PATHS.some((path) => path === pathname) &&
-    hasBearerAuthorization(headers)
+    API_KEY_CSRF_EXEMPT_PATH_PREFIXES.some((pathPrefix) => pathname.startsWith(pathPrefix)) &&
+    hasApiKeyTransport(headers)
   );
 }
 
-function hasBearerAuthorization(headers: Headers): boolean {
+function hasApiKeyTransport(headers: Headers): boolean {
+  if (headers.get(API_KEY_HEADER_NAME)?.trim()) {
+    return true;
+  }
+
   const authorization = headers.get("authorization");
 
   return typeof authorization === "string" && /^Bearer\s+\S+$/i.test(authorization);

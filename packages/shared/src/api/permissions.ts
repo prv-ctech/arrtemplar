@@ -223,14 +223,6 @@ export const USER_PERMISSION_VALUES = PERMISSION_CATALOG.map(
   (entry) => entry.permission,
 ) as readonly UserPermission[];
 export const SYSTEM_ADMIN_PERMISSION: UserPermission = "system:admin";
-export const API_KEY_INELIGIBLE_PERMISSION_VALUES = [
-  SYSTEM_ADMIN_PERMISSION,
-] as const satisfies readonly UserPermission[];
-
-export const API_KEY_ELIGIBLE_PERMISSION_VALUES = USER_PERMISSION_VALUES.filter(
-  (permission) =>
-    !API_KEY_INELIGIBLE_PERMISSION_VALUES.some((ineligible) => ineligible === permission),
-) as readonly UserPermission[];
 
 export const DEFAULT_SIGNED_IN_USER_PERMISSIONS = PERMISSION_CATALOG.filter(
   (entry) => entry.defaultGrant === "signed-in-user",
@@ -250,14 +242,6 @@ const permissionOrder = new Map<UserPermission, number>(
 
 export function isUserPermission(value: string): value is UserPermission {
   return PERMISSION_CATALOG_BY_PERMISSION.has(value as UserPermission);
-}
-
-export function isApiKeyEligiblePermission(value: UserPermission): boolean {
-  return API_KEY_ELIGIBLE_PERMISSION_VALUES.some((permission) => permission === value);
-}
-
-export function getApiKeyEligiblePermissionCatalog(): PermissionCatalogEntry[] {
-  return PERMISSION_CATALOG.filter((entry) => isApiKeyEligiblePermission(entry.permission));
 }
 
 export function normalizePermissionList(permissions: readonly UserPermission[]): UserPermission[] {

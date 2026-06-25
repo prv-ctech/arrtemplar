@@ -31,7 +31,11 @@ import { openTestDatabase, resetTestDatabase } from "../../../../../helpers/data
 const DEFAULT_PASSWORD = "correct-horse-battery-staple";
 const issuer = "https://auth.example.test/application/o/template-app/";
 const testScopes = ["openid", "profile", "email"].join(" ");
-const context: AuthRequestContext = { ipAddress: "127.0.0.1", userAgent: "oauth-test" };
+const context: AuthRequestContext = {
+  ipAddress: "127.0.0.1",
+  path: "/api/auth/callback/oidc",
+  userAgent: "oauth-test",
+};
 const encryptionKey = "hex:000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
 const openDatabases: DatabaseClient[] = [];
 

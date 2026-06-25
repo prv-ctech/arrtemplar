@@ -26,6 +26,12 @@ Use Caveman in `ultra` mode for AI-agent-facing output, summaries, and handoffs.
 - `.github/skills/no-workarounds/SKILL.md`
 - `.github/skills/security-and-hardening/SKILL.md`
 
+### Load on Requirement
+
+Load these skills when their trigger criteria apply to the current task:
+
+- `.github/skills/logtape/SKILL.md` (with every file under `.github/skills/logtape/references/` — start with `core-preflight.md`, then `core-prohibited.md`) — **load when the change under review touches logging.** Specifically load it when the diff adds, edits, or removes LogTape calls, sink/filter/formatter/redaction config, logger categories, or error-path logging — or when a feature change should have added logs and the reviewer must check they are present and correct (no `console.log`, no template-literal interpolation, right category/level, named placeholders with a properties object, error paths logged). **Do not load it for reviews of small fixes unrelated to logging** (e.g. font size, file rename, copy tweaks, spacing). When loaded, flag missing or incorrect logs as an **Important** finding.
+
 ### Completion Gate
 
 Do not interpret the task, review changes, produce final output, or mark the task complete until every core and agent skill listed here has been read and applied.
