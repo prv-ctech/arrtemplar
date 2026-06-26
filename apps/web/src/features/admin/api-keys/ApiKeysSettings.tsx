@@ -37,6 +37,7 @@ import { notify } from "@/features/notifications/notification-gateway";
 import { SettingsStatus } from "@/features/settings/SettingsPrimitives";
 import { cn } from "@/lib/utils";
 import { useAuthenticatedRouteUser } from "@/routes/authenticated-route-user";
+import { SettingsMobileDefinition } from "../settings-mobile-definition";
 import {
   settingsTableActionCellClassName,
   settingsTableActionHeaderClassName,
@@ -502,12 +503,18 @@ function ApiKeyMobileCard({
         />
       </div>
       <dl className="mt-3 grid gap-2 text-sm">
-        <MobileDefinition label="Status">
+        <SettingsMobileDefinition label="Status">
           <ApiKeyStatusBadge status={apiKey.status} />
-        </MobileDefinition>
-        <MobileDefinition label="Last used">{formatDate(apiKey.lastUsedAt)}</MobileDefinition>
-        <MobileDefinition label="Rotated">{formatDate(apiKey.rotatedAt)}</MobileDefinition>
-        <MobileDefinition label="Created">{formatDate(apiKey.createdAt)}</MobileDefinition>
+        </SettingsMobileDefinition>
+        <SettingsMobileDefinition label="Last used">
+          {formatDate(apiKey.lastUsedAt)}
+        </SettingsMobileDefinition>
+        <SettingsMobileDefinition label="Rotated">
+          {formatDate(apiKey.rotatedAt)}
+        </SettingsMobileDefinition>
+        <SettingsMobileDefinition label="Created">
+          {formatDate(apiKey.createdAt)}
+        </SettingsMobileDefinition>
       </dl>
     </article>
   );
@@ -524,17 +531,6 @@ function ApiKeyIdentity({ apiKey }: { apiKey: ApiKeySummary }) {
         <span className="truncate font-mono">{apiKey.maskedKey}</span>
         <span className="font-mono">#{apiKey.fingerprint}</span>
       </div>
-    </div>
-  );
-}
-
-function MobileDefinition({ children, label }: { children: ReactNode; label: string }) {
-  return (
-    <div className="grid min-w-0 grid-cols-[minmax(0,0.75fr)_minmax(0,1fr)] items-start gap-3">
-      <dt className="text-muted-foreground text-xs leading-5">{label}</dt>
-      <dd className="min-w-0 justify-self-end text-right text-foreground wrap-break-word">
-        {children}
-      </dd>
     </div>
   );
 }

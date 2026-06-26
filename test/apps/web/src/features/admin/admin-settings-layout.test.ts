@@ -8,6 +8,8 @@ const servicesSettingsSourcePath = "apps/web/src/features/services-settings/Serv
 const settingsPrimitivesSourcePath = "apps/web/src/features/settings/SettingsPrimitives.tsx";
 const settingsTableActionColumnSourcePath =
   "apps/web/src/features/admin/settings-table-action-column.tsx";
+const settingsMobileDefinitionSourcePath =
+  "apps/web/src/features/admin/settings-mobile-definition.tsx";
 const tableSourcePath = "apps/web/src/components/ui/table.tsx";
 const usersSourcePaths = [
   "apps/web/src/features/admin/AdminUsersSettings.tsx",
@@ -84,6 +86,9 @@ describe("app settings layout", () => {
     const usersTableSource = await readWorkspaceSource(
       "apps/web/src/features/admin/admin-users-table.tsx",
     );
+    const settingsMobileDefinitionSource = await readWorkspaceSource(
+      settingsMobileDefinitionSourcePath,
+    );
     const settingsTableActionColumnSource = await readWorkspaceSource(
       settingsTableActionColumnSourcePath,
     );
@@ -130,7 +135,17 @@ describe("app settings layout", () => {
     expect(usersSource).toContain("settingsTableActionCellClassName");
     expect(usersSource).toContain("AdminUsersMobileList");
     expect(usersSource).toContain("AdminUserMobileCard");
+    expect(usersTableSource).toContain("AdminUserMobileIdentity");
+    expect(usersTableSource).toContain('className="shrink-0 text-muted-foreground text-xs"');
+    expect(usersTableSource).not.toContain("({userId})");
     expect(usersSource).toContain('className="hidden lg:block"');
+    expect(usersTableSource).toContain("SettingsMobileDefinition");
+    expect(settingsMobileDefinitionSource).toContain(
+      "grid-cols-[minmax(0,0.75fr)_minmax(0,1fr)] items-start gap-3",
+    );
+    expect(settingsMobileDefinitionSource).toContain(
+      "justify-self-end text-right text-foreground wrap-break-word",
+    );
     expect(settingsTableActionColumnSource).toContain('"w-12 text-right"');
     expect(settingsTableActionColumnSource).not.toContain("sticky");
     expect(settingsTableActionColumnSource).not.toContain("shadow-[");

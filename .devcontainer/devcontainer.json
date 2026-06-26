@@ -57,11 +57,16 @@
     }
   },
 
-  "forwardPorts": [3000, 5173],
+  "forwardPorts": [3000, 5173, 4983],
   "portsAttributes": {
     "3000": {
       "label": "Bun API",
       "onAutoForward": "notify"
+    },
+    "4983": {
+      "label": "Drizzle Studio",
+      "onAutoForward": "silent",
+      "protocol": "http"
     },
     "5173": {
       "label": "Vite web app",

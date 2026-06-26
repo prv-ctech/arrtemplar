@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { configure } from "@logtape/logtape";
 import { migrateDatabase } from "../../../../../apps/server/src/db/migrate";
-import { TOAST_NOTIFICATION_EVENTS } from "../../../../../packages/shared/src";
-import { APP_LOG_CATEGORY } from "../../../../../packages/shared/src";
+import { APP_LOG_CATEGORY, TOAST_NOTIFICATION_EVENTS } from "../../../../../packages/shared/src";
 import {
   openTestDatabase,
   removeTestDatabaseFiles,

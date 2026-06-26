@@ -1,7 +1,7 @@
 import type { ToastNotificationSeverity } from "@arrtemplar/shared";
 import type { ComponentProps, CSSProperties } from "react";
 import { Badge } from "@/components/ui/badge";
-import { toastPalette } from "@/components/ui/sonner";
+import { toastPalette } from "@/components/ui/toast-palette";
 import { cn } from "@/lib/utils";
 
 const notificationSeverityBadgeBaseClasses = [

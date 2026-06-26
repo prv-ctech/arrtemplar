@@ -82,6 +82,18 @@ type SaveMutation = ReturnType<typeof useUpsertDownloadClientMutation>;
 type DeleteByIdMutation = ReturnType<typeof useDeleteDownloadClientByIdMutation>;
 type TestDefaultMutation = ReturnType<typeof useTestDownloadClientMutation>;
 type TestByIdMutation = ReturnType<typeof useTestDownloadClientByIdMutation>;
+type DownloadClientFormFooterViewModel = {
+  summary: string;
+  testButton: {
+    disabled: boolean;
+    label: string;
+    onClick: () => void;
+  };
+  saveButton: {
+    disabled: boolean;
+    label: string;
+  };
+};
 
 const maxServiceInstancesPerKind = 10;
 const deleteConfirmationPreferenceKey = "arrtemplar.services.skip-delete-confirmation";
@@ -686,6 +698,15 @@ function DownloadClientCardView({
   const canDelete = item.mode === "instance";
   const isTesting = testDefaultMutation.isPending || testByIdMutation.isPending;
   const contentId = `${item.key}-settings`;
+  const footerViewModel = createDownloadClientFormFooterViewModel({
+    canTest: Boolean(config),
+    isBusy,
+    isDraft: Boolean(item.draft),
+    isSaving: saveMutation.isPending,
+    isTesting,
+    onTest: handleTest,
+    probeResponse,
+  });
   const [isExpanded, setIsExpanded] = useState(item.mode === "default" || Boolean(item.draft));
 
   return (
@@ -725,15 +746,7 @@ function DownloadClientCardView({
             statusId={statusId}
             statusMessage={statusMessage}
           />
-          <DownloadClientFormFooter
-            canTest={Boolean(config)}
-            isBusy={isBusy}
-            isDraft={Boolean(item.draft)}
-            isSaving={saveMutation.isPending}
-            isTesting={isTesting}
-            onTest={handleTest}
-            probeResponse={probeResponse}
-          />
+          <DownloadClientFormFooter viewModel={footerViewModel} />
         </form>
       </SettingsAccordionCard>
       <DownloadClientDeleteDialogSlot
@@ -1006,34 +1019,21 @@ function PasswordField({
   );
 }
 
-function DownloadClientFormFooter({
-  canTest,
-  isBusy,
-  isDraft,
-  isSaving,
-  isTesting,
-  onTest,
-  probeResponse,
-}: {
-  canTest: boolean;
-  isBusy: boolean;
-  isDraft: boolean;
-  isSaving: boolean;
-  isTesting: boolean;
-  onTest: () => void;
-  probeResponse: DownloadClientProbeResponse | undefined;
-}) {
+function DownloadClientFormFooter({ viewModel }: { viewModel: DownloadClientFormFooterViewModel }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <p className="min-h-5 text-sm text-muted-foreground">
-        {readFooterSummary(probeResponse, isDraft)}
-      </p>
+      <p className="min-h-5 text-sm text-muted-foreground">{viewModel.summary}</p>
       <div className="flex flex-wrap items-center gap-2">
-        <Button disabled={isBusy || !canTest} onClick={onTest} type="button" variant="outline">
-          {isTesting ? "Testing" : "Test connection"}
+        <Button
+          disabled={viewModel.testButton.disabled}
+          onClick={viewModel.testButton.onClick}
+          type="button"
+          variant="outline"
+        >
+          {viewModel.testButton.label}
         </Button>
-        <Button disabled={isBusy} type="submit">
-          {isSaving ? "Saving" : "Save settings"}
+        <Button disabled={viewModel.saveButton.disabled} type="submit">
+          {viewModel.saveButton.label}
         </Button>
       </div>
     </div>
@@ -1072,6 +1072,37 @@ function readFooterSummary(
   isDraft: boolean,
 ): string {
   return probeResponse?.result.summary ?? (isDraft ? "Save this service before testing." : "");
+}
+
+function createDownloadClientFormFooterViewModel({
+  canTest,
+  isBusy,
+  isDraft,
+  isSaving,
+  isTesting,
+  onTest,
+  probeResponse,
+}: {
+  canTest: boolean;
+  isBusy: boolean;
+  isDraft: boolean;
+  isSaving: boolean;
+  isTesting: boolean;
+  onTest: () => void;
+  probeResponse: DownloadClientProbeResponse | undefined;
+}): DownloadClientFormFooterViewModel {
+  return {
+    summary: readFooterSummary(probeResponse, isDraft),
+    testButton: {
+      disabled: isBusy || !canTest,
+      label: isTesting ? "Testing" : "Test connection",
+      onClick: onTest,
+    },
+    saveButton: {
+      disabled: isBusy,
+      label: isSaving ? "Saving" : "Save settings",
+    },
+  };
 }
 
 function AddServicePill({ onClick }: { onClick: () => void }) {
@@ -1189,9 +1220,6 @@ function DeleteServiceDialog({
       <DialogContent className="rounded-3xl">
         <DialogHeader>
           <DialogTitle>Delete {serviceName}?</DialogTitle>
-          <DialogDescription>
-            This removes this additional service instance. The original service stays available.
-          </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div

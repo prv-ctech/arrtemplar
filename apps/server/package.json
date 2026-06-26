@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "cd ../.. && DATABASE_URL=data/db/arrtemplar-test.sqlite bun test test/apps/server",
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",
-    "db:migrate": "bun src/db/migrate.ts"
+    "db:migrate": "bun src/db/migrate.ts",
+    "db:studio": "drizzle-kit studio --config drizzle.config.ts --host 0.0.0.0 --port 4983"
   },
   "dependencies": {
     "@arrtemplar/shared": "workspace:*",
@@ -26,6 +27,7 @@
     "elysiajs-helmet": "1.0.5"
   },
   "devDependencies": {
+    "@libsql/client": "^0.17.4",
     "drizzle-kit": "^0.31.10",
     "typescript": "^6.0.3"
   },

@@ -32,6 +32,23 @@ import { hashSessionToken } from "./session-token";
 
 type DatabaseTransaction = Parameters<Parameters<DatabaseClient["db"]["transaction"]>[0]>[0];
 type DatabaseReader = DatabaseClient["db"] | DatabaseTransaction;
+type ApiKeyMutationUpdate = Partial<
+  Pick<
+    ApiKey,
+    | "deletedAt"
+    | "fingerprint"
+    | "keyPrefix"
+    | "maskedKey"
+    | "rotatedAt"
+    | "secretHash"
+    | "updatedAt"
+  >
+>;
+type ApiKeyMutation<T> = {
+  apiKey: ApiKey;
+  result: T;
+  values: ApiKeyMutationUpdate;
+};
 
 type ApiKeyFailure = {
   ok: false;
@@ -186,13 +203,12 @@ export class ApiKeyService {
         });
 
         tx.insert(apiKeys).values(apiKey).run();
-        writeApiKeyAuditLog(tx, {
+        writeApiKeyMutationAuditLog(tx, {
           action: "api_keys.created",
           actorUserId: actorResult.actor.id,
+          apiKey,
           context,
           createdAt: now,
-          metadata: buildAuditMetadata(apiKey, context),
-          targetId: apiKey.id,
         });
 
         return apiKey;
@@ -232,30 +248,20 @@ export class ApiKeyService {
     }
 
     try {
-      const result = this.database.db.transaction((tx) => {
-        const existing = readApiKeyById(tx, apiKeyId);
+      const result = this.mutateExistingApiKey({
+        action: "api_keys.deleted",
+        actorUserId: actorResult.actor.id,
+        apiKeyId,
+        context,
+        createMutation: (existing, now) => {
+          const deletedKey: ApiKey = { ...existing, deletedAt: now, updatedAt: now };
 
-        if (!existing || existing.deletedAt) {
-          return null;
-        }
-
-        const now = new Date().toISOString();
-        const deletedKey: ApiKey = { ...existing, deletedAt: now, updatedAt: now };
-
-        tx.update(apiKeys)
-          .set({ deletedAt: now, updatedAt: now })
-          .where(eq(apiKeys.id, apiKeyId))
-          .run();
-        writeApiKeyAuditLog(tx, {
-          action: "api_keys.deleted",
-          actorUserId: actorResult.actor.id,
-          context,
-          createdAt: now,
-          metadata: buildAuditMetadata(deletedKey, context),
-          targetId: existing.id,
-        });
-
-        return this.toApiKeySummary(deletedKey);
+          return {
+            apiKey: deletedKey,
+            result: this.toApiKeySummary(deletedKey),
+            values: { deletedAt: now, updatedAt: now },
+          };
+        },
       });
 
       if (!result) {
@@ -297,42 +303,32 @@ export class ApiKeyService {
     const secretFields = buildApiKeySecretFields(secret);
 
     try {
-      const result = this.database.db.transaction((tx) => {
-        const existing = readApiKeyById(tx, apiKeyId);
-
-        if (!existing || existing.deletedAt) {
-          return null;
-        }
-
-        const now = new Date().toISOString();
-        const rotatedKey: ApiKey = {
-          ...existing,
-          ...secretFields,
-          rotatedAt: now,
-          updatedAt: now,
-        };
-
-        tx.update(apiKeys)
-          .set({
-            secretHash: rotatedKey.secretHash,
-            keyPrefix: rotatedKey.keyPrefix,
-            fingerprint: rotatedKey.fingerprint,
-            maskedKey: rotatedKey.maskedKey,
+      const result = this.mutateExistingApiKey({
+        action: "api_keys.rotated",
+        actorUserId: actorResult.actor.id,
+        apiKeyId,
+        context,
+        createMutation: (existing, now) => {
+          const rotatedKey: ApiKey = {
+            ...existing,
+            ...secretFields,
             rotatedAt: now,
             updatedAt: now,
-          })
-          .where(eq(apiKeys.id, apiKeyId))
-          .run();
-        writeApiKeyAuditLog(tx, {
-          action: "api_keys.rotated",
-          actorUserId: actorResult.actor.id,
-          context,
-          createdAt: now,
-          metadata: buildAuditMetadata(rotatedKey, context),
-          targetId: apiKeyId,
-        });
+          };
 
-        return rotatedKey;
+          return {
+            apiKey: rotatedKey,
+            result: rotatedKey,
+            values: {
+              secretHash: rotatedKey.secretHash,
+              keyPrefix: rotatedKey.keyPrefix,
+              fingerprint: rotatedKey.fingerprint,
+              maskedKey: rotatedKey.maskedKey,
+              rotatedAt: now,
+              updatedAt: now,
+            },
+          };
+        },
       });
 
       if (!result) {
@@ -535,6 +531,36 @@ export class ApiKeyService {
     return this.database.db.select().from(apiKeys).where(eq(apiKeys.id, apiKeyId)).get();
   }
 
+  private mutateExistingApiKey<T>(input: {
+    action: string;
+    actorUserId: string;
+    apiKeyId: string;
+    context: AuthRequestContext;
+    createMutation: (existing: ApiKey, now: string) => ApiKeyMutation<T>;
+  }): T | null {
+    return this.database.db.transaction((tx) => {
+      const existing = readApiKeyById(tx, input.apiKeyId);
+
+      if (!existing || existing.deletedAt) {
+        return null;
+      }
+
+      const now = new Date().toISOString();
+      const mutation = input.createMutation(existing, now);
+
+      updateApiKeyAndWriteMutationAuditLog(tx, {
+        action: input.action,
+        actorUserId: input.actorUserId,
+        apiKey: mutation.apiKey,
+        context: input.context,
+        createdAt: now,
+        values: mutation.values,
+      });
+
+      return mutation.result;
+    });
+  }
+
   private toApiKeySummary(apiKey: ApiKey): ApiKeySummary {
     const createdBy = apiKey.createdByUserId
       ? this.database.db
@@ -723,6 +749,41 @@ function buildAuditMetadata(apiKey: ApiKey, context: AuthRequestContext) {
     keyPrefix: apiKey.keyPrefix,
     path: context.path,
   };
+}
+
+function writeApiKeyMutationAuditLog(
+  tx: DatabaseTransaction,
+  input: {
+    action: string;
+    actorUserId: string;
+    apiKey: ApiKey;
+    context: AuthRequestContext;
+    createdAt: string;
+  },
+): void {
+  writeApiKeyAuditLog(tx, {
+    action: input.action,
+    actorUserId: input.actorUserId,
+    context: input.context,
+    createdAt: input.createdAt,
+    metadata: buildAuditMetadata(input.apiKey, input.context),
+    targetId: input.apiKey.id,
+  });
+}
+
+function updateApiKeyAndWriteMutationAuditLog(
+  tx: DatabaseTransaction,
+  input: {
+    action: string;
+    actorUserId: string;
+    apiKey: ApiKey;
+    context: AuthRequestContext;
+    createdAt: string;
+    values: ApiKeyMutationUpdate;
+  },
+): void {
+  tx.update(apiKeys).set(input.values).where(eq(apiKeys.id, input.apiKey.id)).run();
+  writeApiKeyMutationAuditLog(tx, input);
 }
 
 function writeApiKeyAuditLog(

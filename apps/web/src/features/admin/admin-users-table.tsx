@@ -1,6 +1,5 @@
 import type { AdminUserSummary, PublicUser } from "@arrtemplar/shared";
 import { UserCircleIcon, UserCirclePlusIcon } from "@phosphor-icons/react";
-import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { SettingsMobileDefinition } from "./settings-mobile-definition";
 import {
   settingsTableActionCellClassName,
   settingsTableActionHeaderClassName,
@@ -251,8 +251,7 @@ function AdminUserMobileCard({
     <article className="p-3">
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          <UserIdentityCell username={user.username} />
-          <div className="mt-1 truncate font-mono text-muted-foreground text-xs">{user.id}</div>
+          <AdminUserMobileIdentity userId={user.id} username={user.username} />
         </div>
         <UserRowActions
           actor={actor}
@@ -265,31 +264,35 @@ function AdminUserMobileCard({
         />
       </div>
       <dl className="mt-3 grid gap-2 text-sm">
-        <MobileDefinition label="Auth">
+        <SettingsMobileDefinition label="Auth">
           <AuthMethodBadge method={user.authMethod ?? "local"} />
-        </MobileDefinition>
-        <MobileDefinition label="Permissions">
+        </SettingsMobileDefinition>
+        <SettingsMobileDefinition label="Permissions">
           <UserPermissionSummary permissions={user.permissions} />
-        </MobileDefinition>
-        <MobileDefinition label="Status">
+        </SettingsMobileDefinition>
+        <SettingsMobileDefinition label="Status">
           {user.disabledAt ? "Disabled" : "Active"}
-        </MobileDefinition>
-        <MobileDefinition label="Created">
+        </SettingsMobileDefinition>
+        <SettingsMobileDefinition label="Created">
           {new Date(user.createdAt).toLocaleDateString()}
-        </MobileDefinition>
-        <MobileDefinition label="Updated">
+        </SettingsMobileDefinition>
+        <SettingsMobileDefinition label="Updated">
           {new Date(user.updatedAt).toLocaleDateString()}
-        </MobileDefinition>
+        </SettingsMobileDefinition>
       </dl>
     </article>
   );
 }
 
-function MobileDefinition({ children, label }: { children: ReactNode; label: string }) {
+function AdminUserMobileIdentity({ userId, username }: { userId: string; username: string }) {
   return (
-    <div className="grid gap-1">
-      <dt className="text-muted-foreground text-xs">{label}</dt>
-      <dd className="min-w-0 text-foreground">{children}</dd>
+    <div className="flex min-w-0 items-center gap-2">
+      <UserCircleIcon aria-hidden="true" className="size-4 shrink-0 text-primary" />
+      <span className="truncate font-medium text-foreground">{username}</span>
+      <span aria-hidden="true" className="shrink-0 text-muted-foreground text-xs">
+        |
+      </span>
+      <span className="truncate font-mono text-muted-foreground text-xs">{userId}</span>
     </div>
   );
 }
