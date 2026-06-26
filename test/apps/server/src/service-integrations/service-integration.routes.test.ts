@@ -221,6 +221,102 @@ describe("service integration routes", () => {
     expect(statusBody.result.kind).toBe("prowlarr");
   });
 
+  it("saves, tests, reports status, and lists Jackett and NZBHydra2 configs without secrets", async () => {
+    const { app } = await createTestApp();
+    const adminCookie = await createInitialAdmin(app);
+    const cases = [
+      {
+        kind: "jackett",
+        displayName: "Main Jackett",
+        port: 9,
+        apiKey: "jackett-route-secret",
+      },
+      {
+        kind: "nzbhydra2",
+        displayName: "Main NZBHydra2",
+        port: 9,
+        apiKey: "nzbhydra-route-secret",
+      },
+    ] as const;
+
+    for (const testCase of cases) {
+      const saveResponse = await app.handle(
+        jsonRequest(
+          "PUT",
+          `/api/settings/services/${testCase.kind}`,
+          {
+            displayName: testCase.displayName,
+            enabled: true,
+            useSsl: false,
+            host: "127.0.0.1",
+            port: testCase.port,
+            authMode: "api_key",
+            apiKey: testCase.apiKey,
+          },
+          { cookie: adminCookie },
+        ),
+      );
+      const saveBody = await saveResponse.json();
+      const saveSnapshot = JSON.stringify(saveBody);
+
+      expect(saveResponse.status).toBe(200);
+      expect(saveBody.integration).toMatchObject({
+        id: testCase.kind,
+        kind: testCase.kind,
+        displayName: testCase.displayName,
+        isDefault: true,
+        hasApiKey: true,
+        hasPassword: false,
+      });
+      expect(saveSnapshot).not.toContain(testCase.apiKey);
+
+      const testResponse = await app.handle(
+        jsonRequest(
+          "POST",
+          `/api/settings/services/${testCase.kind}/test`,
+          {},
+          { cookie: adminCookie },
+        ),
+      );
+      const testBody = await testResponse.json();
+
+      expect(testResponse.status).toBe(200);
+      expect(testBody.result.kind).toBe(testCase.kind);
+      expect(["success", "error"]).toContain(testBody.result.outcome);
+      expect(JSON.stringify(testBody)).not.toContain(testCase.apiKey);
+
+      const statusResponse = await app.handle(
+        new Request(`http://localhost/api/settings/services/${testCase.kind}/status`, {
+          headers: { cookie: adminCookie },
+        }),
+      );
+      const statusBody = await statusResponse.json();
+
+      expect(statusResponse.status).toBe(200);
+      expect(statusBody.result.kind).toBe(testCase.kind);
+      expect(["success", "error"]).toContain(statusBody.result.outcome);
+      expect(JSON.stringify(statusBody)).not.toContain(testCase.apiKey);
+    }
+
+    const listResponse = await app.handle(
+      new Request("http://localhost/api/settings/services", {
+        headers: { cookie: adminCookie },
+      }),
+    );
+    const listBody = await listResponse.json();
+    const listSnapshot = JSON.stringify(listBody);
+
+    expect(listResponse.status).toBe(200);
+    expect(listBody.integrations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "jackett", hasApiKey: true }),
+        expect.objectContaining({ kind: "nzbhydra2", hasApiKey: true }),
+      ]),
+    );
+    expect(listSnapshot).not.toContain("jackett-route-secret");
+    expect(listSnapshot).not.toContain("nzbhydra-route-secret");
+  });
+
   it("rejects unsupported Prowlarr auth modes before outbound requests", async () => {
     const { app } = await createTestApp();
     const adminCookie = await createInitialAdmin(app);
@@ -250,6 +346,39 @@ describe("service integration routes", () => {
       code: "configuration_incomplete",
       message: "Prowlarr only supports API key authentication.",
     });
+  });
+
+  it("rejects unsupported Jackett and NZBHydra2 auth modes", async () => {
+    const { app } = await createTestApp();
+    const adminCookie = await createInitialAdmin(app);
+
+    for (const kind of ["jackett", "nzbhydra2"] as const) {
+      const saveResponse = await app.handle(
+        jsonRequest(
+          "PUT",
+          `/api/settings/services/${kind}`,
+          {
+            displayName: kind,
+            enabled: true,
+            useSsl: false,
+            host: "127.0.0.1",
+            port: kind === "jackett" ? 9117 : 5076,
+            authMode: "username_password",
+            username: "admin",
+            password: "secret",
+          },
+          { cookie: adminCookie },
+        ),
+      );
+      const saveBody = await saveResponse.json();
+
+      expect(saveResponse.status).toBe(422);
+      expect(saveBody.error.fieldErrors).toContainEqual({
+        field: "authMode",
+        code: "configuration_incomplete",
+        message: `${kind === "jackett" ? "Jackett" : "NZBHydra2"} only supports API key authentication.`,
+      });
+    }
   });
 
   it("returns unavailable status for unconfigured services and checks saved services", async () => {

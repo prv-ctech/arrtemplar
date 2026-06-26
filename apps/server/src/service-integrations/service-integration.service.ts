@@ -20,6 +20,16 @@ import {
   decryptServiceIntegrationSecret,
   encryptServiceIntegrationSecret,
 } from "../security/oauth-crypto";
+import {
+  type JackettClientConfig,
+  type JackettProbeResponse,
+  probeJackettClient,
+} from "./jackett-client";
+import {
+  type Nzbhydra2ClientConfig,
+  type Nzbhydra2ProbeResponse,
+  probeNzbhydra2Client,
+} from "./nzbhydra2-client";
 import { buildServiceIntegrationBaseUrl } from "./outbound-request-policy";
 import {
   type ProwlarrClientConfig,
@@ -47,6 +57,8 @@ type ServiceIntegrationProbers = {
   qbittorrent: (config: QbittorrentClientConfig) => Promise<QbittorrentProbeResult>;
   sabnzbd: (config: SabnzbdClientSettings) => Promise<SabnzbdClientProbeResponse>;
   prowlarr: (config: ProwlarrClientConfig) => Promise<ProwlarrProbeResponse>;
+  jackett: (config: JackettClientConfig) => Promise<JackettProbeResponse>;
+  nzbhydra2: (config: Nzbhydra2ClientConfig) => Promise<Nzbhydra2ProbeResponse>;
 };
 
 type ServiceIntegrationServiceOptions = {
@@ -59,13 +71,20 @@ type ResolvedSecrets = {
   password: string | null;
 };
 
-type ResolvedProbeConfig = QbittorrentClientConfig | SabnzbdClientSettings | ProwlarrClientConfig;
+type ResolvedProbeConfig =
+  | QbittorrentClientConfig
+  | SabnzbdClientSettings
+  | ProwlarrClientConfig
+  | JackettClientConfig
+  | Nzbhydra2ClientConfig;
 
 const maxServiceIntegrationInstancesPerKind = 10;
 const defaultServiceIntegrationIdByKind = {
   qbittorrent: "qbittorrent",
   sabnzbd: "sabnzbd",
   prowlarr: "prowlarr",
+  jackett: "jackett",
+  nzbhydra2: "nzbhydra2",
 } satisfies Record<ServiceIntegrationKind, string>;
 
 export class ServiceIntegrationService {
@@ -79,6 +98,8 @@ export class ServiceIntegrationService {
       qbittorrent: options.probers?.qbittorrent ?? probeQbittorrentClient,
       sabnzbd: options.probers?.sabnzbd ?? probeSabnzbdClient,
       prowlarr: options.probers?.prowlarr ?? probeProwlarrClient,
+      jackett: options.probers?.jackett ?? probeJackettClient,
+      nzbhydra2: options.probers?.nzbhydra2 ?? probeNzbhydra2Client,
     };
   }
 
@@ -530,18 +551,19 @@ export class ServiceIntegrationService {
       return { ok: false, status: 422, body: validationError(baseUrlValidation.error) };
     }
 
-    if (kind === "prowlarr" && input.authMode !== "api_key") {
+    if (isApiKeyOnlyServiceKind(kind) && input.authMode !== "api_key") {
+      const serviceLabel = readServiceLabel(kind);
       return {
         ok: false,
         status: 422,
         body: validationError({
           code: "configuration_incomplete",
-          message: "Prowlarr only supports API key authentication.",
+          message: `${serviceLabel} only supports API key authentication.`,
           fieldErrors: [
             {
               field: "authMode",
               code: "configuration_incomplete",
-              message: "Prowlarr only supports API key authentication.",
+              message: `${serviceLabel} only supports API key authentication.`,
             },
           ],
         }),
@@ -699,6 +721,10 @@ export class ServiceIntegrationService {
         return await this.probers.sabnzbd(config as SabnzbdClientSettings);
       case "prowlarr":
         return await this.probers.prowlarr(config as ProwlarrClientConfig);
+      case "jackett":
+        return await this.probers.jackett(config as JackettClientConfig);
+      case "nzbhydra2":
+        return await this.probers.nzbhydra2(config as Nzbhydra2ClientConfig);
     }
   }
 
@@ -895,7 +921,15 @@ function readServiceLabel(kind: ServiceIntegrationKind): string {
       return "SABnzbd";
     case "prowlarr":
       return "Prowlarr";
+    case "jackett":
+      return "Jackett";
+    case "nzbhydra2":
+      return "NZBHydra2";
   }
+}
+
+function isApiKeyOnlyServiceKind(kind: ServiceIntegrationKind): boolean {
+  return kind === "prowlarr" || kind === "jackett" || kind === "nzbhydra2";
 }
 
 function normalizeDisplayName(

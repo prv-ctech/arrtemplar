@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import type { DatabaseClient } from "../../../../../apps/server/src/db/client";
 import { serviceIntegrations } from "../../../../../apps/server/src/db/schema";
+import type { JackettProbeResponse } from "../../../../../apps/server/src/service-integrations/jackett-client";
+import type { Nzbhydra2ProbeResponse } from "../../../../../apps/server/src/service-integrations/nzbhydra2-client";
 import type { ProwlarrProbeResponse } from "../../../../../apps/server/src/service-integrations/prowlarr-client";
 import type { QbittorrentProbeResult } from "../../../../../apps/server/src/service-integrations/qbittorrent-client";
 import type { SabnzbdClientProbeResponse } from "../../../../../apps/server/src/service-integrations/sabnzbd-client";
@@ -13,6 +15,8 @@ describe("ServiceIntegrationService", () => {
   afterEach(() => {
     mockState.database?.close();
     mockState.database = null;
+    mockState.jackettCalls = [];
+    mockState.nzbhydra2Calls = [];
     mockState.prowlarrCalls = [];
     mockState.qbittorrentCalls = [];
     mockState.sabnzbdCalls = [];
@@ -219,6 +223,161 @@ describe("ServiceIntegrationService", () => {
     expect(stored?.lastTestedAt).toEqual(expect.any(String));
   });
 
+  it("dispatches Jackett and NZBHydra2 probes with decrypted API keys only", async () => {
+    const database = await openDatabase();
+    const service = createService(database);
+
+    const cases = [
+      {
+        kind: "jackett" as const,
+        displayName: "Main Jackett",
+        host: "jackett.local",
+        port: 9117,
+        apiKey: "jackett-secret",
+        calls: mockState.jackettCalls,
+      },
+      {
+        kind: "nzbhydra2" as const,
+        displayName: "Main NZBHydra2",
+        host: "nzbhydra.local",
+        port: 5076,
+        apiKey: "nzbhydra-secret",
+        calls: mockState.nzbhydra2Calls,
+      },
+    ];
+
+    for (const testCase of cases) {
+      const saveResult = await service.upsertConfig(testCase.kind, {
+        displayName: testCase.displayName,
+        enabled: true,
+        useSsl: false,
+        host: testCase.host,
+        port: testCase.port,
+        authMode: "api_key",
+        apiKey: testCase.apiKey,
+      });
+
+      expect(saveResult.ok).toBe(true);
+      if (!saveResult.ok) {
+        throw new Error(`Expected ${testCase.kind} config to save.`);
+      }
+
+      expect(saveResult.body.integration).toMatchObject({
+        id: testCase.kind,
+        kind: testCase.kind,
+        displayName: testCase.displayName,
+        hasApiKey: true,
+        hasPassword: false,
+      });
+      expect(JSON.stringify(saveResult.body)).not.toContain(testCase.apiKey);
+
+      const testResult = await service.testConfig(testCase.kind);
+
+      expect(testResult.ok).toBe(true);
+      if (!testResult.ok) {
+        throw new Error(`Expected ${testCase.kind} probe to succeed.`);
+      }
+
+      expect(testCase.calls).toHaveLength(1);
+      expect(testCase.calls[0]?.apiKey).toBe(testCase.apiKey);
+      expect(testResult.body.result).toMatchObject({
+        kind: testCase.kind,
+        outcome: "success",
+        reachable: true,
+        authenticated: true,
+        compatible: true,
+      });
+    }
+  });
+
+  it("creates named Jackett and NZBHydra2 instances without replacing defaults", async () => {
+    const database = await openDatabase();
+    const service = createService(database);
+
+    for (const kind of ["jackett", "nzbhydra2"] as const) {
+      await service.upsertConfig(kind, {
+        displayName: `Main ${kind}`,
+        enabled: true,
+        useSsl: false,
+        host: `${kind}.local`,
+        port: kind === "jackett" ? 9117 : 5076,
+        authMode: "api_key",
+        apiKey: `${kind}-secret`,
+      });
+
+      const additional = await service.createConfig(kind, {
+        displayName: `Backup ${kind}`,
+        enabled: true,
+        useSsl: false,
+        host: `${kind}-backup.local`,
+        port: kind === "jackett" ? 9118 : 5077,
+        authMode: "api_key",
+        apiKey: `${kind}-backup-secret`,
+      });
+
+      expect(additional.ok).toBe(true);
+      if (!additional.ok) {
+        throw new Error(`Expected additional ${kind} config to save.`);
+      }
+    }
+
+    const configs = service.listConfigs().integrations;
+
+    for (const kind of ["jackett", "nzbhydra2"] as const) {
+      const kindConfigs = configs.filter((config) => config.kind === kind);
+
+      expect(kindConfigs).toHaveLength(2);
+      expect(kindConfigs.find((config) => config.isDefault)).toMatchObject({
+        id: kind,
+        displayName: `Main ${kind}`,
+      });
+      expect(kindConfigs.find((config) => !config.isDefault)).toMatchObject({
+        displayName: `Backup ${kind}`,
+      });
+    }
+  });
+
+  it("persists test and status metadata for Jackett and NZBHydra2", async () => {
+    const database = await openDatabase();
+    const service = createService(database);
+
+    await service.upsertConfig("jackett", {
+      displayName: "Jackett",
+      enabled: true,
+      useSsl: false,
+      host: "jackett.local",
+      port: 9117,
+      authMode: "api_key",
+      apiKey: "jackett-secret",
+    });
+    await service.upsertConfig("nzbhydra2", {
+      displayName: "NZBHydra2",
+      enabled: true,
+      useSsl: false,
+      host: "nzbhydra.local",
+      port: 5076,
+      authMode: "api_key",
+      apiKey: "nzbhydra-secret",
+    });
+
+    const jackettTest = await service.testConfig("jackett");
+    const nzbhydraStatus = await service.getStatus("nzbhydra2");
+
+    expect(jackettTest.ok).toBe(true);
+    expect(nzbhydraStatus.ok).toBe(true);
+
+    const storedRows = database.db.select().from(serviceIntegrations).all();
+    const jackett = storedRows.find((entry) => entry.kind === "jackett");
+    const nzbhydra2 = storedRows.find((entry) => entry.kind === "nzbhydra2");
+
+    expect(jackett?.lastTestOutcome).toBe("success");
+    expect(jackett?.lastTestMessage).toBe("Connected to Jackett. Configured indexers: 2.");
+    expect(jackett?.lastTestedAt).toEqual(expect.any(String));
+    expect(nzbhydra2?.lastStatusOutcome).toBe("success");
+    expect(nzbhydra2?.lastStatusMessage).toBe("Connected to NZBHydra2 7.13.0.");
+    expect(nzbhydra2?.lastStatusCheckedAt).toEqual(expect.any(String));
+  });
+
   it("rejects username/password auth for Prowlarr before probing", async () => {
     const database = await openDatabase();
     const service = createService(database);
@@ -247,15 +406,52 @@ describe("ServiceIntegrationService", () => {
     });
     expect(mockState.prowlarrCalls).toHaveLength(0);
   });
+
+  it("rejects username/password auth for Jackett and NZBHydra2 before probing", async () => {
+    const database = await openDatabase();
+    const service = createService(database);
+
+    for (const kind of ["jackett", "nzbhydra2"] as const) {
+      const result = await service.upsertConfig(kind, {
+        displayName: kind,
+        enabled: true,
+        useSsl: false,
+        host: `${kind}.local`,
+        port: kind === "jackett" ? 9117 : 5076,
+        authMode: "username_password",
+        username: "admin",
+        password: "secret",
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        throw new Error(`Expected ${kind} validation to fail.`);
+      }
+
+      expect(result.status).toBe(422);
+      expect(result.body.error.fieldErrors).toContainEqual({
+        field: "authMode",
+        code: "configuration_incomplete",
+        message: `${kind === "jackett" ? "Jackett" : "NZBHydra2"} only supports API key authentication.`,
+      });
+    }
+
+    expect(mockState.jackettCalls).toHaveLength(0);
+    expect(mockState.nzbhydra2Calls).toHaveLength(0);
+  });
 });
 
 const mockState: {
   database: DatabaseClient | null;
+  jackettCalls: Array<Record<string, unknown>>;
+  nzbhydra2Calls: Array<Record<string, unknown>>;
   prowlarrCalls: Array<Record<string, unknown>>;
   qbittorrentCalls: Array<Record<string, unknown>>;
   sabnzbdCalls: Array<Record<string, unknown>>;
 } = {
   database: null,
+  jackettCalls: [],
+  nzbhydra2Calls: [],
   prowlarrCalls: [],
   qbittorrentCalls: [],
   sabnzbdCalls: [],
@@ -271,6 +467,14 @@ function createService(database: DatabaseClient): ServiceIntegrationService {
   return new ServiceIntegrationService(database, {
     secretEncryptionKey,
     probers: {
+      jackett: async (config) => {
+        mockState.jackettCalls.push(config as Record<string, unknown>);
+        return successJackettProbe();
+      },
+      nzbhydra2: async (config) => {
+        mockState.nzbhydra2Calls.push(config as Record<string, unknown>);
+        return successNzbhydra2Probe();
+      },
       prowlarr: async (config) => {
         mockState.prowlarrCalls.push(config as Record<string, unknown>);
         return successProwlarrProbe();
@@ -285,6 +489,46 @@ function createService(database: DatabaseClient): ServiceIntegrationService {
       },
     },
   });
+}
+
+function successJackettProbe(): JackettProbeResponse {
+  return {
+    ok: true,
+    result: {
+      kind: "jackett",
+      configured: true,
+      enabled: true,
+      outcome: "success",
+      summary: "Connected to Jackett. Configured indexers: 2.",
+      checkedAt: new Date().toISOString(),
+      reachable: true,
+      authenticated: true,
+      compatible: true,
+      version: null,
+      webApiVersion: null,
+      connectionState: "connected",
+    },
+  };
+}
+
+function successNzbhydra2Probe(): Nzbhydra2ProbeResponse {
+  return {
+    ok: true,
+    result: {
+      kind: "nzbhydra2",
+      configured: true,
+      enabled: true,
+      outcome: "success",
+      summary: "Connected to NZBHydra2 7.13.0.",
+      checkedAt: new Date().toISOString(),
+      reachable: true,
+      authenticated: true,
+      compatible: true,
+      version: "7.13.0",
+      webApiVersion: null,
+      connectionState: "connected",
+    },
+  };
 }
 
 function successQbittorrentProbe(): QbittorrentProbeResult {

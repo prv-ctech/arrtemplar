@@ -6,7 +6,11 @@ import {
   normalizeApiKeyListResponse,
   normalizeNotificationHistoryListResponse,
 } from "../../../../../apps/web/src/lib/api";
-import { CSRF_HEADER_NAME, CSRF_HEADER_VALUE } from "../../../../../packages/shared/src";
+import {
+  CSRF_HEADER_NAME,
+  CSRF_HEADER_VALUE,
+  isServiceIntegrationKind,
+} from "../../../../../packages/shared/src";
 
 const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../../");
 const apiSourcePath = `${workspaceRoot}/apps/web/src/lib/api.ts`;
@@ -209,6 +213,11 @@ describe("service integration api client", () => {
     expect(source).toContain("isServiceIntegrationKind");
     expect(source).toContain("isServiceIntegrationAuthMode");
     expect(source).toContain("isServiceIntegrationProbeOutcome");
+  });
+
+  it("accepts Jackett and NZBHydra2 service kinds", () => {
+    expect(isServiceIntegrationKind("jackett")).toBe(true);
+    expect(isServiceIntegrationKind("nzbhydra2")).toBe(true);
   });
 });
 

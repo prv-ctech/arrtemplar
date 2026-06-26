@@ -56,6 +56,10 @@ describe("app settings layout", () => {
     expect(source).toContain("/services/qbittorrent.svg");
     expect(source).toContain("/services/sabnzbd.svg");
     expect(source).toContain("/services/prowlarr.svg");
+    expect(source).toContain("/services/jackett.svg");
+    expect(source).toContain("/services/nzbhydra2.svg");
+    expect(source).toContain('kind: "jackett"');
+    expect(source).toContain('kind: "nzbhydra2"');
     expect(source).toContain("SettingsAccordionCard");
     expect(source).toContain("Service name");
     expect(source).toContain("Add another service");
@@ -74,6 +78,10 @@ describe("app settings layout", () => {
     expect(source).toContain("Connected");
     expect(source).toContain("Not configured");
     expect(source).toContain("useState(false)");
+    expect(source).toContain("serviceIntegrationCardColumns");
+    expect(source).toContain("contents min-w-0 xl:block xl:space-y-4");
+    expect(source).toContain("xl:items-start");
+    expect(source).toContain("style={{ order: mobileOrder }}");
     expect(source).not.toContain("ServiceEnabledToggle");
     expect(source).not.toContain("Enable service integration");
     expect(source).not.toContain("This settings section is scaffolded");

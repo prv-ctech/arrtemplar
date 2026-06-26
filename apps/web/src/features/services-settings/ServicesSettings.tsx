@@ -122,6 +122,33 @@ const serviceIntegrationCards: readonly ServiceIntegrationCardDefinition[] = [
     logoPath: "/services/prowlarr.svg",
     authModeOptions: [{ label: "API key", value: "api_key" }],
   },
+  {
+    kind: "jackett",
+    title: "Jackett",
+    logoPath: "/services/jackett.svg",
+    authModeOptions: [{ label: "API key", value: "api_key" }],
+  },
+  {
+    kind: "nzbhydra2",
+    title: "NZBHydra2",
+    logoPath: "/services/nzbhydra2.svg",
+    authModeOptions: [{ label: "API key", value: "api_key" }],
+  },
+] as const;
+
+const serviceIntegrationCardColumns = [
+  {
+    key: "primary-services",
+    items: serviceIntegrationCards
+      .filter((_, index) => index % 2 === 0)
+      .map((card, mobileOrder) => ({ card, mobileOrder: mobileOrder * 2 })),
+  },
+  {
+    key: "secondary-services",
+    items: serviceIntegrationCards
+      .filter((_, index) => index % 2 === 1)
+      .map((card, mobileOrder) => ({ card, mobileOrder: mobileOrder * 2 + 1 })),
+  },
 ] as const;
 
 const compactServiceIntegrationFieldClassName =
@@ -215,17 +242,23 @@ export function ServicesSettings() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        {serviceIntegrationCards.map((card) => (
-          <div className="min-w-0 space-y-3" key={card.kind}>
-            {createServiceItems(card, configsByKind.get(card.kind) ?? [], drafts).map((item) => (
-              <ServiceIntegrationCard
-                item={item}
-                key={item.key}
-                notificationPreferences={actor.notificationPreferences}
-                onDraftRemoved={removeDraft}
-                onDraftSaved={removeDraft}
-              />
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:items-start">
+        {serviceIntegrationCardColumns.map((column) => (
+          <div className="contents min-w-0 xl:block xl:space-y-4" key={column.key}>
+            {column.items.map(({ card, mobileOrder }) => (
+              <div className="min-w-0 space-y-3" key={card.kind} style={{ order: mobileOrder }}>
+                {createServiceItems(card, configsByKind.get(card.kind) ?? [], drafts).map(
+                  (item) => (
+                    <ServiceIntegrationCard
+                      item={item}
+                      key={item.key}
+                      notificationPreferences={actor.notificationPreferences}
+                      onDraftRemoved={removeDraft}
+                      onDraftSaved={removeDraft}
+                    />
+                  ),
+                )}
+              </div>
             ))}
           </div>
         ))}
@@ -351,7 +384,7 @@ function useServiceIntegrationCardController({
   }
 
   function handleTestSuccess(result: ServiceIntegrationProbeResponse) {
-    applyProbeResultStatus(result, setStatusMessage, setErrorMessage);
+    setErrorMessage(result.error?.fieldErrors?.[0]?.message ?? result.error?.message ?? null);
     notify(
       {
         id: "services.tested",
@@ -472,15 +505,6 @@ function readCardTitle(
   card: ServiceIntegrationCardDefinition,
 ): string {
   return form.displayName.trim() || card.title;
-}
-
-function applyProbeResultStatus(
-  result: ServiceIntegrationProbeResponse,
-  setStatusMessage: (message: string | null) => void,
-  setErrorMessage: (message: string | null) => void,
-) {
-  setStatusMessage(result.result.summary);
-  setErrorMessage(result.error?.fieldErrors?.[0]?.message ?? result.error?.message ?? null);
 }
 
 function readTestErrorMessage(error: Error, title: string): string {

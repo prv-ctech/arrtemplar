@@ -1,4 +1,10 @@
-export const SERVICE_INTEGRATION_KIND_VALUES = ["qbittorrent", "sabnzbd", "prowlarr"] as const;
+export const SERVICE_INTEGRATION_KIND_VALUES = [
+  "qbittorrent",
+  "sabnzbd",
+  "prowlarr",
+  "jackett",
+  "nzbhydra2",
+] as const;
 
 export type ServiceIntegrationKind = (typeof SERVICE_INTEGRATION_KIND_VALUES)[number];
 
