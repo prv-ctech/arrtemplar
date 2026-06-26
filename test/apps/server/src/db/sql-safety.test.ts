@@ -43,10 +43,13 @@ describe("server SQL safety", () => {
     const clientSource = await Bun.file(`${serverSourceRoot}/db/client.ts`).text();
     const schemaSource = await Bun.file(`${serverSourceRoot}/db/schema.ts`).text();
 
-    expect(clientSource).toContain('sqlite.run("PRAGMA foreign_keys = ON")');
-    expect(clientSource).toContain('sqlite.run("PRAGMA journal_mode = WAL")');
-    expect(clientSource).toContain('sqlite.run("PRAGMA busy_timeout = 5000")');
-    expect(clientSource).toContain('sqlite.run("PRAGMA synchronous = NORMAL")');
+    expect(clientSource).toContain('"PRAGMA foreign_keys = ON"');
+    expect(clientSource).toContain('"PRAGMA journal_mode = WAL"');
+    expect(clientSource).toContain('"PRAGMA busy_timeout = 5000"');
+    expect(clientSource).toContain('"PRAGMA synchronous = NORMAL"');
+    expect(clientSource).toContain('"PRAGMA trusted_schema = OFF"');
+    expect(clientSource).toContain('sqlite.run("PRAGMA optimize=0x10002")');
+    expect(clientSource).toContain('sqlite.run("PRAGMA optimize")');
     expect(clientSource).not.toMatch(/sqlite\.run\s*\(\s*`[^`]*\$\{/);
     expect(schemaSource).toContain("sql<string>`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`");
   });

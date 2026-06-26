@@ -20,64 +20,42 @@ import { type InferInsertModel, type InferSelectModel, sql } from "drizzle-orm";
 import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 const timestampNow = sql<string>`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`;
+type NonEmptyEnum<T extends string> = [T, ...T[]];
+
+function nonEmptyEnum<T extends string>(values: readonly T[]): NonEmptyEnum<T> {
+  if (values.length === 0) {
+    throw new Error("Drizzle enum values must not be empty.");
+  }
+
+  return [...values] as NonEmptyEnum<T>;
+}
+
+function createdAtColumn() {
+  return text("created_at").notNull().default(timestampNow);
+}
+
+function timestampColumns() {
+  return {
+    createdAt: createdAtColumn(),
+    updatedAt: text("updated_at").notNull().default(timestampNow),
+  };
+}
 
 export const userPermissions = USER_PERMISSION_VALUES;
-const userPermissionEnum = [...userPermissions] as [
-  (typeof userPermissions)[number],
-  ...(typeof userPermissions)[number][],
-];
-const authMethodEnum = [...AUTH_METHOD_VALUES] as [
-  (typeof AUTH_METHOD_VALUES)[number],
-  ...(typeof AUTH_METHOD_VALUES)[number][],
-];
-const authProviderSlugEnum = [...AUTH_PROVIDER_SLUGS] as [
-  (typeof AUTH_PROVIDER_SLUGS)[number],
-  ...(typeof AUTH_PROVIDER_SLUGS)[number][],
-];
-const authProviderKindEnum = [...AUTH_PROVIDER_KIND_VALUES] as [
-  (typeof AUTH_PROVIDER_KIND_VALUES)[number],
-  ...(typeof AUTH_PROVIDER_KIND_VALUES)[number][],
-];
-const tokenEndpointAuthMethodEnum = [...TOKEN_ENDPOINT_AUTH_METHOD_VALUES] as [
-  (typeof TOKEN_ENDPOINT_AUTH_METHOD_VALUES)[number],
-  ...(typeof TOKEN_ENDPOINT_AUTH_METHOD_VALUES)[number][],
-];
-const oidcSigningAlgorithmEnum = [...OIDC_SIGNING_ALGORITHM_VALUES] as [
-  (typeof OIDC_SIGNING_ALGORITHM_VALUES)[number],
-  ...(typeof OIDC_SIGNING_ALGORITHM_VALUES)[number][],
-];
-const oidcProfileSigningAlgorithmEnum = [...OIDC_PROFILE_SIGNING_ALGORITHM_VALUES] as [
-  (typeof OIDC_PROFILE_SIGNING_ALGORITHM_VALUES)[number],
-  ...(typeof OIDC_PROFILE_SIGNING_ALGORITHM_VALUES)[number][],
-];
-const notificationFrequencyEnum = [...NOTIFICATION_FREQUENCY_VALUES] as [
-  (typeof NOTIFICATION_FREQUENCY_VALUES)[number],
-  ...(typeof NOTIFICATION_FREQUENCY_VALUES)[number][],
-];
-const downloadClientKindEnum = [...DOWNLOAD_CLIENT_KIND_VALUES] as [
-  (typeof DOWNLOAD_CLIENT_KIND_VALUES)[number],
-  ...(typeof DOWNLOAD_CLIENT_KIND_VALUES)[number][],
-];
-const downloadClientAuthModeEnum = [...DOWNLOAD_CLIENT_AUTH_MODE_VALUES] as [
-  (typeof DOWNLOAD_CLIENT_AUTH_MODE_VALUES)[number],
-  ...(typeof DOWNLOAD_CLIENT_AUTH_MODE_VALUES)[number][],
-];
-const downloadClientProbeOutcomeEnum = [...DOWNLOAD_CLIENT_PROBE_OUTCOME_VALUES] as [
-  (typeof DOWNLOAD_CLIENT_PROBE_OUTCOME_VALUES)[number],
-  ...(typeof DOWNLOAD_CLIENT_PROBE_OUTCOME_VALUES)[number][],
-];
-const toastNotificationIdEnum = [...TOAST_NOTIFICATION_EVENT_IDS] as [
-  (typeof TOAST_NOTIFICATION_EVENT_IDS)[number],
-  ...(typeof TOAST_NOTIFICATION_EVENT_IDS)[number][],
-];
-const toastNotificationSeverityEnum = [...TOAST_NOTIFICATION_SEVERITY_VALUES] as [
-  (typeof TOAST_NOTIFICATION_SEVERITY_VALUES)[number],
-  ...(typeof TOAST_NOTIFICATION_SEVERITY_VALUES)[number][],
-];
-const toastNotificationImportanceEnum = [...TOAST_NOTIFICATION_IMPORTANCE_VALUES] as [
-  (typeof TOAST_NOTIFICATION_IMPORTANCE_VALUES)[number],
-  ...(typeof TOAST_NOTIFICATION_IMPORTANCE_VALUES)[number][],
-];
+const userPermissionEnum = nonEmptyEnum(userPermissions);
+const authMethodEnum = nonEmptyEnum(AUTH_METHOD_VALUES);
+const authProviderSlugEnum = nonEmptyEnum(AUTH_PROVIDER_SLUGS);
+const authProviderKindEnum = nonEmptyEnum(AUTH_PROVIDER_KIND_VALUES);
+const tokenEndpointAuthMethodEnum = nonEmptyEnum(TOKEN_ENDPOINT_AUTH_METHOD_VALUES);
+const oidcSigningAlgorithmEnum = nonEmptyEnum(OIDC_SIGNING_ALGORITHM_VALUES);
+const oidcProfileSigningAlgorithmEnum = nonEmptyEnum(OIDC_PROFILE_SIGNING_ALGORITHM_VALUES);
+const notificationFrequencyEnum = nonEmptyEnum(NOTIFICATION_FREQUENCY_VALUES);
+const downloadClientKindEnum = nonEmptyEnum(DOWNLOAD_CLIENT_KIND_VALUES);
+const downloadClientAuthModeEnum = nonEmptyEnum(DOWNLOAD_CLIENT_AUTH_MODE_VALUES);
+const downloadClientProbeOutcomeEnum = nonEmptyEnum(DOWNLOAD_CLIENT_PROBE_OUTCOME_VALUES);
+const toastNotificationIdEnum = nonEmptyEnum(TOAST_NOTIFICATION_EVENT_IDS);
+const toastNotificationSeverityEnum = nonEmptyEnum(TOAST_NOTIFICATION_SEVERITY_VALUES);
+const toastNotificationImportanceEnum = nonEmptyEnum(TOAST_NOTIFICATION_IMPORTANCE_VALUES);
 
 function permissionGrantMetadataColumns() {
   return {
@@ -86,8 +64,7 @@ function permissionGrantMetadataColumns() {
     grantedByUserId: text("granted_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
-    createdAt: text("created_at").notNull().default(timestampNow),
-    updatedAt: text("updated_at").notNull().default(timestampNow),
+    ...timestampColumns(),
   };
 }
 
@@ -111,8 +88,7 @@ export const users = sqliteTable(
     authMethod: text("auth_method", { enum: authMethodEnum }).notNull().default("local"),
     passwordHash: text("password_hash").notNull(),
     disabledAt: text("disabled_at"),
-    createdAt: text("created_at").notNull().default(timestampNow),
-    updatedAt: text("updated_at").notNull().default(timestampNow),
+    ...timestampColumns(),
     lastLoginAt: text("last_login_at"),
   },
   (table) => [
@@ -160,8 +136,7 @@ export const authProviders = sqliteTable(
       .notNull()
       .default(false),
     mobileRedirectUri: text("mobile_redirect_uri"),
-    createdAt: text("created_at").notNull().default(timestampNow),
-    updatedAt: text("updated_at").notNull().default(timestampNow),
+    ...timestampColumns(),
   },
   (table) => [uniqueIndex("auth_providers_slug_unique").on(table.slug)],
 );
@@ -179,7 +154,7 @@ export const authIdentities = sqliteTable(
     preferredUsername: text("preferred_username"),
     name: text("name"),
     email: text("email"),
-    createdAt: text("created_at").notNull().default(timestampNow),
+    createdAt: createdAtColumn(),
   },
   (table) => [
     uniqueIndex("auth_identities_provider_issuer_subject_unique").on(
@@ -204,10 +179,10 @@ export const notificationHistory = sqliteTable(
     severity: text("severity", { enum: toastNotificationSeverityEnum }).notNull(),
     importance: text("importance", { enum: toastNotificationImportanceEnum }).notNull(),
     readAt: text("read_at"),
-    createdAt: text("created_at").notNull().default(timestampNow),
+    createdAt: createdAtColumn(),
   },
   (table) => [
-    index("notification_history_user_created_at_idx").on(table.userId, table.createdAt),
+    index("notification_history_user_created_at_idx").on(table.userId, sql`created_at DESC`),
     index("notification_history_user_unread_idx").on(table.userId, table.readAt),
   ],
 );
@@ -242,7 +217,7 @@ export const sessions = sqliteTable(
     oauthIdTokenEncrypted: text("oauth_id_token_encrypted"),
     oauthMasterKeyId: text("oauth_master_key_id"),
     oauthSid: text("oauth_sid"),
-    createdAt: text("created_at").notNull().default(timestampNow),
+    createdAt: createdAtColumn(),
   },
   (table) => [
     uniqueIndex("sessions_token_hash_unique").on(table.tokenHash),
@@ -270,14 +245,12 @@ export const apiKeys = sqliteTable(
     lastUsedUserAgent: text("last_used_user_agent"),
     rotatedAt: text("rotated_at"),
     deletedAt: text("deleted_at"),
-    createdAt: text("created_at").notNull().default(timestampNow),
-    updatedAt: text("updated_at").notNull().default(timestampNow),
+    ...timestampColumns(),
   },
   (table) => [
     uniqueIndex("api_keys_secret_hash_unique").on(table.secretHash),
     index("api_keys_created_by_user_id_idx").on(table.createdByUserId),
     index("api_keys_deleted_at_idx").on(table.deletedAt),
-    index("api_keys_name_idx").on(table.name),
   ],
 );
 
@@ -304,12 +277,13 @@ export const downloadClients = sqliteTable(
     lastStatusCheckedAt: text("last_status_checked_at"),
     lastStatusOutcome: text("last_status_outcome", { enum: downloadClientProbeOutcomeEnum }),
     lastStatusMessage: text("last_status_message"),
-    createdAt: text("created_at").notNull().default(timestampNow),
-    updatedAt: text("updated_at").notNull().default(timestampNow),
+    ...timestampColumns(),
   },
   (table) => [
     index("download_clients_kind_idx").on(table.kind),
-    index("download_clients_enabled_idx").on(table.enabled),
+    uniqueIndex("download_clients_default_kind_unique")
+      .on(table.kind)
+      .where(sql`${table.isDefault} = 1`),
   ],
 );
 
@@ -323,7 +297,7 @@ export const auditLogs = sqliteTable(
     targetId: text("target_id"),
     metadataJson: text("metadata_json"),
     ipAddress: text("ip_address"),
-    createdAt: text("created_at").notNull().default(timestampNow),
+    createdAt: createdAtColumn(),
   },
   (table) => [
     index("audit_logs_actor_user_id_idx").on(table.actorUserId),

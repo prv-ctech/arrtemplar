@@ -4,7 +4,7 @@ import { $ } from "bun";
 import { createSessionExpiresAt } from "../../../../../apps/server/src/auth/session-token";
 import { resolveWorkspacePath } from "../../../../../apps/server/src/config/database-paths";
 import { readRuntimeEnv } from "../../../../../apps/server/src/config/env";
-import type { DatabaseClient } from "../../../../../apps/server/src/db/client";
+import { createDatabase, type DatabaseClient } from "../../../../../apps/server/src/db/client";
 import { sessions, users } from "../../../../../apps/server/src/db/schema";
 import { configureServerLogging } from "../../../../../apps/server/src/logging/config";
 import { APP_LOG_CATEGORY } from "../../../../../packages/shared/src";
@@ -18,15 +18,143 @@ import {
 let database: DatabaseClient | null = null;
 const testLogPath = "data/logs/drizzle-client-test.jsonl";
 const resolvedTestLogPath = resolveWorkspacePath(testLogPath);
+const lifecycleTestDatabaseUrl = "data/db/arrtemplar-client-lifecycle-test.sqlite";
+const fileUriTestDatabaseUrl = "data/db/arrtemplar-client-file-uri-test.sqlite";
+const absolutePathTestDatabaseUrl = "data/db/arrtemplar-client-absolute-test.sqlite";
+const clientTestDatabaseFiles = [
+  resolveWorkspacePath(lifecycleTestDatabaseUrl),
+  `${resolveWorkspacePath(lifecycleTestDatabaseUrl)}-shm`,
+  `${resolveWorkspacePath(lifecycleTestDatabaseUrl)}-wal`,
+  resolveWorkspacePath(fileUriTestDatabaseUrl),
+  `${resolveWorkspacePath(fileUriTestDatabaseUrl)}-shm`,
+  `${resolveWorkspacePath(fileUriTestDatabaseUrl)}-wal`,
+  resolveWorkspacePath(absolutePathTestDatabaseUrl),
+  `${resolveWorkspacePath(absolutePathTestDatabaseUrl)}-shm`,
+  `${resolveWorkspacePath(absolutePathTestDatabaseUrl)}-wal`,
+] as const;
 
 afterEach(async () => {
   database?.close();
   database = null;
   await resetLogTape();
   await $`rm -f ${resolvedTestLogPath} ${resolvedTestLogPath}.1 ${resolvedTestLogPath}.2`.quiet();
+  for (const filePath of clientTestDatabaseFiles) {
+    await $`rm -f ${filePath}`.quiet();
+  }
 });
 
 describe("createDatabase", () => {
+  it("configures SQLite with safe PRAGMAs for memory databases", () => {
+    database = createDatabase(":memory:");
+
+    expect(
+      database.sqlite.query<{ foreign_keys: number }, []>("PRAGMA foreign_keys").get(),
+    ).toEqual({
+      foreign_keys: 1,
+    });
+    expect(database.sqlite.query<{ timeout: number }, []>("PRAGMA busy_timeout").get()).toEqual({
+      timeout: 5000,
+    });
+    expect(database.sqlite.query<{ synchronous: number }, []>("PRAGMA synchronous").get()).toEqual({
+      synchronous: 1,
+    });
+    expect(
+      database.sqlite.query<{ trusted_schema: number }, []>("PRAGMA trusted_schema").get(),
+    ).toEqual({
+      trusted_schema: 0,
+    });
+    expect(
+      database.sqlite.query<{ journal_mode: string }, []>("PRAGMA journal_mode").get(),
+    ).toEqual({
+      journal_mode: "memory",
+    });
+  });
+
+  it("opens supported database URL forms without leaking raw paths into lifecycle logs", async () => {
+    const { records, sink } = createLogBuffer();
+
+    await configure({
+      sinks: { buffer: sink, meta: () => undefined },
+      loggers: [
+        { category: ["logtape", "meta"], sinks: ["meta"] },
+        { category: [APP_LOG_CATEGORY, "database", "lifecycle"], sinks: ["buffer"] },
+      ],
+    });
+
+    const absoluteDatabaseUrl = resolveWorkspacePath(absolutePathTestDatabaseUrl);
+
+    for (const databaseUrl of [
+      lifecycleTestDatabaseUrl,
+      absoluteDatabaseUrl,
+      ":memory:",
+      `file:${fileUriTestDatabaseUrl}`,
+    ]) {
+      const currentDatabase = createDatabase(databaseUrl);
+      currentDatabase.close();
+    }
+
+    const configuredEvents = records.filter(
+      (record) => record.properties.event === "database.connection_configured",
+    );
+
+    expect(configuredEvents.map((record) => record.properties.databaseUrlKind)).toEqual([
+      "relative-path",
+      "absolute-path",
+      "memory",
+      "file-uri",
+    ]);
+    expect(JSON.stringify(records)).not.toContain(lifecycleTestDatabaseUrl);
+    expect(JSON.stringify(records)).not.toContain(absoluteDatabaseUrl);
+  });
+
+  it("rejects unsupported SQLite URI forms before file lifecycle handling runs", async () => {
+    const { records, sink } = createLogBuffer();
+
+    await configure({
+      sinks: { buffer: sink, meta: () => undefined },
+      loggers: [
+        { category: ["logtape", "meta"], sinks: ["meta"] },
+        { category: [APP_LOG_CATEGORY, "database", "lifecycle"], sinks: ["buffer"] },
+      ],
+    });
+
+    expect(() => createDatabase("file::memory:")).toThrow("Unsupported SQLite database URL form");
+    expect(() => createDatabase("file:memdb1?mode=memory&cache=shared")).toThrow(
+      "Unsupported SQLite database URL form",
+    );
+    expect(() => createDatabase(`file:${fileUriTestDatabaseUrl}?mode=ro`)).toThrow(
+      "Unsupported SQLite database URL form",
+    );
+    expect(records.map((record) => record.properties.event)).toEqual([
+      "database.connection_rejected",
+      "database.connection_rejected",
+      "database.connection_rejected",
+    ]);
+  });
+
+  it("runs static optimize PRAGMAs on file database open and close", async () => {
+    const { records, sink } = createLogBuffer();
+
+    await configure({
+      sinks: { buffer: sink, meta: () => undefined },
+      loggers: [
+        { category: ["logtape", "meta"], sinks: ["meta"] },
+        { category: [APP_LOG_CATEGORY, "database", "lifecycle"], sinks: ["buffer"] },
+      ],
+    });
+
+    const openedDatabase = createDatabase(lifecycleTestDatabaseUrl);
+    openedDatabase.close();
+    database = null;
+
+    expect(
+      records
+        .filter((record) => record.properties.event === "database.optimization_completed")
+        .map((record) => record.properties.mode),
+    ).toEqual(["open", "close"]);
+    expect(() => openedDatabase.sqlite.query("select 1").get()).toThrow();
+  });
+
   it("logs SQLite-formatted Drizzle queries through the database query category", async () => {
     const { records, sink } = createLogBuffer();
 

@@ -1,11 +1,14 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
+import { configure } from "@logtape/logtape";
 import { migrateDatabase } from "../../../../../apps/server/src/db/migrate";
 import { TOAST_NOTIFICATION_EVENTS } from "../../../../../packages/shared/src";
+import { APP_LOG_CATEGORY } from "../../../../../packages/shared/src";
 import {
   openTestDatabase,
   removeTestDatabaseFiles,
   TEST_DATABASE_URL,
 } from "../../../../helpers/database";
+import { createLogBuffer, resetLogTape } from "../../../../helpers/logging";
 import { expectCoreTables, readTableNames } from "../../../../helpers/schema-assertions";
 
 type TableColumn = {
@@ -22,12 +25,18 @@ type ForeignKey = {
 
 type IndexRow = {
   name: string;
+  partial?: number;
+  unique?: number;
 };
 
 type IndexColumn = {
   desc: number;
   name: string;
 };
+
+afterEach(async () => {
+  await resetLogTape();
+});
 
 describe("migrateDatabase", () => {
   it("creates all core tables on the canonical test database and can rerun", async () => {
@@ -41,9 +50,85 @@ describe("migrateDatabase", () => {
     try {
       expectCoreTables(readTableNames(database));
       expectNotificationHistorySchema(database);
+      expectDownloadClientSchema(database);
     } finally {
       database.close();
     }
+  });
+
+  it("logs migration lifecycle events and duration", async () => {
+    const { records, sink } = createLogBuffer();
+
+    await configure({
+      sinks: { buffer: sink, meta: () => undefined },
+      loggers: [
+        { category: ["logtape", "meta"], sinks: ["meta"] },
+        { category: [APP_LOG_CATEGORY, "database", "lifecycle"], sinks: ["buffer"] },
+      ],
+    });
+
+    await removeTestDatabaseFiles();
+    migrateDatabase(TEST_DATABASE_URL);
+
+    expect(records).toContainEqual(
+      expect.objectContaining({
+        category: [APP_LOG_CATEGORY, "database", "lifecycle"],
+        level: "info",
+        properties: expect.objectContaining({
+          database: "primary",
+          event: "database.migration_started",
+          migrationsFolder: expect.any(String),
+        }),
+      }),
+    );
+    expect(records).toContainEqual(
+      expect.objectContaining({
+        category: [APP_LOG_CATEGORY, "database", "lifecycle"],
+        level: "info",
+        properties: expect.objectContaining({
+          database: "primary",
+          durationMs: expect.any(Number),
+          event: "database.migration_completed",
+          migrationsFolder: expect.any(String),
+        }),
+      }),
+    );
+  });
+
+  it("logs migration failures and rethrows them", async () => {
+    const { records, sink } = createLogBuffer();
+
+    await configure({
+      sinks: { buffer: sink, meta: () => undefined },
+      loggers: [
+        { category: ["logtape", "meta"], sinks: ["meta"] },
+        { category: [APP_LOG_CATEGORY, "database", "lifecycle"], sinks: ["buffer"] },
+      ],
+    });
+
+    await removeTestDatabaseFiles();
+    const migrationError = new Error("forced migration failure");
+
+    expect(() =>
+      migrateDatabase(TEST_DATABASE_URL, {
+        migrationsFolder: "data/db/missing-migrations",
+        runMigrations: () => {
+          throw migrationError;
+        },
+      }),
+    ).toThrow(migrationError);
+    expect(records).toContainEqual(
+      expect.objectContaining({
+        category: [APP_LOG_CATEGORY, "database", "lifecycle"],
+        level: "error",
+        properties: expect.objectContaining({
+          database: "primary",
+          event: "database.migration_failed",
+          migrationsFolder: "data/db/missing-migrations",
+          error: expect.any(Error),
+        }),
+      }),
+    );
   });
 });
 
@@ -103,6 +188,53 @@ function expectNotificationHistorySchema(database: ReturnType<typeof openTestDat
   ]);
 
   expectNotificationHistoryAcceptsAllToastEvents(database);
+}
+
+function expectDownloadClientSchema(database: ReturnType<typeof openTestDatabase>): void {
+  const indexes = database.sqlite
+    .query<IndexRow, []>("pragma index_list('download_clients')")
+    .all();
+
+  expect(indexes).toContainEqual(expect.objectContaining({ name: "download_clients_kind_idx" }));
+  expect(indexes).toContainEqual(
+    expect.objectContaining({
+      name: "download_clients_default_kind_unique",
+      partial: 1,
+      unique: 1,
+    }),
+  );
+  expect(indexes.map((index) => index.name)).not.toContain("download_clients_enabled_idx");
+
+  const insertDefaultClient = database.sqlite.query(
+    "insert into download_clients (id, kind, display_name, is_default, enabled, use_ssl, host, port, auth_mode) values ($id, $kind, $displayName, true, true, false, $host, 8080, 'none')",
+  );
+
+  insertDefaultClient.run({
+    displayName: "qBittorrent",
+    host: "localhost",
+    id: "qbittorrent-default",
+    kind: "qbittorrent",
+  });
+  expect(() =>
+    insertDefaultClient.run({
+      displayName: "qBittorrent duplicate",
+      host: "localhost",
+      id: "qbittorrent-default-duplicate",
+      kind: "qbittorrent",
+    }),
+  ).toThrow();
+
+  database.sqlite
+    .query(
+      "insert into download_clients (id, kind, display_name, is_default, enabled, use_ssl, host, port, auth_mode) values ('qbittorrent-extra', 'qbittorrent', 'qBittorrent extra', false, true, false, 'localhost', 8081, 'none')",
+    )
+    .run();
+  insertDefaultClient.run({
+    displayName: "SABnzbd",
+    host: "localhost",
+    id: "sabnzbd-default",
+    kind: "sabnzbd",
+  });
 }
 
 function expectNotificationHistoryAcceptsAllToastEvents(

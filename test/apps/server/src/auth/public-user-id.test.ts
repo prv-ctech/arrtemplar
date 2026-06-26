@@ -15,7 +15,7 @@ import {
 
 const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../../");
 const schemaSourcePath = `${workspaceRoot}/apps/server/src/db/schema.ts`;
-const sqlBaselinePath = `${workspaceRoot}/apps/server/drizzle/0000_core_tables.sql`;
+const sqlBaselinePath = `${workspaceRoot}/apps/server/drizzle/0000_sqlite_core_baseline.sql`;
 const snapshotPath = `${workspaceRoot}/apps/server/drizzle/meta/0000_snapshot.json`;
 
 const expectedPermissions: UserPermission[] = [
