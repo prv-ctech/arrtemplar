@@ -1,9 +1,9 @@
 import type {
-  DownloadClientKind,
-  DownloadClientProbeResponse,
-  DownloadClientSavedConfig,
   NotificationPreferences,
-  UpsertDownloadClientRequest,
+  ServiceIntegrationKind,
+  ServiceIntegrationProbeResponse,
+  ServiceIntegrationSavedConfig,
+  UpsertServiceIntegrationRequest,
 } from "@arrtemplar/shared";
 import { PlusIcon, TrashIcon } from "@phosphor-icons/react";
 import { type FormEvent, useId, useMemo, useState } from "react";
@@ -27,33 +27,32 @@ import { ApiClientError } from "@/lib/api-error";
 import { cn } from "@/lib/utils";
 import { useAuthenticatedRouteUser } from "@/routes/authenticated-route-user";
 import {
-  type SaveDownloadClientConfigVariables,
-  useDeleteDownloadClientByIdMutation,
-  useDownloadClientConfigsQuery,
-  useDownloadClientStatusQuery,
-  useTestDownloadClientByIdMutation,
-  useTestDownloadClientMutation,
-  useUpsertDownloadClientMutation,
+  type SaveServiceIntegrationConfigVariables,
+  useDeleteServiceIntegrationByIdMutation,
+  useServiceIntegrationConfigsQuery,
+  useServiceIntegrationStatusQuery,
+  useTestServiceIntegrationByIdMutation,
+  useTestServiceIntegrationMutation,
+  useUpsertServiceIntegrationMutation,
 } from "./services-settings";
 
-type DownloadClientCardDefinition = {
-  kind: DownloadClientKind;
+type ServiceIntegrationCardDefinition = {
+  kind: ServiceIntegrationKind;
   title: string;
   logoPath: string;
   authModeOptions: Array<{
     label: string;
-    value: UpsertDownloadClientRequest["authMode"];
+    value: UpsertServiceIntegrationRequest["authMode"];
   }>;
 };
 
-type DownloadClientFormState = {
+type ServiceIntegrationFormState = {
   displayName: string;
-  enabled: boolean;
   useSsl: boolean;
   host: string;
   port: string;
   urlBase: string;
-  authMode: UpsertDownloadClientRequest["authMode"];
+  authMode: UpsertServiceIntegrationRequest["authMode"];
   username: string;
   apiKey: string;
   password: string;
@@ -61,28 +60,28 @@ type DownloadClientFormState = {
 
 type DraftServiceInstance = {
   id: string;
-  kind: DownloadClientKind;
+  kind: ServiceIntegrationKind;
   displayName: string;
 };
 
 type ServiceListItem = {
-  card: DownloadClientCardDefinition;
-  config?: DownloadClientSavedConfig | undefined;
+  card: ServiceIntegrationCardDefinition;
+  config?: ServiceIntegrationSavedConfig | undefined;
   draft?: DraftServiceInstance | undefined;
   key: string;
-  mode: SaveDownloadClientConfigVariables["mode"];
+  mode: SaveServiceIntegrationConfigVariables["mode"];
 };
 
 type StatusBadge = {
   label: string;
   variant: "default" | "destructive" | "outline" | "secondary";
 };
-type FormUpdate = (next: Partial<DownloadClientFormState>) => void;
-type SaveMutation = ReturnType<typeof useUpsertDownloadClientMutation>;
-type DeleteByIdMutation = ReturnType<typeof useDeleteDownloadClientByIdMutation>;
-type TestDefaultMutation = ReturnType<typeof useTestDownloadClientMutation>;
-type TestByIdMutation = ReturnType<typeof useTestDownloadClientByIdMutation>;
-type DownloadClientFormFooterViewModel = {
+type FormUpdate = (next: Partial<ServiceIntegrationFormState>) => void;
+type SaveMutation = ReturnType<typeof useUpsertServiceIntegrationMutation>;
+type DeleteByIdMutation = ReturnType<typeof useDeleteServiceIntegrationByIdMutation>;
+type TestDefaultMutation = ReturnType<typeof useTestServiceIntegrationMutation>;
+type TestByIdMutation = ReturnType<typeof useTestServiceIntegrationByIdMutation>;
+type ServiceIntegrationFormFooterViewModel = {
   summary: string;
   testButton: {
     disabled: boolean;
@@ -98,7 +97,7 @@ type DownloadClientFormFooterViewModel = {
 const maxServiceInstancesPerKind = 10;
 const deleteConfirmationPreferenceKey = "arrtemplar.services.skip-delete-confirmation";
 
-const downloadClientCards: readonly DownloadClientCardDefinition[] = [
+const serviceIntegrationCards: readonly ServiceIntegrationCardDefinition[] = [
   {
     kind: "qbittorrent",
     title: "qBittorrent",
@@ -117,15 +116,22 @@ const downloadClientCards: readonly DownloadClientCardDefinition[] = [
       { label: "Username and password", value: "username_password" },
     ],
   },
+  {
+    kind: "prowlarr",
+    title: "Prowlarr",
+    logoPath: "/services/prowlarr.svg",
+    authModeOptions: [{ label: "API key", value: "api_key" }],
+  },
 ] as const;
 
-const compactDownloadClientFieldClassName = "h-9 w-full min-w-0 rounded-xl px-3 text-sm sm:w-52";
+const compactServiceIntegrationFieldClassName =
+  "h-9 w-full min-w-0 rounded-xl px-3 text-sm sm:w-52";
 
-const selectClassName = `${compactDownloadClientFieldClassName} border border-input bg-background/50 text-foreground shadow-[inset_0_1px_0_hsl(0_0%_100%/0.04)] outline-none transition-[border-color,box-shadow] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] focus-visible:border-primary/70 focus-visible:ring-2 focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm`;
+const selectClassName = `${compactServiceIntegrationFieldClassName} border border-input bg-background/50 text-foreground shadow-[inset_0_1px_0_hsl(0_0%_100%/0.04)] outline-none transition-[border-color,box-shadow] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] focus-visible:border-primary/70 focus-visible:ring-2 focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm`;
 
 export function ServicesSettings() {
   const actor = useAuthenticatedRouteUser();
-  const configsQuery = useDownloadClientConfigsQuery();
+  const configsQuery = useServiceIntegrationConfigsQuery();
   const [drafts, setDrafts] = useState<DraftServiceInstance[]>([]);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const configsByKind = useMemo(
@@ -134,7 +140,7 @@ export function ServicesSettings() {
   );
   const draftCountsByKind = useMemo(() => countDraftsByKind(drafts), [drafts]);
 
-  function readInstanceCount(kind: DownloadClientKind): number {
+  function readInstanceCount(kind: ServiceIntegrationKind): number {
     const savedConfigs = configsByKind.get(kind) ?? [];
     const savedDefaultCount = savedConfigs.some((config) => config.isDefault) ? 1 : 0;
     const savedAdditionalCount = savedConfigs.filter((config) => !config.isDefault).length;
@@ -143,7 +149,7 @@ export function ServicesSettings() {
     );
   }
 
-  function handleAddService(kind: DownloadClientKind) {
+  function handleAddService(kind: ServiceIntegrationKind) {
     const card = readCardDefinition(kind);
     const nextCount = readInstanceCount(kind) + 1;
 
@@ -210,10 +216,10 @@ export function ServicesSettings() {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        {downloadClientCards.map((card) => (
+        {serviceIntegrationCards.map((card) => (
           <div className="min-w-0 space-y-3" key={card.kind}>
             {createServiceItems(card, configsByKind.get(card.kind) ?? [], drafts).map((item) => (
-              <DownloadClientCard
+              <ServiceIntegrationCard
                 item={item}
                 key={item.key}
                 notificationPreferences={actor.notificationPreferences}
@@ -227,7 +233,7 @@ export function ServicesSettings() {
       <AddServicePill onClick={() => setAddDialogOpen(true)} />
       <AddServiceDialog
         instanceCounts={
-          new Map(downloadClientCards.map((card) => [card.kind, readInstanceCount(card.kind)]))
+          new Map(serviceIntegrationCards.map((card) => [card.kind, readInstanceCount(card.kind)]))
         }
         onAddService={handleAddService}
         onOpenChange={setAddDialogOpen}
@@ -249,7 +255,7 @@ function ServicesSettingsSkeleton() {
   );
 }
 
-function DownloadClientCard({
+function ServiceIntegrationCard({
   item,
   notificationPreferences,
   onDraftRemoved,
@@ -260,17 +266,17 @@ function DownloadClientCard({
   onDraftRemoved: (draftId: string) => void;
   onDraftSaved: (draftId: string) => void;
 }) {
-  const controller = useDownloadClientCardController({
+  const controller = useServiceIntegrationCardController({
     item,
     notificationPreferences,
     onDraftRemoved,
     onDraftSaved,
   });
 
-  return <DownloadClientCardView controller={controller} />;
+  return <ServiceIntegrationCardView controller={controller} />;
 }
 
-function useDownloadClientCardController({
+function useServiceIntegrationCardController({
   item,
   notificationPreferences,
   onDraftRemoved,
@@ -282,15 +288,15 @@ function useDownloadClientCardController({
   onDraftSaved: (draftId: string) => void;
 }) {
   const { card, config, draft, mode } = item;
-  const statusQuery = useDownloadClientStatusQuery(
+  const statusQuery = useServiceIntegrationStatusQuery(
     config,
     card.kind,
     shouldQueryStatus(mode, config),
   );
-  const saveMutation = useUpsertDownloadClientMutation();
-  const deleteMutation = useDeleteDownloadClientByIdMutation();
-  const testDefaultMutation = useTestDownloadClientMutation();
-  const testByIdMutation = useTestDownloadClientByIdMutation();
+  const saveMutation = useUpsertServiceIntegrationMutation();
+  const deleteMutation = useDeleteServiceIntegrationByIdMutation();
+  const testDefaultMutation = useTestServiceIntegrationMutation();
+  const testByIdMutation = useTestServiceIntegrationByIdMutation();
   const [form, setForm] = useState(() => createFormState(card, config, draft));
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -307,7 +313,7 @@ function useDownloadClientCardController({
   const statusBadge = readCardStatusBadge(probeResponse, statusQuery.isLoading, isDraft);
   const title = readCardTitle(form, card);
 
-  function updateForm(next: Partial<DownloadClientFormState>) {
+  function updateForm(next: Partial<ServiceIntegrationFormState>) {
     setErrorMessage(null);
     setStatusMessage(null);
     setForm((current) => ({ ...current, ...next }));
@@ -315,7 +321,7 @@ function useDownloadClientCardController({
 
   function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    submitDownloadClientForm({
+    submitServiceIntegrationForm({
       card,
       config,
       draft,
@@ -332,7 +338,7 @@ function useDownloadClientCardController({
   }
 
   function handleTest() {
-    testDownloadClientFromCard({
+    testServiceIntegrationFromCard({
       card,
       config,
       onError: handleTestError,
@@ -344,7 +350,7 @@ function useDownloadClientCardController({
     });
   }
 
-  function handleTestSuccess(result: DownloadClientProbeResponse) {
+  function handleTestSuccess(result: ServiceIntegrationProbeResponse) {
     applyProbeResultStatus(result, setStatusMessage, setErrorMessage);
     notify(
       {
@@ -375,7 +381,7 @@ function useDownloadClientCardController({
   }
 
   function executeDelete() {
-    deleteDownloadClientFromCard({
+    deleteServiceIntegrationFromCard({
       config,
       deleteMutation,
       draft,
@@ -413,8 +419,8 @@ function useDownloadClientCardController({
 }
 
 function shouldQueryStatus(
-  mode: SaveDownloadClientConfigVariables["mode"],
-  config: DownloadClientSavedConfig | undefined,
+  mode: SaveServiceIntegrationConfigVariables["mode"],
+  config: ServiceIntegrationSavedConfig | undefined,
 ): boolean {
   return mode === "default" || Boolean(config);
 }
@@ -434,18 +440,18 @@ function readBusyState(
 }
 
 function isDraftServiceItem(
-  mode: SaveDownloadClientConfigVariables["mode"],
-  config: DownloadClientSavedConfig | undefined,
+  mode: SaveServiceIntegrationConfigVariables["mode"],
+  config: ServiceIntegrationSavedConfig | undefined,
 ): boolean {
   return mode === "instance" && !config;
 }
 
 function readVisibleProbeResponse(
   isDraft: boolean,
-  defaultProbe: DownloadClientProbeResponse | undefined,
-  instanceProbe: DownloadClientProbeResponse | undefined,
-  statusProbe: DownloadClientProbeResponse | undefined,
-): DownloadClientProbeResponse | undefined {
+  defaultProbe: ServiceIntegrationProbeResponse | undefined,
+  instanceProbe: ServiceIntegrationProbeResponse | undefined,
+  statusProbe: ServiceIntegrationProbeResponse | undefined,
+): ServiceIntegrationProbeResponse | undefined {
   if (isDraft) {
     return undefined;
   }
@@ -454,19 +460,22 @@ function readVisibleProbeResponse(
 }
 
 function readCardStatusBadge(
-  probeResponse: DownloadClientProbeResponse | undefined,
+  probeResponse: ServiceIntegrationProbeResponse | undefined,
   isLoading: boolean,
   isDraft: boolean,
 ): StatusBadge {
   return readStatusBadge(probeResponse?.result, isLoading, isDraft);
 }
 
-function readCardTitle(form: DownloadClientFormState, card: DownloadClientCardDefinition): string {
+function readCardTitle(
+  form: ServiceIntegrationFormState,
+  card: ServiceIntegrationCardDefinition,
+): string {
   return form.displayName.trim() || card.title;
 }
 
 function applyProbeResultStatus(
-  result: DownloadClientProbeResponse,
+  result: ServiceIntegrationProbeResponse,
   setStatusMessage: (message: string | null) => void,
   setErrorMessage: (message: string | null) => void,
 ) {
@@ -478,7 +487,7 @@ function readTestErrorMessage(error: Error, title: string): string {
   return error.message || `${title} test failed.`;
 }
 
-function submitDownloadClientForm({
+function submitServiceIntegrationForm({
   card,
   config,
   draft,
@@ -492,16 +501,16 @@ function submitDownloadClientForm({
   setStatusMessage,
   title,
 }: {
-  card: DownloadClientCardDefinition;
-  config: DownloadClientSavedConfig | undefined;
+  card: ServiceIntegrationCardDefinition;
+  config: ServiceIntegrationSavedConfig | undefined;
   draft: DraftServiceInstance | undefined;
-  form: DownloadClientFormState;
-  mode: SaveDownloadClientConfigVariables["mode"];
+  form: ServiceIntegrationFormState;
+  mode: SaveServiceIntegrationConfigVariables["mode"];
   notificationPreferences: NotificationPreferences;
   onDraftSaved: (draftId: string) => void;
   saveMutation: SaveMutation;
   setErrorMessage: (message: string | null) => void;
-  setForm: (form: DownloadClientFormState) => void;
+  setForm: (form: ServiceIntegrationFormState) => void;
   setStatusMessage: (message: string | null) => void;
   title: string;
 }) {
@@ -555,7 +564,7 @@ function submitDownloadClientForm({
   );
 }
 
-function testDownloadClientFromCard({
+function testServiceIntegrationFromCard({
   card,
   config,
   onError,
@@ -565,10 +574,10 @@ function testDownloadClientFromCard({
   testByIdMutation,
   testDefaultMutation,
 }: {
-  card: DownloadClientCardDefinition;
-  config: DownloadClientSavedConfig | undefined;
+  card: ServiceIntegrationCardDefinition;
+  config: ServiceIntegrationSavedConfig | undefined;
   onError: (error: Error) => void;
-  onSuccess: (result: DownloadClientProbeResponse) => void;
+  onSuccess: (result: ServiceIntegrationProbeResponse) => void;
   setErrorMessage: (message: string | null) => void;
   setStatusMessage: (message: string | null) => void;
   testByIdMutation: TestByIdMutation;
@@ -601,7 +610,7 @@ function requestDeleteConfirmation(
   setDeleteDialogOpen(true);
 }
 
-function deleteDownloadClientFromCard({
+function deleteServiceIntegrationFromCard({
   config,
   deleteMutation,
   draft,
@@ -611,7 +620,7 @@ function deleteDownloadClientFromCard({
   setStatusMessage,
   title,
 }: {
-  config: DownloadClientSavedConfig | undefined;
+  config: ServiceIntegrationSavedConfig | undefined;
   deleteMutation: DeleteByIdMutation;
   draft: DraftServiceInstance | undefined;
   notificationPreferences: NotificationPreferences;
@@ -665,10 +674,10 @@ function readSaveErrorMessage(error: unknown, title: string): string {
   return error instanceof Error ? error.message : `${title} save failed.`;
 }
 
-function DownloadClientCardView({
+function ServiceIntegrationCardView({
   controller,
 }: {
-  controller: ReturnType<typeof useDownloadClientCardController>;
+  controller: ReturnType<typeof useServiceIntegrationCardController>;
 }) {
   const {
     card,
@@ -698,7 +707,7 @@ function DownloadClientCardView({
   const canDelete = item.mode === "instance";
   const isTesting = testDefaultMutation.isPending || testByIdMutation.isPending;
   const contentId = `${item.key}-settings`;
-  const footerViewModel = createDownloadClientFormFooterViewModel({
+  const footerViewModel = createServiceIntegrationFormFooterViewModel({
     canTest: Boolean(config),
     isBusy,
     isDraft: Boolean(item.draft),
@@ -707,18 +716,16 @@ function DownloadClientCardView({
     onTest: handleTest,
     probeResponse,
   });
-  const [isExpanded, setIsExpanded] = useState(item.mode === "default" || Boolean(item.draft));
+  const [isExpanded, setIsExpanded] = useState(false);
 
   return (
     <>
       <SettingsAccordionCard
         action={
-          <DownloadClientCardActions
+          <ServiceIntegrationCardActions
             canDelete={canDelete}
-            enabled={form.enabled}
             isBusy={isBusy}
             onDeleteRequest={handleDeleteRequest}
-            onEnabledChange={(enabled) => updateForm({ enabled })}
             statusBadge={statusBadge}
             title={title}
           />
@@ -731,7 +738,7 @@ function DownloadClientCardView({
         toggleLabel={`${isExpanded ? "Collapse" : "Expand"} ${title} service settings`}
       >
         <form className="space-y-4" onSubmit={handleSave}>
-          <DownloadClientFormFields
+          <ServiceIntegrationFormFields
             apiKeyDescription={apiKeyDescription}
             card={card}
             form={form}
@@ -746,10 +753,10 @@ function DownloadClientCardView({
             statusId={statusId}
             statusMessage={statusMessage}
           />
-          <DownloadClientFormFooter viewModel={footerViewModel} />
+          <ServiceIntegrationFormFooter viewModel={footerViewModel} />
         </form>
       </SettingsAccordionCard>
-      <DownloadClientDeleteDialogSlot
+      <ServiceIntegrationDeleteDialogSlot
         canDelete={canDelete}
         onConfirmDelete={executeDelete}
         onOpenChange={setDeleteDialogOpen}
@@ -760,27 +767,22 @@ function DownloadClientCardView({
   );
 }
 
-function DownloadClientCardActions({
+function ServiceIntegrationCardActions({
   canDelete,
-  enabled,
   isBusy,
   onDeleteRequest,
-  onEnabledChange,
   statusBadge,
   title,
 }: {
   canDelete: boolean;
-  enabled: boolean;
   isBusy: boolean;
   onDeleteRequest: () => void;
-  onEnabledChange: (enabled: boolean) => void;
   statusBadge: StatusBadge;
   title: string;
 }) {
   return (
     <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
       <Badge variant={statusBadge.variant}>{statusBadge.label}</Badge>
-      <ServiceEnabledToggle disabled={isBusy} enabled={enabled} onChange={onEnabledChange} />
       {canDelete ? (
         <Button
           aria-label={`Remove ${title}`}
@@ -798,7 +800,7 @@ function DownloadClientCardActions({
   );
 }
 
-function DownloadClientFormFields({
+function ServiceIntegrationFormFields({
   apiKeyDescription,
   card,
   form,
@@ -809,8 +811,8 @@ function DownloadClientFormFields({
   updateForm,
 }: {
   apiKeyDescription: string | undefined;
-  card: DownloadClientCardDefinition;
-  form: DownloadClientFormState;
+  card: ServiceIntegrationCardDefinition;
+  form: ServiceIntegrationFormState;
   isBusy: boolean;
   itemKey: string;
   passwordDescription: string | undefined;
@@ -821,7 +823,7 @@ function DownloadClientFormFields({
     <div className="overflow-hidden rounded-xl border border-border bg-card/40">
       <SettingsRow controlId={`${itemKey}-display-name`} density="compact" label="Service name">
         <Input
-          className={compactDownloadClientFieldClassName}
+          className={compactServiceIntegrationFieldClassName}
           disabled={isBusy}
           id={`${itemKey}-display-name`}
           onChange={(event) => updateForm({ displayName: event.currentTarget.value })}
@@ -831,7 +833,7 @@ function DownloadClientFormFields({
       </SettingsRow>
       <SettingsRow controlId={`${itemKey}-host`} density="compact" label="Host">
         <Input
-          className={compactDownloadClientFieldClassName}
+          className={compactServiceIntegrationFieldClassName}
           disabled={isBusy}
           id={`${itemKey}-host`}
           onChange={(event) => updateForm({ host: event.currentTarget.value })}
@@ -863,7 +865,7 @@ function DownloadClientFormFields({
       </SettingsRow>
       <SettingsRow controlId={`${itemKey}-url-base`} density="compact" label="URL base">
         <Input
-          className={compactDownloadClientFieldClassName}
+          className={compactServiceIntegrationFieldClassName}
           disabled={isBusy}
           id={`${itemKey}-url-base`}
           onChange={(event) => updateForm({ urlBase: event.currentTarget.value })}
@@ -878,7 +880,7 @@ function DownloadClientFormFields({
           id={`${itemKey}-auth-mode`}
           onChange={(event) =>
             updateForm({
-              authMode: event.currentTarget.value as DownloadClientFormState["authMode"],
+              authMode: event.currentTarget.value as ServiceIntegrationFormState["authMode"],
             })
           }
           value={form.authMode}
@@ -890,7 +892,7 @@ function DownloadClientFormFields({
           ))}
         </select>
       </SettingsRow>
-      <DownloadClientCredentialFields
+      <ServiceIntegrationCredentialFields
         apiKeyDescription={apiKeyDescription}
         form={form}
         isBusy={isBusy}
@@ -902,7 +904,7 @@ function DownloadClientFormFields({
   );
 }
 
-function DownloadClientCredentialFields({
+function ServiceIntegrationCredentialFields({
   apiKeyDescription,
   form,
   isBusy,
@@ -911,7 +913,7 @@ function DownloadClientCredentialFields({
   updateForm,
 }: {
   apiKeyDescription: string | undefined;
-  form: DownloadClientFormState;
+  form: ServiceIntegrationFormState;
   isBusy: boolean;
   itemKey: string;
   passwordDescription: string | undefined;
@@ -922,7 +924,7 @@ function DownloadClientCredentialFields({
       <>
         <SettingsRow controlId={`${itemKey}-username`} density="compact" label="Username">
           <Input
-            className={compactDownloadClientFieldClassName}
+            className={compactServiceIntegrationFieldClassName}
             disabled={isBusy}
             id={`${itemKey}-username`}
             onChange={(event) => updateForm({ username: event.currentTarget.value })}
@@ -973,7 +975,7 @@ function ApiKeyField({
     >
       <Input
         autoComplete="off"
-        className={compactDownloadClientFieldClassName}
+        className={compactServiceIntegrationFieldClassName}
         disabled={isBusy}
         id={`${itemKey}-api-key`}
         onChange={(event) => updateForm({ apiKey: event.currentTarget.value })}
@@ -1007,7 +1009,7 @@ function PasswordField({
     >
       <Input
         autoComplete="off"
-        className={compactDownloadClientFieldClassName}
+        className={compactServiceIntegrationFieldClassName}
         disabled={isBusy}
         id={`${itemKey}-password`}
         onChange={(event) => updateForm({ password: event.currentTarget.value })}
@@ -1019,7 +1021,11 @@ function PasswordField({
   );
 }
 
-function DownloadClientFormFooter({ viewModel }: { viewModel: DownloadClientFormFooterViewModel }) {
+function ServiceIntegrationFormFooter({
+  viewModel,
+}: {
+  viewModel: ServiceIntegrationFormFooterViewModel;
+}) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-2">
       <p className="min-h-5 text-sm text-muted-foreground">{viewModel.summary}</p>
@@ -1040,7 +1046,7 @@ function DownloadClientFormFooter({ viewModel }: { viewModel: DownloadClientForm
   );
 }
 
-function DownloadClientDeleteDialogSlot({
+function ServiceIntegrationDeleteDialogSlot({
   canDelete,
   onConfirmDelete,
   onOpenChange,
@@ -1068,13 +1074,13 @@ function DownloadClientDeleteDialogSlot({
 }
 
 function readFooterSummary(
-  probeResponse: DownloadClientProbeResponse | undefined,
+  probeResponse: ServiceIntegrationProbeResponse | undefined,
   isDraft: boolean,
 ): string {
   return probeResponse?.result.summary ?? (isDraft ? "Save this service before testing." : "");
 }
 
-function createDownloadClientFormFooterViewModel({
+function createServiceIntegrationFormFooterViewModel({
   canTest,
   isBusy,
   isDraft,
@@ -1089,8 +1095,8 @@ function createDownloadClientFormFooterViewModel({
   isSaving: boolean;
   isTesting: boolean;
   onTest: () => void;
-  probeResponse: DownloadClientProbeResponse | undefined;
-}): DownloadClientFormFooterViewModel {
+  probeResponse: ServiceIntegrationProbeResponse | undefined;
+}): ServiceIntegrationFormFooterViewModel {
   return {
     summary: readFooterSummary(probeResponse, isDraft),
     testButton: {
@@ -1124,7 +1130,7 @@ function AddServicePill({ onClick }: { onClick: () => void }) {
             Add another service
           </span>
           <span className="block text-sm text-muted-foreground">
-            Create another qBittorrent or SABnzbd instance.
+            Create another service instance.
           </span>
         </span>
       </span>
@@ -1138,8 +1144,8 @@ function AddServiceDialog({
   onOpenChange,
   open,
 }: {
-  instanceCounts: Map<DownloadClientKind, number>;
-  onAddService: (kind: DownloadClientKind) => void;
+  instanceCounts: Map<ServiceIntegrationKind, number>;
+  onAddService: (kind: ServiceIntegrationKind) => void;
   onOpenChange: (open: boolean) => void;
   open: boolean;
 }) {
@@ -1148,12 +1154,10 @@ function AddServiceDialog({
       <DialogContent className="rounded-3xl">
         <DialogHeader>
           <DialogTitle>Add another service</DialogTitle>
-          <DialogDescription>
-            Choose a downloader type. Each service type supports up to 10 instances.
-          </DialogDescription>
+          <DialogDescription>Choose a service. Up to 10 instances per kind.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 sm:grid-cols-2">
-          {downloadClientCards.map((card) => {
+          {serviceIntegrationCards.map((card) => {
             const count = instanceCounts.get(card.kind) ?? 1;
             const isAtLimit = count >= maxServiceInstancesPerKind;
 
@@ -1307,45 +1311,12 @@ function ChoiceButton({
   );
 }
 
-function ServiceLogo({ card }: { card: DownloadClientCardDefinition }) {
+function ServiceLogo({ card }: { card: ServiceIntegrationCardDefinition }) {
   return <img alt="" className="h-8 w-auto shrink-0" src={card.logoPath} />;
 }
 
-function ServiceEnabledToggle({
-  disabled,
-  enabled,
-  onChange,
-}: {
-  disabled: boolean;
-  enabled: boolean;
-  onChange: (enabled: boolean) => void;
-}) {
-  return (
-    <label
-      className={cn(
-        "inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-border bg-card/65 px-2.5 py-1.5 text-xs font-medium",
-        disabled && "cursor-not-allowed opacity-60",
-      )}
-    >
-      <input
-        aria-label="Enable service integration"
-        checked={enabled}
-        className="peer sr-only"
-        disabled={disabled}
-        onChange={(event) => onChange(event.currentTarget.checked)}
-        type="checkbox"
-      />
-      <span
-        aria-hidden="true"
-        className="relative h-5 w-9 rounded-full border border-border bg-muted transition-colors after:absolute after:top-0.5 after:left-0.5 after:size-4 after:rounded-full after:bg-background after:shadow-sm after:transition-transform peer-checked:border-primary/60 peer-checked:bg-primary peer-checked:after:translate-x-4"
-      />
-      <span className="text-foreground">{enabled ? "On" : "Off"}</span>
-    </label>
-  );
-}
-
 function readStatusBadge(
-  status: DownloadClientProbeResponse["result"] | undefined,
+  status: ServiceIntegrationProbeResponse["result"] | undefined,
   loading: boolean,
   isDraft: boolean,
 ): StatusBadge {
@@ -1374,17 +1345,16 @@ function readStatusBadge(
 }
 
 function createFormState(
-  card: DownloadClientCardDefinition,
-  config?: DownloadClientSavedConfig,
+  card: ServiceIntegrationCardDefinition,
+  config?: ServiceIntegrationSavedConfig,
   draft?: DraftServiceInstance,
-): DownloadClientFormState {
+): ServiceIntegrationFormState {
   if (!config) {
     return createEmptyFormState(draft?.displayName ?? card.title);
   }
 
   return {
     displayName: config.displayName,
-    enabled: config.enabled,
     useSsl: config.useSsl,
     host: config.host,
     port: String(config.port),
@@ -1396,10 +1366,9 @@ function createFormState(
   };
 }
 
-function createEmptyFormState(displayName: string): DownloadClientFormState {
+function createEmptyFormState(displayName: string): ServiceIntegrationFormState {
   return {
     displayName,
-    enabled: false,
     useSsl: false,
     host: "",
     port: "",
@@ -1412,9 +1381,9 @@ function createEmptyFormState(displayName: string): DownloadClientFormState {
 }
 
 function readUpsertRequest(
-  form: DownloadClientFormState,
-  card: DownloadClientCardDefinition,
-): { ok: true; value: UpsertDownloadClientRequest } | { ok: false; message: string } {
+  form: ServiceIntegrationFormState,
+  card: ServiceIntegrationCardDefinition,
+): { ok: true; value: UpsertServiceIntegrationRequest } | { ok: false; message: string } {
   const displayName = form.displayName.trim() || card.title;
   const host = form.host.trim();
   const port = Number.parseInt(form.port, 10);
@@ -1435,7 +1404,6 @@ function readUpsertRequest(
     ok: true,
     value: {
       displayName,
-      enabled: form.enabled,
       useSsl: form.useSsl,
       host,
       port,
@@ -1449,7 +1417,7 @@ function readUpsertRequest(
 }
 
 function readSecretDescription(
-  config: DownloadClientSavedConfig | undefined,
+  config: ServiceIntegrationSavedConfig | undefined,
   field: "apiKey" | "password",
 ): string | undefined {
   if (!config) {
@@ -1468,9 +1436,9 @@ function readSecretDescription(
 }
 
 function groupConfigsByKind(
-  configs: readonly DownloadClientSavedConfig[],
-): Map<DownloadClientKind, DownloadClientSavedConfig[]> {
-  const grouped = new Map<DownloadClientKind, DownloadClientSavedConfig[]>();
+  configs: readonly ServiceIntegrationSavedConfig[],
+): Map<ServiceIntegrationKind, ServiceIntegrationSavedConfig[]> {
+  const grouped = new Map<ServiceIntegrationKind, ServiceIntegrationSavedConfig[]>();
 
   for (const config of configs) {
     grouped.set(config.kind, [...(grouped.get(config.kind) ?? []), config]);
@@ -1481,8 +1449,8 @@ function groupConfigsByKind(
 
 function countDraftsByKind(
   drafts: readonly DraftServiceInstance[],
-): Map<DownloadClientKind, number> {
-  const counts = new Map<DownloadClientKind, number>();
+): Map<ServiceIntegrationKind, number> {
+  const counts = new Map<ServiceIntegrationKind, number>();
 
   for (const draft of drafts) {
     counts.set(draft.kind, (counts.get(draft.kind) ?? 0) + 1);
@@ -1492,8 +1460,8 @@ function countDraftsByKind(
 }
 
 function createServiceItems(
-  card: DownloadClientCardDefinition,
-  configs: readonly DownloadClientSavedConfig[],
+  card: ServiceIntegrationCardDefinition,
+  configs: readonly ServiceIntegrationSavedConfig[],
   drafts: readonly DraftServiceInstance[],
 ): ServiceListItem[] {
   const defaultConfig = configs.find((config) => config.isDefault);
@@ -1512,8 +1480,10 @@ function createServiceItems(
   ];
 }
 
-function readCardDefinition(kind: DownloadClientKind): DownloadClientCardDefinition | undefined {
-  return downloadClientCards.find((card) => card.kind === kind);
+function readCardDefinition(
+  kind: ServiceIntegrationKind,
+): ServiceIntegrationCardDefinition | undefined {
+  return serviceIntegrationCards.find((card) => card.kind === kind);
 }
 
 function readDeleteConfirmationPreference(): boolean {

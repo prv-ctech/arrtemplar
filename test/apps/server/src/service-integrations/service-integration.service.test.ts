@@ -1,17 +1,19 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import type { DatabaseClient } from "../../../../../apps/server/src/db/client";
-import { downloadClients } from "../../../../../apps/server/src/db/schema";
-import { DownloadClientService } from "../../../../../apps/server/src/download-clients/download-client.service";
-import type { QbittorrentProbeResult } from "../../../../../apps/server/src/download-clients/qbittorrent-client";
-import type { SabnzbdClientProbeResponse } from "../../../../../apps/server/src/download-clients/sabnzbd-client";
+import { serviceIntegrations } from "../../../../../apps/server/src/db/schema";
+import type { ProwlarrProbeResponse } from "../../../../../apps/server/src/service-integrations/prowlarr-client";
+import type { QbittorrentProbeResult } from "../../../../../apps/server/src/service-integrations/qbittorrent-client";
+import type { SabnzbdClientProbeResponse } from "../../../../../apps/server/src/service-integrations/sabnzbd-client";
+import { ServiceIntegrationService } from "../../../../../apps/server/src/service-integrations/service-integration.service";
 import { resetAndOpenTestDatabase } from "../../../../helpers/database";
 
 const secretEncryptionKey = "hex:000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
 
-describe("DownloadClientService", () => {
+describe("ServiceIntegrationService", () => {
   afterEach(() => {
     mockState.database?.close();
     mockState.database = null;
+    mockState.prowlarrCalls = [];
     mockState.qbittorrentCalls = [];
     mockState.sabnzbdCalls = [];
   });
@@ -36,7 +38,7 @@ describe("DownloadClientService", () => {
       throw new Error("Expected upsert to succeed.");
     }
 
-    expect(result.body.client).toMatchObject({
+    expect(result.body.integration).toMatchObject({
       id: "qbittorrent",
       kind: "qbittorrent",
       displayName: "Main qBittorrent",
@@ -50,12 +52,12 @@ describe("DownloadClientService", () => {
       hasPassword: false,
     });
 
-    const storedRow = database.db.select().from(downloadClients).get();
+    const storedRow = database.db.select().from(serviceIntegrations).get();
 
     expect(storedRow?.apiKeyEncrypted).toEqual(expect.any(String));
     expect(storedRow?.apiKeyEncrypted).not.toContain("qbt-secret");
     expect(storedRow?.passwordEncrypted).toBeNull();
-    expect(result.body.client).not.toHaveProperty("apiKeyEncrypted");
+    expect(result.body.integration).not.toHaveProperty("apiKeyEncrypted");
   });
 
   it("preserves existing secrets when new secret input is omitted", async () => {
@@ -120,7 +122,7 @@ describe("DownloadClientService", () => {
       throw new Error("Expected additional SABnzbd config to save.");
     }
 
-    const configs = service.listConfigs().clients;
+    const configs = service.listConfigs().integrations;
 
     expect(configs).toHaveLength(2);
     expect(configs.find((config) => config.isDefault)).toMatchObject({
@@ -133,11 +135,11 @@ describe("DownloadClientService", () => {
     });
   });
 
-  it("returns disabled status without probing disabled configs", async () => {
+  it("connects saved configs without a separate enabled switch", async () => {
     const database = await openDatabase();
     const service = createService(database);
 
-    await service.upsertConfig("sabnzbd", {
+    const saveResult = await service.upsertConfig("sabnzbd", {
       displayName: "SABnzbd",
       enabled: false,
       useSsl: false,
@@ -147,20 +149,26 @@ describe("DownloadClientService", () => {
       apiKey: "sab-secret",
     });
 
+    expect(saveResult.ok).toBe(true);
+    if (!saveResult.ok) {
+      throw new Error("Expected SABnzbd config to save.");
+    }
+    expect(saveResult.body.integration?.enabled).toBe(true);
+
     const result = await service.getStatus("sabnzbd");
 
     expect(result.ok).toBe(true);
     if (!result.ok) {
-      throw new Error("Expected disabled status result.");
+      throw new Error("Expected connected status result.");
     }
 
     expect(result.body.result).toMatchObject({
       kind: "sabnzbd",
-      enabled: false,
       configured: true,
-      outcome: "disabled",
+      enabled: true,
+      outcome: "success",
     });
-    expect(mockState.sabnzbdCalls).toHaveLength(0);
+    expect(mockState.sabnzbdCalls).toHaveLength(1);
   });
 
   it("returns not-configured status for missing configs", async () => {
@@ -203,21 +211,52 @@ describe("DownloadClientService", () => {
       throw new Error("Expected SABnzbd test result.");
     }
 
-    const storedRow = database.db.select().from(downloadClients).all();
+    const storedRow = database.db.select().from(serviceIntegrations).all();
     const stored = storedRow.find((entry) => entry.kind === "sabnzbd");
 
     expect(stored?.lastTestOutcome).toBe("success");
     expect(stored?.lastTestMessage).toBe("SABnzbd connection succeeded.");
     expect(stored?.lastTestedAt).toEqual(expect.any(String));
   });
+
+  it("rejects username/password auth for Prowlarr before probing", async () => {
+    const database = await openDatabase();
+    const service = createService(database);
+
+    const result = await service.upsertConfig("prowlarr", {
+      displayName: "Main Prowlarr",
+      enabled: true,
+      useSsl: false,
+      host: "prowlarr.local",
+      port: 9696,
+      authMode: "username_password",
+      username: "admin",
+      password: "secret",
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected Prowlarr validation to fail.");
+    }
+
+    expect(result.status).toBe(422);
+    expect(result.body.error.fieldErrors).toContainEqual({
+      field: "authMode",
+      code: "configuration_incomplete",
+      message: "Prowlarr only supports API key authentication.",
+    });
+    expect(mockState.prowlarrCalls).toHaveLength(0);
+  });
 });
 
 const mockState: {
   database: DatabaseClient | null;
+  prowlarrCalls: Array<Record<string, unknown>>;
   qbittorrentCalls: Array<Record<string, unknown>>;
   sabnzbdCalls: Array<Record<string, unknown>>;
 } = {
   database: null,
+  prowlarrCalls: [],
   qbittorrentCalls: [],
   sabnzbdCalls: [],
 };
@@ -228,10 +267,14 @@ async function openDatabase(): Promise<DatabaseClient> {
   return database;
 }
 
-function createService(database: DatabaseClient): DownloadClientService {
-  return new DownloadClientService(database, {
+function createService(database: DatabaseClient): ServiceIntegrationService {
+  return new ServiceIntegrationService(database, {
     secretEncryptionKey,
     probers: {
+      prowlarr: async (config) => {
+        mockState.prowlarrCalls.push(config as Record<string, unknown>);
+        return successProwlarrProbe();
+      },
       qbittorrent: async (config) => {
         mockState.qbittorrentCalls.push(config as Record<string, unknown>);
         return successQbittorrentProbe();
@@ -278,6 +321,26 @@ function successSabnzbdProbe(): SabnzbdClientProbeResponse {
       authenticated: true,
       compatible: true,
       version: "4.5.3",
+      webApiVersion: null,
+      connectionState: "connected",
+    },
+  };
+}
+
+function successProwlarrProbe(): ProwlarrProbeResponse {
+  return {
+    ok: true,
+    result: {
+      kind: "prowlarr",
+      configured: true,
+      enabled: true,
+      outcome: "success",
+      summary: "Connected to Prowlarr 1.30.2.",
+      checkedAt: new Date().toISOString(),
+      reachable: true,
+      authenticated: true,
+      compatible: true,
+      version: "1.30.2",
       webApiVersion: null,
       connectionState: "connected",
     },

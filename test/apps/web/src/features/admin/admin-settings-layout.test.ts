@@ -50,11 +50,12 @@ describe("app settings layout", () => {
   it("uses real Services settings cards instead of placeholder copy", async () => {
     const source = await readWorkspaceSource(servicesSettingsSourcePath);
 
-    expect(source).toContain("useDownloadClientConfigsQuery");
+    expect(source).toContain("useServiceIntegrationConfigsQuery");
     expect(source).toContain("useAuthenticatedRouteUser");
-    expect(source).toContain("useDownloadClientStatusQuery");
+    expect(source).toContain("useServiceIntegrationStatusQuery");
     expect(source).toContain("/services/qbittorrent.svg");
     expect(source).toContain("/services/sabnzbd.svg");
+    expect(source).toContain("/services/prowlarr.svg");
     expect(source).toContain("SettingsAccordionCard");
     expect(source).toContain("Service name");
     expect(source).toContain("Add another service");
@@ -72,12 +73,16 @@ describe("app settings layout", () => {
     expect(source).toContain("services.test.failed");
     expect(source).toContain("Connected");
     expect(source).toContain("Not configured");
+    expect(source).toContain("useState(false)");
+    expect(source).not.toContain("ServiceEnabledToggle");
+    expect(source).not.toContain("Enable service integration");
     expect(source).not.toContain("This settings section is scaffolded");
     expect(source).not.toContain("decorative bubble");
     expect(source).not.toContain(
       "Save downloader connections, test them, and review normalized compatibility status.",
     );
     expect(source).not.toContain("Outbound access is intentional here.");
+    expect(source).not.toContain("Choose a downloader type.");
   });
 
   it("keeps the users section as a real directory-driven management surface", async () => {

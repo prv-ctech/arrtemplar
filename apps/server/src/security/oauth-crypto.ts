@@ -8,13 +8,15 @@ const oauthHmacKeyBytes = 64;
 const oauthGcmIvBytes = 12;
 
 const OAUTH_CLIENT_SECRET_PURPOSE = "arrtemplar/oauth-client-secret/v1" as const;
-const DOWNLOAD_CLIENT_SECRET_PURPOSE = "arrtemplar/download-client-secret/v1" as const;
+const LEGACY_DOWNLOAD_CLIENT_SECRET_PURPOSE = "arrtemplar/download-client-secret/v1" as const;
+const SERVICE_INTEGRATION_SECRET_PURPOSE = "arrtemplar/service-integration-secret/v1" as const;
 const OAUTH_ID_TOKEN_PURPOSE = "arrtemplar/oauth-id-token/v1" as const;
 export const OAUTH_STATE_PURPOSE = "arrtemplar/oauth-state/v1" as const;
 
 export type OAuthKeyPurpose =
   | typeof OAUTH_CLIENT_SECRET_PURPOSE
-  | typeof DOWNLOAD_CLIENT_SECRET_PURPOSE
+  | typeof LEGACY_DOWNLOAD_CLIENT_SECRET_PURPOSE
+  | typeof SERVICE_INTEGRATION_SECRET_PURPOSE
   | typeof OAUTH_ID_TOKEN_PURPOSE
   | typeof OAUTH_STATE_PURPOSE;
 
@@ -28,7 +30,7 @@ export type EncryptedOAuthIdToken = {
   masterKeyId: string;
 };
 
-export type EncryptedDownloadClientSecret = {
+export type EncryptedServiceIntegrationSecret = {
   encrypted: string;
   masterKeyId: string;
 };
@@ -89,15 +91,15 @@ export async function encryptOAuthClientSecret(
   return encryptWithPurpose(plaintext, masterKey, OAUTH_CLIENT_SECRET_PURPOSE);
 }
 
-export async function encryptDownloadClientSecret(
+export async function encryptServiceIntegrationSecret(
   plaintext: string,
   masterKey: string,
-): Promise<EncryptedDownloadClientSecret> {
+): Promise<EncryptedServiceIntegrationSecret> {
   if (!plaintext) {
-    throw new Error("Download client secret must not be empty.");
+    throw new Error("Service integration secret must not be empty.");
   }
 
-  return encryptWithPurpose(plaintext, masterKey, DOWNLOAD_CLIENT_SECRET_PURPOSE);
+  return await encryptWithPurpose(plaintext, masterKey, SERVICE_INTEGRATION_SECRET_PURPOSE);
 }
 
 export async function decryptOAuthClientSecret(
@@ -120,12 +122,21 @@ export async function decryptOAuthClientSecret(
   }
 }
 
-export async function decryptDownloadClientSecret(
+export async function decryptServiceIntegrationSecret(
   encrypted: string,
   masterKey: string,
 ): Promise<string> {
-  const derivedKey = await deriveAesGcmKey(masterKey, DOWNLOAD_CLIENT_SECRET_PURPOSE);
-  return decryptAesGcm(encrypted, derivedKey);
+  try {
+    const derivedKey = await deriveAesGcmKey(masterKey, SERVICE_INTEGRATION_SECRET_PURPOSE);
+    return await decryptAesGcm(encrypted, derivedKey);
+  } catch (error) {
+    if (error instanceof OauthCryptoError) {
+      throw error;
+    }
+
+    const legacyKey = await deriveAesGcmKey(masterKey, LEGACY_DOWNLOAD_CLIENT_SECRET_PURPOSE);
+    return await decryptAesGcm(encrypted, legacyKey);
+  }
 }
 
 export async function encryptOAuthIdToken(

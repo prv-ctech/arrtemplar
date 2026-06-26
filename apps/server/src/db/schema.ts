@@ -4,12 +4,12 @@ import {
   AUTH_PROVIDER_SLUGS,
   DEFAULT_PROFILE_AVATAR_ID,
   DEFAULT_PROFILE_BANNER_ID,
-  DOWNLOAD_CLIENT_AUTH_MODE_VALUES,
-  DOWNLOAD_CLIENT_KIND_VALUES,
-  DOWNLOAD_CLIENT_PROBE_OUTCOME_VALUES,
   NOTIFICATION_FREQUENCY_VALUES,
   OIDC_PROFILE_SIGNING_ALGORITHM_VALUES,
   OIDC_SIGNING_ALGORITHM_VALUES,
+  SERVICE_INTEGRATION_AUTH_MODE_VALUES,
+  SERVICE_INTEGRATION_KIND_VALUES,
+  SERVICE_INTEGRATION_PROBE_OUTCOME_VALUES,
   TOAST_NOTIFICATION_EVENT_IDS,
   TOAST_NOTIFICATION_IMPORTANCE_VALUES,
   TOAST_NOTIFICATION_SEVERITY_VALUES,
@@ -50,9 +50,9 @@ const tokenEndpointAuthMethodEnum = nonEmptyEnum(TOKEN_ENDPOINT_AUTH_METHOD_VALU
 const oidcSigningAlgorithmEnum = nonEmptyEnum(OIDC_SIGNING_ALGORITHM_VALUES);
 const oidcProfileSigningAlgorithmEnum = nonEmptyEnum(OIDC_PROFILE_SIGNING_ALGORITHM_VALUES);
 const notificationFrequencyEnum = nonEmptyEnum(NOTIFICATION_FREQUENCY_VALUES);
-const downloadClientKindEnum = nonEmptyEnum(DOWNLOAD_CLIENT_KIND_VALUES);
-const downloadClientAuthModeEnum = nonEmptyEnum(DOWNLOAD_CLIENT_AUTH_MODE_VALUES);
-const downloadClientProbeOutcomeEnum = nonEmptyEnum(DOWNLOAD_CLIENT_PROBE_OUTCOME_VALUES);
+const serviceIntegrationKindEnum = nonEmptyEnum(SERVICE_INTEGRATION_KIND_VALUES);
+const serviceIntegrationAuthModeEnum = nonEmptyEnum(SERVICE_INTEGRATION_AUTH_MODE_VALUES);
+const serviceIntegrationProbeOutcomeEnum = nonEmptyEnum(SERVICE_INTEGRATION_PROBE_OUTCOME_VALUES);
 const toastNotificationIdEnum = nonEmptyEnum(TOAST_NOTIFICATION_EVENT_IDS);
 const toastNotificationSeverityEnum = nonEmptyEnum(TOAST_NOTIFICATION_SEVERITY_VALUES);
 const toastNotificationImportanceEnum = nonEmptyEnum(TOAST_NOTIFICATION_IMPORTANCE_VALUES);
@@ -254,11 +254,11 @@ export const apiKeys = sqliteTable(
   ],
 );
 
-export const downloadClients = sqliteTable(
-  "download_clients",
+export const serviceIntegrations = sqliteTable(
+  "service_integrations",
   {
     id: text("id").primaryKey(),
-    kind: text("kind", { enum: downloadClientKindEnum }).notNull(),
+    kind: text("kind", { enum: serviceIntegrationKindEnum }).notNull(),
     displayName: text("display_name").notNull(),
     isDefault: integer("is_default", { mode: "boolean" }).notNull().default(false),
     enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
@@ -266,22 +266,24 @@ export const downloadClients = sqliteTable(
     host: text("host").notNull(),
     port: integer("port").notNull(),
     urlBase: text("url_base"),
-    authMode: text("auth_mode", { enum: downloadClientAuthModeEnum }).notNull(),
+    authMode: text("auth_mode", { enum: serviceIntegrationAuthModeEnum }).notNull(),
     username: text("username"),
     apiKeyEncrypted: text("api_key_encrypted"),
     passwordEncrypted: text("password_encrypted"),
     masterKeyId: text("master_key_id"),
     lastTestedAt: text("last_tested_at"),
-    lastTestOutcome: text("last_test_outcome", { enum: downloadClientProbeOutcomeEnum }),
+    lastTestOutcome: text("last_test_outcome", { enum: serviceIntegrationProbeOutcomeEnum }),
     lastTestMessage: text("last_test_message"),
     lastStatusCheckedAt: text("last_status_checked_at"),
-    lastStatusOutcome: text("last_status_outcome", { enum: downloadClientProbeOutcomeEnum }),
+    lastStatusOutcome: text("last_status_outcome", {
+      enum: serviceIntegrationProbeOutcomeEnum,
+    }),
     lastStatusMessage: text("last_status_message"),
     ...timestampColumns(),
   },
   (table) => [
-    index("download_clients_kind_idx").on(table.kind),
-    uniqueIndex("download_clients_default_kind_unique")
+    index("service_integrations_kind_idx").on(table.kind),
+    uniqueIndex("service_integrations_default_kind_unique")
       .on(table.kind)
       .where(sql`${table.isDefault} = 1`),
   ],
@@ -321,7 +323,7 @@ export type Session = InferSelectModel<typeof sessions>;
 export type NewSession = InferInsertModel<typeof sessions>;
 export type ApiKey = InferSelectModel<typeof apiKeys>;
 export type NewApiKey = InferInsertModel<typeof apiKeys>;
-export type DownloadClient = InferSelectModel<typeof downloadClients>;
-export type NewDownloadClient = InferInsertModel<typeof downloadClients>;
+export type ServiceIntegration = InferSelectModel<typeof serviceIntegrations>;
+export type NewServiceIntegration = InferInsertModel<typeof serviceIntegrations>;
 export type AuditLog = InferSelectModel<typeof auditLogs>;
 export type NewAuditLog = InferInsertModel<typeof auditLogs>;

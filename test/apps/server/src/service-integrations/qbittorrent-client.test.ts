@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
-import { probeQbittorrentClient } from "../../../../../apps/server/src/download-clients/qbittorrent-client";
+import { probeQbittorrentClient } from "../../../../../apps/server/src/service-integrations/qbittorrent-client";
 
 const originalFetch = globalThis.fetch;
 

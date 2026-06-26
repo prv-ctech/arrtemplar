@@ -1,13 +1,13 @@
 import type {
-  DownloadClientAuthMode,
-  DownloadClientField,
-  DownloadClientOperationError,
-  DownloadClientProbeResult,
+  ServiceIntegrationAuthMode,
+  ServiceIntegrationField,
+  ServiceIntegrationOperationError,
+  ServiceIntegrationProbeResult,
 } from "@arrtemplar/shared";
 import {
-  buildDownloadClientBaseUrl,
-  createDownloadClientOperationError,
-  requestDownloadClientText,
+  buildServiceIntegrationBaseUrl,
+  createServiceIntegrationOperationError,
+  requestServiceIntegrationText,
 } from "./outbound-request-policy";
 
 const API_KEY_REQUIRED_TEXT = "API Key Required";
@@ -18,7 +18,7 @@ export type SabnzbdClientSettings = {
   host: string;
   port: number;
   urlBase?: string | null;
-  authMode: DownloadClientAuthMode;
+  authMode: ServiceIntegrationAuthMode;
   apiKey?: string | null;
   username?: string | null;
   password?: string | null;
@@ -26,8 +26,8 @@ export type SabnzbdClientSettings = {
 };
 
 export type SabnzbdClientProbeResponse =
-  | { ok: true; result: DownloadClientProbeResult }
-  | { ok: false; result: DownloadClientProbeResult; error: DownloadClientOperationError };
+  | { ok: true; result: ServiceIntegrationProbeResult }
+  | { ok: false; result: ServiceIntegrationProbeResult; error: ServiceIntegrationOperationError };
 
 type SabnzbdApiMode = "version" | "status";
 
@@ -35,7 +35,7 @@ type SabnzbdJsonResponse =
   | { ok: true; body: unknown }
   | {
       ok: false;
-      error: DownloadClientOperationError;
+      error: ServiceIntegrationOperationError;
       reachable: boolean;
       authenticated: boolean;
     };
@@ -44,7 +44,7 @@ export async function probeSabnzbdClient(
   settings: SabnzbdClientSettings,
 ): Promise<SabnzbdClientProbeResponse> {
   const checkedAt = new Date().toISOString();
-  const baseUrlResult = buildDownloadClientBaseUrl({
+  const baseUrlResult = buildServiceIntegrationBaseUrl({
     serviceLabel: "SABnzbd",
     useSsl: settings.useSsl,
     host: settings.host,
@@ -137,10 +137,10 @@ async function fetchSabnzbdJson(
   baseUrl: URL,
   mode: SabnzbdApiMode,
 ): Promise<SabnzbdJsonResponse> {
-  let response: Awaited<ReturnType<typeof requestDownloadClientText>>;
+  let response: Awaited<ReturnType<typeof requestServiceIntegrationText>>;
 
   try {
-    response = await requestDownloadClientText({
+    response = await requestServiceIntegrationText({
       baseUrl,
       serviceLabel: "SABnzbd",
       path: buildSabnzbdApiPath(settings, mode),
@@ -251,13 +251,13 @@ function appendConfiguredCredentials(url: URL, settings: SabnzbdClientSettings):
 
 function validateConfiguredCredentials(
   settings: SabnzbdClientSettings,
-): DownloadClientOperationError | null {
+): ServiceIntegrationOperationError | null {
   if (settings.authMode === "api_key" && !hasConfiguredValue(settings.apiKey)) {
     return createOperationError("auth_failed", "SABnzbd API key is required.", ["apiKey"]);
   }
 
   if (settings.authMode === "username_password") {
-    const missingFields: DownloadClientField[] = [];
+    const missingFields: ServiceIntegrationField[] = [];
 
     if (!hasConfiguredValue(settings.username)) {
       missingFields.push("username");
@@ -279,7 +279,7 @@ function validateConfiguredCredentials(
   return null;
 }
 
-function createCredentialTextError(bodyText: string): DownloadClientOperationError | null {
+function createCredentialTextError(bodyText: string): ServiceIntegrationOperationError | null {
   if (bodyText.includes(API_KEY_REQUIRED_TEXT)) {
     return createOperationError("auth_failed", "SABnzbd API key is required.", ["apiKey"]);
   }
@@ -292,8 +292,8 @@ function createCredentialTextError(bodyText: string): DownloadClientOperationErr
 }
 
 function createRejectedCredentialError(
-  authMode: DownloadClientAuthMode,
-): DownloadClientOperationError {
+  authMode: ServiceIntegrationAuthMode,
+): ServiceIntegrationOperationError {
   if (authMode === "api_key") {
     return createOperationError("auth_failed", "SABnzbd API key was rejected.", ["apiKey"]);
   }
@@ -314,7 +314,7 @@ function createFailureResult({
   connectionState = null,
 }: {
   checkedAt: string;
-  error: DownloadClientOperationError;
+  error: ServiceIntegrationOperationError;
   configured?: boolean;
   reachable: boolean;
   authenticated?: boolean;
@@ -350,7 +350,7 @@ function createProbeResult({
   connectionState,
 }: {
   checkedAt: string;
-  outcome: DownloadClientProbeResult["outcome"];
+  outcome: ServiceIntegrationProbeResult["outcome"];
   summary: string;
   configured?: boolean;
   reachable: boolean;
@@ -358,7 +358,7 @@ function createProbeResult({
   compatible: boolean;
   version: string | null;
   connectionState: string | null;
-}): DownloadClientProbeResult {
+}): ServiceIntegrationProbeResult {
   return {
     kind: "sabnzbd",
     configured,
@@ -376,11 +376,11 @@ function createProbeResult({
 }
 
 function createOperationError(
-  code: DownloadClientOperationError["code"],
+  code: ServiceIntegrationOperationError["code"],
   message: string,
-  fields: DownloadClientField[] = [],
-): DownloadClientOperationError {
-  return createDownloadClientOperationError(code, message, fields);
+  fields: ServiceIntegrationField[] = [],
+): ServiceIntegrationOperationError {
+  return createServiceIntegrationOperationError(code, message, fields);
 }
 
 function readVersion(body: unknown): string | null {
@@ -399,7 +399,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isOperationError(error: unknown): error is DownloadClientOperationError {
+function isOperationError(error: unknown): error is ServiceIntegrationOperationError {
   return Boolean(
     error &&
       typeof error === "object" &&

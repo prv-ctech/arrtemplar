@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, mock } from "bun:test";
 import {
   probeSabnzbdClient,
   type SabnzbdClientSettings,
-} from "../../../../../apps/server/src/download-clients/sabnzbd-client";
+} from "../../../../../apps/server/src/service-integrations/sabnzbd-client";
 
 const originalFetch = globalThis.fetch;
 

@@ -49,7 +49,7 @@ describe("migrateDatabase", () => {
     try {
       expectCoreTables(readTableNames(database));
       expectNotificationHistorySchema(database);
-      expectDownloadClientSchema(database);
+      expectServiceIntegrationSchema(database);
     } finally {
       database.close();
     }
@@ -189,23 +189,25 @@ function expectNotificationHistorySchema(database: ReturnType<typeof openTestDat
   expectNotificationHistoryAcceptsAllToastEvents(database);
 }
 
-function expectDownloadClientSchema(database: ReturnType<typeof openTestDatabase>): void {
+function expectServiceIntegrationSchema(database: ReturnType<typeof openTestDatabase>): void {
   const indexes = database.sqlite
-    .query<IndexRow, []>("pragma index_list('download_clients')")
+    .query<IndexRow, []>("pragma index_list('service_integrations')")
     .all();
 
-  expect(indexes).toContainEqual(expect.objectContaining({ name: "download_clients_kind_idx" }));
+  expect(indexes).toContainEqual(
+    expect.objectContaining({ name: "service_integrations_kind_idx" }),
+  );
   expect(indexes).toContainEqual(
     expect.objectContaining({
-      name: "download_clients_default_kind_unique",
+      name: "service_integrations_default_kind_unique",
       partial: 1,
       unique: 1,
     }),
   );
-  expect(indexes.map((index) => index.name)).not.toContain("download_clients_enabled_idx");
+  expect(indexes.map((index) => index.name)).not.toContain("service_integrations_enabled_idx");
 
   const insertDefaultClient = database.sqlite.query(
-    "insert into download_clients (id, kind, display_name, is_default, enabled, use_ssl, host, port, auth_mode) values ($id, $kind, $displayName, true, true, false, $host, 8080, 'none')",
+    "insert into service_integrations (id, kind, display_name, is_default, enabled, use_ssl, host, port, auth_mode) values ($id, $kind, $displayName, true, true, false, $host, 8080, 'none')",
   );
 
   insertDefaultClient.run({
@@ -225,7 +227,7 @@ function expectDownloadClientSchema(database: ReturnType<typeof openTestDatabase
 
   database.sqlite
     .query(
-      "insert into download_clients (id, kind, display_name, is_default, enabled, use_ssl, host, port, auth_mode) values ('qbittorrent-extra', 'qbittorrent', 'qBittorrent extra', false, true, false, 'localhost', 8081, 'none')",
+      "insert into service_integrations (id, kind, display_name, is_default, enabled, use_ssl, host, port, auth_mode) values ('qbittorrent-extra', 'qbittorrent', 'qBittorrent extra', false, true, false, 'localhost', 8081, 'none')",
     )
     .run();
   insertDefaultClient.run({

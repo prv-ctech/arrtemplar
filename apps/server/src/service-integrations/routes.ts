@@ -1,11 +1,11 @@
 import {
   type ApiErrorResponse,
-  DOWNLOAD_CLIENT_AUTH_MODE_VALUES,
-  DOWNLOAD_CLIENT_KIND_VALUES,
-  DOWNLOAD_CLIENT_PROBE_OUTCOME_VALUES,
-  type DownloadClientKind,
   type PublicUser,
-  type UpsertDownloadClientRequest,
+  SERVICE_INTEGRATION_AUTH_MODE_VALUES,
+  SERVICE_INTEGRATION_KIND_VALUES,
+  SERVICE_INTEGRATION_PROBE_OUTCOME_VALUES,
+  type ServiceIntegrationKind,
+  type UpsertServiceIntegrationRequest,
 } from "@arrtemplar/shared";
 import { Elysia, t } from "elysia";
 import { ApiKeyService } from "../auth/api-key.service";
@@ -14,12 +14,12 @@ import { resolveRoutePrincipal } from "../auth/route-principal";
 import { createRequestContext } from "../auth/routes";
 import { SESSION_COOKIE_NAME } from "../auth/session-token";
 import type { DatabaseClient } from "../db/client";
-import { DownloadClientService } from "./download-client.service";
+import { ServiceIntegrationService } from "./service-integration.service";
 
 // biome-ignore lint/suspicious/noExplicitAny: Elysia SelectiveStatus callback types vary per route and are impractical to model precisely in these shared helpers.
 type StatusHandler = (...args: any[]) => any;
 
-type DownloadClientRoutesOptions = {
+type ServiceIntegrationRoutesOptions = {
   database: DatabaseClient;
   secretEncryptionKey: string | null;
 };
@@ -41,34 +41,36 @@ type KindBodyRouteContext = BaseRouteContext & {
 };
 type InstanceBodyRouteContext = BaseRouteContext & {
   body: unknown;
-  params: { clientId: unknown };
+  params: { integrationId: unknown };
 };
 type KindRequestRouteContext = BaseRouteContext & { params: { kind: unknown } };
-type InstanceRequestRouteContext = BaseRouteContext & { params: { clientId: unknown } };
+type InstanceRequestRouteContext = BaseRouteContext & { params: { integrationId: unknown } };
 type KindStatusRouteContext = BaseRouteContext & { params: { kind: unknown } };
-type InstanceStatusRouteContext = BaseRouteContext & { params: { clientId: unknown } };
+type InstanceStatusRouteContext = BaseRouteContext & { params: { integrationId: unknown } };
 
-const downloadClientKindSchema = t.Union(
-  DOWNLOAD_CLIENT_KIND_VALUES.map((kind) => t.Literal(kind)) as [
+const serviceIntegrationKindSchema = t.Union(
+  SERVICE_INTEGRATION_KIND_VALUES.map((kind) => t.Literal(kind)) as [
     ReturnType<typeof t.Literal>,
     ...ReturnType<typeof t.Literal>[],
   ],
 );
-const downloadClientAuthModeSchema = t.Union(
-  DOWNLOAD_CLIENT_AUTH_MODE_VALUES.map((mode) => t.Literal(mode)) as [
+const serviceIntegrationAuthModeSchema = t.Union(
+  SERVICE_INTEGRATION_AUTH_MODE_VALUES.map((mode) => t.Literal(mode)) as [
     ReturnType<typeof t.Literal>,
     ...ReturnType<typeof t.Literal>[],
   ],
 );
-const downloadClientProbeOutcomeSchema = t.Union(
-  DOWNLOAD_CLIENT_PROBE_OUTCOME_VALUES.map((outcome) => t.Literal(outcome)) as [
+const serviceIntegrationProbeOutcomeSchema = t.Union(
+  SERVICE_INTEGRATION_PROBE_OUTCOME_VALUES.map((outcome) => t.Literal(outcome)) as [
     ReturnType<typeof t.Literal>,
     ...ReturnType<typeof t.Literal>[],
   ],
 );
 
-const downloadClientParamsSchema = t.Object({ kind: downloadClientKindSchema });
-const downloadClientInstanceParamsSchema = t.Object({ clientId: t.String({ minLength: 1 }) });
+const serviceIntegrationParamsSchema = t.Object({ kind: serviceIntegrationKindSchema });
+const serviceIntegrationInstanceParamsSchema = t.Object({
+  integrationId: t.String({ minLength: 1 }),
+});
 const sessionCookieSchema = t.Cookie({ [SESSION_COOKIE_NAME]: t.Optional(t.String()) });
 const apiErrorResponseSchema = t.Object({
   error: t.Object({
@@ -85,9 +87,9 @@ const apiErrorResponseSchema = t.Object({
     ),
   }),
 });
-const downloadClientSavedConfigSchema = t.Object({
+const serviceIntegrationSavedConfigSchema = t.Object({
   id: t.String({ minLength: 1 }),
-  kind: downloadClientKindSchema,
+  kind: serviceIntegrationKindSchema,
   displayName: t.String({ minLength: 1 }),
   isDefault: t.Boolean(),
   enabled: t.Boolean(),
@@ -95,30 +97,30 @@ const downloadClientSavedConfigSchema = t.Object({
   host: t.String({ minLength: 1 }),
   port: t.Number({ minimum: 1, maximum: 65_535 }),
   urlBase: t.Union([t.String(), t.Null()]),
-  authMode: downloadClientAuthModeSchema,
+  authMode: serviceIntegrationAuthModeSchema,
   username: t.Union([t.String(), t.Null()]),
   hasApiKey: t.Boolean(),
   hasPassword: t.Boolean(),
   lastTestedAt: t.Union([t.String({ format: "date-time" }), t.Null()]),
-  lastTestOutcome: t.Union([downloadClientProbeOutcomeSchema, t.Null()]),
+  lastTestOutcome: t.Union([serviceIntegrationProbeOutcomeSchema, t.Null()]),
   lastTestMessage: t.Union([t.String(), t.Null()]),
   lastStatusCheckedAt: t.Union([t.String({ format: "date-time" }), t.Null()]),
-  lastStatusOutcome: t.Union([downloadClientProbeOutcomeSchema, t.Null()]),
+  lastStatusOutcome: t.Union([serviceIntegrationProbeOutcomeSchema, t.Null()]),
   lastStatusMessage: t.Union([t.String(), t.Null()]),
   createdAt: t.String({ format: "date-time" }),
   updatedAt: t.String({ format: "date-time" }),
 });
-const downloadClientResponseSchema = t.Object({
-  client: t.Union([downloadClientSavedConfigSchema, t.Null()]),
+const serviceIntegrationResponseSchema = t.Object({
+  integration: t.Union([serviceIntegrationSavedConfigSchema, t.Null()]),
 });
-const downloadClientListResponseSchema = t.Object({
-  clients: t.Array(downloadClientSavedConfigSchema),
+const serviceIntegrationListResponseSchema = t.Object({
+  integrations: t.Array(serviceIntegrationSavedConfigSchema),
 });
-const downloadClientProbeResultSchema = t.Object({
-  kind: downloadClientKindSchema,
+const serviceIntegrationProbeResultSchema = t.Object({
+  kind: serviceIntegrationKindSchema,
   configured: t.Boolean(),
   enabled: t.Boolean(),
-  outcome: downloadClientProbeOutcomeSchema,
+  outcome: serviceIntegrationProbeOutcomeSchema,
   summary: t.String(),
   checkedAt: t.String({ format: "date-time" }),
   reachable: t.Boolean(),
@@ -128,8 +130,8 @@ const downloadClientProbeResultSchema = t.Object({
   webApiVersion: t.Union([t.String(), t.Null()]),
   connectionState: t.Union([t.String(), t.Null()]),
 });
-const downloadClientProbeResponseSchema = t.Object({
-  result: downloadClientProbeResultSchema,
+const serviceIntegrationProbeResponseSchema = t.Object({
+  result: serviceIntegrationProbeResultSchema,
   error: t.Optional(
     t.Object({
       code: t.String(),
@@ -146,19 +148,19 @@ const downloadClientProbeResponseSchema = t.Object({
     }),
   ),
 });
-const deleteDownloadClientResponseSchema = t.Object({
+const deleteServiceIntegrationResponseSchema = t.Object({
   status: t.Literal("ok"),
   deletedId: t.String({ minLength: 1 }),
-  deletedKind: downloadClientKindSchema,
+  deletedKind: serviceIntegrationKindSchema,
 });
-const upsertDownloadClientRequestSchema = t.Object({
+const upsertServiceIntegrationRequestSchema = t.Object({
   displayName: t.Optional(t.Union([t.String(), t.Null()])),
-  enabled: t.Boolean(),
+  enabled: t.Optional(t.Boolean()),
   useSsl: t.Boolean(),
   host: t.String({ minLength: 1 }),
   port: t.Number({ minimum: 1, maximum: 65_535 }),
   urlBase: t.Optional(t.Union([t.String(), t.Null()])),
-  authMode: downloadClientAuthModeSchema,
+  authMode: serviceIntegrationAuthModeSchema,
   username: t.Optional(t.Union([t.String(), t.Null()])),
   apiKey: t.Optional(t.String()),
   password: t.Optional(t.String()),
@@ -168,43 +170,43 @@ const authErrorResponseSchemas = {
   401: apiErrorResponseSchema,
   403: apiErrorResponseSchema,
 } as const;
-const downloadClientReadResponseSchemas = {
-  200: downloadClientResponseSchema,
+const serviceIntegrationReadResponseSchemas = {
+  200: serviceIntegrationResponseSchema,
   ...authErrorResponseSchemas,
 } as const;
-const downloadClientSaveResponseSchemas = {
-  ...downloadClientReadResponseSchemas,
+const serviceIntegrationSaveResponseSchemas = {
+  ...serviceIntegrationReadResponseSchemas,
   422: apiErrorResponseSchema,
   503: apiErrorResponseSchema,
 } as const;
-const downloadClientInstanceSaveResponseSchemas = {
-  ...downloadClientSaveResponseSchemas,
+const serviceIntegrationInstanceSaveResponseSchemas = {
+  ...serviceIntegrationSaveResponseSchemas,
   404: apiErrorResponseSchema,
 } as const;
-const downloadClientDeleteResponseSchemas = {
-  200: deleteDownloadClientResponseSchema,
+const serviceIntegrationDeleteResponseSchemas = {
+  200: deleteServiceIntegrationResponseSchema,
   ...authErrorResponseSchemas,
   404: apiErrorResponseSchema,
 } as const;
-const downloadClientInstanceDeleteResponseSchemas = {
-  ...downloadClientDeleteResponseSchemas,
+const serviceIntegrationInstanceDeleteResponseSchemas = {
+  ...serviceIntegrationDeleteResponseSchemas,
   422: apiErrorResponseSchema,
 } as const;
-const downloadClientProbeResponseSchemas = {
-  200: downloadClientProbeResponseSchema,
+const serviceIntegrationProbeResponseSchemas = {
+  200: serviceIntegrationProbeResponseSchema,
   ...authErrorResponseSchemas,
   404: apiErrorResponseSchema,
-  422: apiErrorResponseSchema,
-  503: apiErrorResponseSchema,
-} as const;
-const downloadClientStatusResponseSchemas = {
-  200: downloadClientProbeResponseSchema,
-  ...authErrorResponseSchemas,
   422: apiErrorResponseSchema,
   503: apiErrorResponseSchema,
 } as const;
-const downloadClientInstanceStatusResponseSchemas = {
-  ...downloadClientStatusResponseSchemas,
+const serviceIntegrationStatusResponseSchemas = {
+  200: serviceIntegrationProbeResponseSchema,
+  ...authErrorResponseSchemas,
+  422: apiErrorResponseSchema,
+  503: apiErrorResponseSchema,
+} as const;
+const serviceIntegrationInstanceStatusResponseSchemas = {
+  ...serviceIntegrationStatusResponseSchemas,
   404: apiErrorResponseSchema,
 } as const;
 
@@ -212,8 +214,8 @@ function createKindBodyRouteHandler<T>(
   apiKeyService: ApiKeyService,
   authService: AuthService,
   action: (
-    kind: DownloadClientKind,
-    input: UpsertDownloadClientRequest,
+    kind: ServiceIntegrationKind,
+    input: UpsertServiceIntegrationRequest,
     actor: PublicUser | undefined,
     context: RouteRequestContext,
   ) => MaybePromise<ServiceResponse<T>>,
@@ -228,8 +230,8 @@ function createKindBodyRouteHandler<T>(
       status as StatusHandler,
       (actor, context) =>
         action(
-          params.kind as DownloadClientKind,
-          body as UpsertDownloadClientRequest,
+          params.kind as ServiceIntegrationKind,
+          body as UpsertServiceIntegrationRequest,
           actor,
           context,
         ),
@@ -241,7 +243,7 @@ function createInstanceBodyRouteHandler<T>(
   authService: AuthService,
   action: (
     id: string,
-    input: UpsertDownloadClientRequest,
+    input: UpsertServiceIntegrationRequest,
     actor: PublicUser | undefined,
     context: RouteRequestContext,
   ) => MaybePromise<ServiceResponse<T>>,
@@ -255,7 +257,12 @@ function createInstanceBodyRouteHandler<T>(
       server,
       status as StatusHandler,
       (actor, context) =>
-        action(params.clientId as string, body as UpsertDownloadClientRequest, actor, context),
+        action(
+          params.integrationId as string,
+          body as UpsertServiceIntegrationRequest,
+          actor,
+          context,
+        ),
     );
 }
 
@@ -263,7 +270,7 @@ function createKindRequestRouteHandler<T>(
   apiKeyService: ApiKeyService,
   authService: AuthService,
   action: (
-    kind: DownloadClientKind,
+    kind: ServiceIntegrationKind,
     actor: PublicUser | undefined,
     context: RouteRequestContext,
   ) => MaybePromise<ServiceResponse<T>>,
@@ -276,7 +283,7 @@ function createKindRequestRouteHandler<T>(
       request,
       server,
       status as StatusHandler,
-      (actor, context) => action(params.kind as DownloadClientKind, actor, context),
+      (actor, context) => action(params.kind as ServiceIntegrationKind, actor, context),
     );
 }
 
@@ -297,14 +304,14 @@ function createInstanceRequestRouteHandler<T>(
       request,
       server,
       status as StatusHandler,
-      (actor, context) => action(params.clientId as string, actor, context),
+      (actor, context) => action(params.integrationId as string, actor, context),
     );
 }
 
 function createKindStatusRouteHandler<T>(
   apiKeyService: ApiKeyService,
   authService: AuthService,
-  action: (kind: DownloadClientKind) => MaybePromise<ServiceResponse<T>>,
+  action: (kind: ServiceIntegrationKind) => MaybePromise<ServiceResponse<T>>,
 ) {
   return async ({ cookie, params, request, server, status }: KindStatusRouteContext) =>
     await withSettingsRequestResultAsync(
@@ -314,7 +321,7 @@ function createKindStatusRouteHandler<T>(
       request,
       server,
       status as StatusHandler,
-      async () => await action(params.kind as DownloadClientKind),
+      async () => await action(params.kind as ServiceIntegrationKind),
     );
 }
 
@@ -331,7 +338,7 @@ function createInstanceStatusRouteHandler<T>(
       request,
       server,
       status as StatusHandler,
-      async () => await action(params.clientId as string),
+      async () => await action(params.integrationId as string),
     );
 }
 
@@ -339,55 +346,55 @@ function readRouteSessionCookie(cookie: Record<string, { value?: unknown } | und
   return cookie[SESSION_COOKIE_NAME]?.value;
 }
 
-export function createDownloadClientRoutes(options: DownloadClientRoutesOptions) {
+export function createServiceIntegrationRoutes(options: ServiceIntegrationRoutesOptions) {
   const authService = new AuthService(options.database);
   const apiKeyService = new ApiKeyService(options.database);
-  const downloadClientService = new DownloadClientService(options.database, {
+  const serviceIntegrationService = new ServiceIntegrationService(options.database, {
     secretEncryptionKey: options.secretEncryptionKey,
   });
   const createInstance = createKindBodyRouteHandler(
     apiKeyService,
     authService,
     (kind, input, actor, context) =>
-      downloadClientService.createConfig(kind, input, actor, context),
+      serviceIntegrationService.createConfig(kind, input, actor, context),
   );
   const saveDefault = createKindBodyRouteHandler(
     apiKeyService,
     authService,
     (kind, input, actor, context) =>
-      downloadClientService.upsertConfig(kind, input, actor, context),
+      serviceIntegrationService.upsertConfig(kind, input, actor, context),
   );
   const saveInstance = createInstanceBodyRouteHandler(
     apiKeyService,
     authService,
     (id, input, actor, context) =>
-      downloadClientService.updateConfigById(id, input, actor, context),
+      serviceIntegrationService.updateConfigById(id, input, actor, context),
   );
   const deleteDefault = createKindRequestRouteHandler(
     apiKeyService,
     authService,
-    (kind, actor, context) => downloadClientService.deleteConfig(kind, actor, context),
+    (kind, actor, context) => serviceIntegrationService.deleteConfig(kind, actor, context),
   );
   const deleteInstance = createInstanceRequestRouteHandler(
     apiKeyService,
     authService,
-    (id, actor, context) => downloadClientService.deleteConfigById(id, actor, context),
+    (id, actor, context) => serviceIntegrationService.deleteConfigById(id, actor, context),
   );
   const testDefault = createKindRequestRouteHandler(
     apiKeyService,
     authService,
-    (kind, actor, context) => downloadClientService.testConfig(kind, actor, context),
+    (kind, actor, context) => serviceIntegrationService.testConfig(kind, actor, context),
   );
   const testInstance = createInstanceRequestRouteHandler(
     apiKeyService,
     authService,
-    (id, actor, context) => downloadClientService.testConfigById(id, actor, context),
+    (id, actor, context) => serviceIntegrationService.testConfigById(id, actor, context),
   );
   const readDefaultStatus = createKindStatusRouteHandler(apiKeyService, authService, (kind) =>
-    downloadClientService.getStatus(kind),
+    serviceIntegrationService.getStatus(kind),
   );
   const readInstanceStatus = createInstanceStatusRouteHandler(apiKeyService, authService, (id) =>
-    downloadClientService.getStatusById(id),
+    serviceIntegrationService.getStatusById(id),
   );
 
   return new Elysia({ prefix: "/api" })
@@ -401,14 +408,14 @@ export function createDownloadClientRoutes(options: DownloadClientRoutesOptions)
           request,
           server,
           status as StatusHandler,
-          async () => ({ ok: true, body: downloadClientService.listConfigs() }),
+          async () => ({ ok: true, body: serviceIntegrationService.listConfigs() }),
         ),
       {
         cookie: sessionCookieSchema,
-        response: { 200: downloadClientListResponseSchema, ...authErrorResponseSchemas },
+        response: { 200: serviceIntegrationListResponseSchema, ...authErrorResponseSchemas },
         detail: {
-          summary: "List download client settings",
-          description: "Returns safe download client settings metadata without secrets.",
+          summary: "List service integrations",
+          description: "Returns safe service integration settings metadata without secrets.",
           tags: ["Settings"],
         },
       },
@@ -425,115 +432,117 @@ export function createDownloadClientRoutes(options: DownloadClientRoutesOptions)
           status as StatusHandler,
           async () => ({
             ok: true,
-            body: downloadClientService.getConfig(params.kind as DownloadClientKind),
+            body: serviceIntegrationService.getConfig(params.kind as ServiceIntegrationKind),
           }),
         ),
       {
-        params: downloadClientParamsSchema,
+        params: serviceIntegrationParamsSchema,
         cookie: sessionCookieSchema,
-        response: downloadClientReadResponseSchemas,
+        response: serviceIntegrationReadResponseSchemas,
         detail: {
-          summary: "Get one download client setting",
-          description: "Returns one safe download client config or null when it is not configured.",
+          summary: "Get one service integration",
+          description:
+            "Returns one safe service integration config or null when it is not configured.",
           tags: ["Settings"],
         },
       },
     )
     .post("/settings/services/:kind/instances", createInstance, {
-      params: downloadClientParamsSchema,
-      body: upsertDownloadClientRequestSchema,
+      params: serviceIntegrationParamsSchema,
+      body: upsertServiceIntegrationRequestSchema,
       cookie: sessionCookieSchema,
-      response: downloadClientSaveResponseSchemas,
+      response: serviceIntegrationSaveResponseSchemas,
       detail: {
-        summary: "Create a download client instance",
-        description: "Creates one additional named download client config for a supported kind.",
+        summary: "Create a service integration instance",
+        description:
+          "Creates one additional named service integration config for a supported kind.",
         tags: ["Settings"],
       },
     })
     .put("/settings/services/:kind", saveDefault, {
-      params: downloadClientParamsSchema,
-      body: upsertDownloadClientRequestSchema,
+      params: serviceIntegrationParamsSchema,
+      body: upsertServiceIntegrationRequestSchema,
       cookie: sessionCookieSchema,
-      response: downloadClientSaveResponseSchemas,
+      response: serviceIntegrationSaveResponseSchemas,
       detail: {
-        summary: "Save download client settings",
+        summary: "Save service integration settings",
         description:
-          "Creates or updates one download client config while preserving stored secrets unless replaced.",
+          "Creates or updates one service integration config while preserving stored secrets unless replaced.",
         tags: ["Settings"],
       },
     })
-    .put("/settings/services/instances/:clientId", saveInstance, {
-      params: downloadClientInstanceParamsSchema,
-      body: upsertDownloadClientRequestSchema,
+    .put("/settings/services/instances/:integrationId", saveInstance, {
+      params: serviceIntegrationInstanceParamsSchema,
+      body: upsertServiceIntegrationRequestSchema,
       cookie: sessionCookieSchema,
-      response: downloadClientInstanceSaveResponseSchemas,
+      response: serviceIntegrationInstanceSaveResponseSchemas,
       detail: {
-        summary: "Save one download client instance",
+        summary: "Save one service integration instance",
         description:
-          "Updates one named download client config while preserving stored secrets unless replaced.",
+          "Updates one named service integration config while preserving stored secrets unless replaced.",
         tags: ["Settings"],
       },
     })
     .delete("/settings/services/:kind", deleteDefault, {
-      params: downloadClientParamsSchema,
+      params: serviceIntegrationParamsSchema,
       cookie: sessionCookieSchema,
-      response: downloadClientDeleteResponseSchemas,
+      response: serviceIntegrationDeleteResponseSchemas,
       detail: {
-        summary: "Delete download client settings",
-        description: "Deletes one saved download client config.",
+        summary: "Delete service integration settings",
+        description: "Deletes one saved service integration config.",
         tags: ["Settings"],
       },
     })
-    .delete("/settings/services/instances/:clientId", deleteInstance, {
-      params: downloadClientInstanceParamsSchema,
+    .delete("/settings/services/instances/:integrationId", deleteInstance, {
+      params: serviceIntegrationInstanceParamsSchema,
       cookie: sessionCookieSchema,
-      response: downloadClientInstanceDeleteResponseSchemas,
+      response: serviceIntegrationInstanceDeleteResponseSchemas,
       detail: {
-        summary: "Delete one additional download client instance",
-        description: "Deletes one non-default named download client config.",
+        summary: "Delete one additional service integration instance",
+        description: "Deletes one non-default named service integration config.",
         tags: ["Settings"],
       },
     })
     .post("/settings/services/:kind/test", testDefault, {
-      params: downloadClientParamsSchema,
+      params: serviceIntegrationParamsSchema,
       body: emptyRequestSchema,
       cookie: sessionCookieSchema,
-      response: downloadClientProbeResponseSchemas,
+      response: serviceIntegrationProbeResponseSchemas,
       detail: {
-        summary: "Test download client connectivity",
-        description: "Runs a live connectivity/auth probe for one configured download client.",
+        summary: "Test service integration connectivity",
+        description: "Runs a live connectivity/auth probe for one configured service integration.",
         tags: ["Settings"],
       },
     })
-    .post("/settings/services/instances/:clientId/test", testInstance, {
-      params: downloadClientInstanceParamsSchema,
+    .post("/settings/services/instances/:integrationId/test", testInstance, {
+      params: serviceIntegrationInstanceParamsSchema,
       body: emptyRequestSchema,
       cookie: sessionCookieSchema,
-      response: downloadClientProbeResponseSchemas,
+      response: serviceIntegrationProbeResponseSchemas,
       detail: {
-        summary: "Test download client instance connectivity",
-        description: "Runs a live connectivity/auth probe for one named download client.",
+        summary: "Test service integration instance connectivity",
+        description: "Runs a live connectivity/auth probe for one named service integration.",
         tags: ["Settings"],
       },
     })
     .get("/settings/services/:kind/status", readDefaultStatus, {
-      params: downloadClientParamsSchema,
+      params: serviceIntegrationParamsSchema,
       cookie: sessionCookieSchema,
-      response: downloadClientStatusResponseSchemas,
+      response: serviceIntegrationStatusResponseSchemas,
       detail: {
-        summary: "Read download client status",
+        summary: "Read service integration status",
         description:
-          "Returns normalized status for a configured, disabled, or missing download client.",
+          "Returns normalized status for a configured, disabled, or missing service integration.",
         tags: ["Settings"],
       },
     })
-    .get("/settings/services/instances/:clientId/status", readInstanceStatus, {
-      params: downloadClientInstanceParamsSchema,
+    .get("/settings/services/instances/:integrationId/status", readInstanceStatus, {
+      params: serviceIntegrationInstanceParamsSchema,
       cookie: sessionCookieSchema,
-      response: downloadClientInstanceStatusResponseSchemas,
+      response: serviceIntegrationInstanceStatusResponseSchemas,
       detail: {
-        summary: "Read download client instance status",
-        description: "Returns normalized status for one saved named download client.",
+        summary: "Read service integration instance status",
+        description: "Returns normalized status for one saved named service integration.",
         tags: ["Settings"],
       },
     });

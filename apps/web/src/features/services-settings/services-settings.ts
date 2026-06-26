@@ -1,124 +1,129 @@
 import type {
-  DownloadClientKind,
-  DownloadClientSavedConfig,
-  UpsertDownloadClientRequest,
+  ServiceIntegrationKind,
+  ServiceIntegrationSavedConfig,
+  UpsertServiceIntegrationRequest,
 } from "@arrtemplar/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  createDownloadClientConfig,
-  deleteDownloadClientConfigById,
-  getDownloadClientStatus,
-  getDownloadClientStatusById,
-  listDownloadClientConfigs,
-  testDownloadClientConfig,
-  testDownloadClientConfigById,
-  updateDownloadClientConfig,
-  upsertDownloadClientConfig,
+  createServiceIntegrationConfig,
+  deleteServiceIntegrationConfigById,
+  getServiceIntegrationStatus,
+  getServiceIntegrationStatusById,
+  listServiceIntegrationConfigs,
+  testServiceIntegrationConfig,
+  testServiceIntegrationConfigById,
+  updateServiceIntegrationConfig,
+  upsertServiceIntegrationConfig,
 } from "@/lib/api";
 
-const downloadClientQueryKeys = {
-  all: ["download-clients"] as const,
-  list: () => [...downloadClientQueryKeys.all, "list"] as const,
-  status: (id: string) => [...downloadClientQueryKeys.all, "status", id] as const,
+const serviceIntegrationQueryKeys = {
+  all: ["service-integrations"] as const,
+  list: () => [...serviceIntegrationQueryKeys.all, "list"] as const,
+  status: (id: string) => [...serviceIntegrationQueryKeys.all, "status", id] as const,
 };
 
-export type SaveDownloadClientConfigVariables = {
-  config: DownloadClientSavedConfig | undefined;
-  input: UpsertDownloadClientRequest;
-  kind: DownloadClientKind;
+export type SaveServiceIntegrationConfigVariables = {
+  config: ServiceIntegrationSavedConfig | undefined;
+  input: UpsertServiceIntegrationRequest;
+  kind: ServiceIntegrationKind;
   mode: "default" | "instance";
 };
 
-export function useDownloadClientConfigsQuery() {
+export function useServiceIntegrationConfigsQuery() {
   return useQuery({
-    queryKey: downloadClientQueryKeys.list(),
-    queryFn: listDownloadClientConfigs,
+    queryKey: serviceIntegrationQueryKeys.list(),
+    queryFn: listServiceIntegrationConfigs,
     staleTime: 15_000,
   });
 }
 
-export function useDownloadClientStatusQuery(
-  config: DownloadClientSavedConfig | undefined,
-  kind: DownloadClientKind,
+export function useServiceIntegrationStatusQuery(
+  config: ServiceIntegrationSavedConfig | undefined,
+  kind: ServiceIntegrationKind,
   enabled = true,
 ) {
   const statusId = config?.id ?? kind;
 
   return useQuery({
     enabled,
-    queryKey: downloadClientQueryKeys.status(statusId),
+    queryKey: serviceIntegrationQueryKeys.status(statusId),
     queryFn: () =>
-      config ? getDownloadClientStatusById(config.id) : getDownloadClientStatus(kind),
+      config ? getServiceIntegrationStatusById(config.id) : getServiceIntegrationStatus(kind),
     staleTime: 15_000,
   });
 }
 
-export function useUpsertDownloadClientMutation() {
+export function useUpsertServiceIntegrationMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ config, input, kind, mode }: SaveDownloadClientConfigVariables) => {
+    mutationFn: ({ config, input, kind, mode }: SaveServiceIntegrationConfigVariables) => {
       if (!config && mode === "instance") {
-        return createDownloadClientConfig(kind, input);
+        return createServiceIntegrationConfig(kind, input);
       }
 
       return !config || config.isDefault
-        ? upsertDownloadClientConfig(kind, input)
-        : updateDownloadClientConfig(config.id, input);
+        ? upsertServiceIntegrationConfig(kind, input)
+        : updateServiceIntegrationConfig(config.id, input);
     },
     onSuccess: async (result, variables) => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: downloadClientQueryKeys.list() }),
-        queryClient.invalidateQueries({ queryKey: downloadClientQueryKeys.status(result.id) }),
-        queryClient.invalidateQueries({ queryKey: downloadClientQueryKeys.status(variables.kind) }),
+        queryClient.invalidateQueries({ queryKey: serviceIntegrationQueryKeys.list() }),
+        queryClient.invalidateQueries({ queryKey: serviceIntegrationQueryKeys.status(result.id) }),
+        queryClient.invalidateQueries({
+          queryKey: serviceIntegrationQueryKeys.status(variables.kind),
+        }),
       ]);
     },
   });
 }
 
-export function useDeleteDownloadClientByIdMutation() {
+export function useDeleteServiceIntegrationByIdMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (id: string) => deleteDownloadClientConfigById(id),
+    mutationFn: (id: string) => deleteServiceIntegrationConfigById(id),
     onSuccess: async (result) => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: downloadClientQueryKeys.list() }),
+        queryClient.invalidateQueries({ queryKey: serviceIntegrationQueryKeys.list() }),
         queryClient.invalidateQueries({
-          queryKey: downloadClientQueryKeys.status(result.deletedId),
+          queryKey: serviceIntegrationQueryKeys.status(result.deletedId),
         }),
         queryClient.invalidateQueries({
-          queryKey: downloadClientQueryKeys.status(result.deletedKind),
+          queryKey: serviceIntegrationQueryKeys.status(result.deletedKind),
         }),
       ]);
     },
   });
 }
 
-export function useTestDownloadClientMutation() {
+export function useTestServiceIntegrationMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (kind: DownloadClientKind) => testDownloadClientConfig(kind),
+    mutationFn: (kind: ServiceIntegrationKind) => testServiceIntegrationConfig(kind),
     onSuccess: async (_result, kind) => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: downloadClientQueryKeys.list() }),
-        queryClient.invalidateQueries({ queryKey: downloadClientQueryKeys.status(kind) }),
+        queryClient.invalidateQueries({ queryKey: serviceIntegrationQueryKeys.list() }),
+        queryClient.invalidateQueries({ queryKey: serviceIntegrationQueryKeys.status(kind) }),
       ]);
     },
   });
 }
 
-export function useTestDownloadClientByIdMutation() {
+export function useTestServiceIntegrationByIdMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (config: DownloadClientSavedConfig) => testDownloadClientConfigById(config.id),
+    mutationFn: (config: ServiceIntegrationSavedConfig) =>
+      testServiceIntegrationConfigById(config.id),
     onSuccess: async (_result, config) => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: downloadClientQueryKeys.list() }),
-        queryClient.invalidateQueries({ queryKey: downloadClientQueryKeys.status(config.id) }),
-        queryClient.invalidateQueries({ queryKey: downloadClientQueryKeys.status(config.kind) }),
+        queryClient.invalidateQueries({ queryKey: serviceIntegrationQueryKeys.list() }),
+        queryClient.invalidateQueries({ queryKey: serviceIntegrationQueryKeys.status(config.id) }),
+        queryClient.invalidateQueries({
+          queryKey: serviceIntegrationQueryKeys.status(config.kind),
+        }),
       ]);
     },
   });

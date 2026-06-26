@@ -1,10 +1,10 @@
 import * as dns from "node:dns/promises";
-import type { DownloadClientField, DownloadClientOperationError } from "@arrtemplar/shared";
+import type { ServiceIntegrationField, ServiceIntegrationOperationError } from "@arrtemplar/shared";
 
 const defaultTimeoutMs = 5000;
 const defaultMaxResponseBytes = 64 * 1024;
 
-export type DownloadClientRequestTarget = {
+export type ServiceIntegrationRequestTarget = {
   serviceLabel: string;
   useSsl: boolean;
   host: string;
@@ -12,7 +12,7 @@ export type DownloadClientRequestTarget = {
   urlBase?: string | null | undefined;
 };
 
-export type DownloadClientRequestOptions = {
+export type ServiceIntegrationRequestOptions = {
   baseUrl: URL;
   serviceLabel: string;
   path: string;
@@ -23,21 +23,21 @@ export type DownloadClientRequestOptions = {
   maxResponseBytes?: number;
 };
 
-export type DownloadClientTextResponse = {
+export type ServiceIntegrationTextResponse = {
   status: number;
   headers: Headers;
   text: string;
 };
 
-export function buildDownloadClientBaseUrl(
-  target: DownloadClientRequestTarget,
-): { ok: true; baseUrl: URL } | { ok: false; error: DownloadClientOperationError } {
+export function buildServiceIntegrationBaseUrl(
+  target: ServiceIntegrationRequestTarget,
+): { ok: true; baseUrl: URL } | { ok: false; error: ServiceIntegrationOperationError } {
   const host = target.host.trim();
 
   if (!host) {
     return {
       ok: false,
-      error: createDownloadClientOperationError(
+      error: createServiceIntegrationOperationError(
         "configuration_incomplete",
         `${target.serviceLabel} host is required.`,
         ["host"],
@@ -48,7 +48,7 @@ export function buildDownloadClientBaseUrl(
   if (!isHostOnly(host)) {
     return {
       ok: false,
-      error: createDownloadClientOperationError(
+      error: createServiceIntegrationOperationError(
         "invalid_host",
         `${target.serviceLabel} host is invalid.`,
         ["host"],
@@ -59,7 +59,7 @@ export function buildDownloadClientBaseUrl(
   if (!Number.isInteger(target.port) || target.port < 1 || target.port > 65_535) {
     return {
       ok: false,
-      error: createDownloadClientOperationError(
+      error: createServiceIntegrationOperationError(
         "invalid_port",
         `${target.serviceLabel} port must be between 1 and 65535.`,
         ["port"],
@@ -72,7 +72,7 @@ export function buildDownloadClientBaseUrl(
   if (isBlockedIpLiteral(hostname)) {
     return {
       ok: false,
-      error: createDownloadClientOperationError(
+      error: createServiceIntegrationOperationError(
         "disallowed_target",
         `${target.serviceLabel} target is not allowed.`,
         ["host"],
@@ -95,7 +95,7 @@ export function buildDownloadClientBaseUrl(
   } catch {
     return {
       ok: false,
-      error: createDownloadClientOperationError(
+      error: createServiceIntegrationOperationError(
         "invalid_host",
         `${target.serviceLabel} host is invalid.`,
         ["host"],
@@ -113,9 +113,9 @@ export function createSameOriginHeaders(baseUrl: URL): Headers {
   return headers;
 }
 
-export async function requestDownloadClientText(
-  options: DownloadClientRequestOptions,
-): Promise<DownloadClientTextResponse> {
+export async function requestServiceIntegrationText(
+  options: ServiceIntegrationRequestOptions,
+): Promise<ServiceIntegrationTextResponse> {
   const timeoutMs = normalizeTimeout(options.timeoutMs);
   const maxResponseBytes = normalizeMaxResponseBytes(options.maxResponseBytes);
   await assertResolvedHostAllowed(options.baseUrl.hostname, options.serviceLabel);
@@ -132,7 +132,7 @@ export async function requestDownloadClientText(
       });
 
       if (response.status >= 300 && response.status < 400) {
-        throw createDownloadClientOperationError(
+        throw createServiceIntegrationOperationError(
           "redirect_blocked",
           `${options.serviceLabel} redirected the request.`,
         );
@@ -146,11 +146,11 @@ export async function requestDownloadClientText(
   );
 }
 
-export function createDownloadClientOperationError(
-  code: DownloadClientOperationError["code"],
+export function createServiceIntegrationOperationError(
+  code: ServiceIntegrationOperationError["code"],
   message: string,
-  fields: DownloadClientField[] = [],
-): DownloadClientOperationError {
+  fields: ServiceIntegrationField[] = [],
+): ServiceIntegrationOperationError {
   const fieldErrors = fields.map((field) => ({ field, code, message }));
 
   if (fieldErrors.length === 0) {
@@ -163,7 +163,7 @@ export function createDownloadClientOperationError(
 function normalizeUrlBase(
   urlBase: string | null | undefined,
   serviceLabel: string,
-): { ok: true; path: string } | { ok: false; error: DownloadClientOperationError } {
+): { ok: true; path: string } | { ok: false; error: ServiceIntegrationOperationError } {
   const trimmed = urlBase?.trim() ?? "";
 
   if (!trimmed || trimmed === "/") {
@@ -179,7 +179,7 @@ function normalizeUrlBase(
   ) {
     return {
       ok: false,
-      error: createDownloadClientOperationError(
+      error: createServiceIntegrationOperationError(
         "invalid_url_base",
         `${serviceLabel} URL base must be a safe path that starts with /.`,
         ["urlBase"],
@@ -232,7 +232,7 @@ function isBlockedIpLiteral(hostname: string): boolean {
 
 async function assertResolvedHostAllowed(hostname: string, serviceLabel: string): Promise<void> {
   if (isBlockedIpLiteral(hostname)) {
-    throw createDownloadClientOperationError(
+    throw createServiceIntegrationOperationError(
       "disallowed_target",
       `${serviceLabel} target is not allowed.`,
       ["host"],
@@ -242,7 +242,7 @@ async function assertResolvedHostAllowed(hostname: string, serviceLabel: string)
   const addresses = await dns.lookup(hostname, { all: true, verbatim: true }).catch(() => []);
 
   if (addresses.some((entry) => isBlockedIpLiteral(entry.address))) {
-    throw createDownloadClientOperationError(
+    throw createServiceIntegrationOperationError(
       "disallowed_target",
       `${serviceLabel} target is not allowed.`,
       ["host"],
@@ -293,7 +293,7 @@ async function withTimeout<T>(
     timeout = setTimeout(() => {
       controller.abort();
       reject(
-        createDownloadClientOperationError(
+        createServiceIntegrationOperationError(
           "timeout",
           `${serviceLabel} did not respond before the timeout.`,
         ),
@@ -305,14 +305,14 @@ async function withTimeout<T>(
     return await Promise.race([request(controller.signal), timeoutPromise]);
   } catch (error) {
     if (isTimeoutError(error) || isAbortError(error)) {
-      throw createDownloadClientOperationError(
+      throw createServiceIntegrationOperationError(
         "timeout",
         `${serviceLabel} did not respond before the timeout.`,
       );
     }
 
     if (error instanceof TypeError) {
-      throw createDownloadClientOperationError(
+      throw createServiceIntegrationOperationError(
         "connection_failed",
         `Could not connect to ${serviceLabel}.`,
       );
@@ -333,7 +333,7 @@ async function readResponseText(response: Response, maxResponseBytes: number): P
     const parsedLength = Number(contentLength);
 
     if (Number.isFinite(parsedLength) && parsedLength > maxResponseBytes) {
-      throw createDownloadClientOperationError(
+      throw createServiceIntegrationOperationError(
         "response_too_large",
         "Response exceeded the allowed size limit.",
       );
@@ -359,7 +359,7 @@ async function readResponseText(response: Response, maxResponseBytes: number): P
     receivedBytes += value.byteLength;
 
     if (receivedBytes > maxResponseBytes) {
-      throw createDownloadClientOperationError(
+      throw createServiceIntegrationOperationError(
         "response_too_large",
         "Response exceeded the allowed size limit.",
       );

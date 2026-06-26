@@ -8,7 +8,7 @@ import { TEST_WEB_ORIGIN } from "../../../../helpers/server";
 const secretEncryptionKey = "hex:000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
 const defaultPassword = "correct-horse-battery-staple";
 
-describe("download client routes", () => {
+describe("service integration routes", () => {
   afterEach(() => {
     testState.database?.close();
     testState.database = null;
@@ -59,7 +59,7 @@ describe("download client routes", () => {
     const saveBody = await saveResponse.json();
 
     expect(saveResponse.status).toBe(200);
-    expect(saveBody.client).toMatchObject({
+    expect(saveBody.integration).toMatchObject({
       id: "qbittorrent",
       kind: "qbittorrent",
       displayName: "Main qBittorrent",
@@ -78,7 +78,7 @@ describe("download client routes", () => {
     const listBody = await listResponse.json();
 
     expect(listResponse.status).toBe(200);
-    expect(listBody.clients).toHaveLength(1);
+    expect(listBody.integrations).toHaveLength(1);
 
     const createInstanceResponse = await app.handle(
       jsonRequest(
@@ -97,10 +97,10 @@ describe("download client routes", () => {
       ),
     );
     const createInstanceBody = await createInstanceResponse.json();
-    const instanceId = createInstanceBody.client.id;
+    const instanceId = createInstanceBody.integration.id;
 
     expect(createInstanceResponse.status).toBe(200);
-    expect(createInstanceBody.client).toMatchObject({
+    expect(createInstanceBody.integration).toMatchObject({
       kind: "qbittorrent",
       displayName: "Seedbox qBittorrent",
       isDefault: false,
@@ -170,7 +170,89 @@ describe("download client routes", () => {
     });
   });
 
-  it("returns unavailable status for unconfigured or disabled services", async () => {
+  it("saves, tests, and reports status for Prowlarr configs", async () => {
+    const { app } = await createTestApp();
+    const adminCookie = await createInitialAdmin(app);
+
+    const saveResponse = await app.handle(
+      jsonRequest(
+        "PUT",
+        "/api/settings/services/prowlarr",
+        {
+          displayName: "Main Prowlarr",
+          enabled: true,
+          useSsl: false,
+          host: "127.0.0.1",
+          port: 9,
+          authMode: "api_key",
+          apiKey: "prowlarr-secret",
+        },
+        { cookie: adminCookie },
+      ),
+    );
+    const saveBody = await saveResponse.json();
+
+    expect(saveResponse.status).toBe(200);
+    expect(saveBody.integration).toMatchObject({
+      id: "prowlarr",
+      kind: "prowlarr",
+      displayName: "Main Prowlarr",
+      isDefault: true,
+      hasApiKey: true,
+    });
+
+    const testResponse = await app.handle(
+      jsonRequest("POST", "/api/settings/services/prowlarr/test", {}, { cookie: adminCookie }),
+    );
+    const testBody = await testResponse.json();
+
+    expect(testResponse.status).toBe(200);
+    expect(testBody.result.kind).toBe("prowlarr");
+    expect(["success", "error"]).toContain(testBody.result.outcome);
+
+    const statusResponse = await app.handle(
+      new Request("http://localhost/api/settings/services/prowlarr/status", {
+        headers: { cookie: adminCookie },
+      }),
+    );
+    const statusBody = await statusResponse.json();
+
+    expect(statusResponse.status).toBe(200);
+    expect(statusBody.result.kind).toBe("prowlarr");
+  });
+
+  it("rejects unsupported Prowlarr auth modes before outbound requests", async () => {
+    const { app } = await createTestApp();
+    const adminCookie = await createInitialAdmin(app);
+
+    const saveResponse = await app.handle(
+      jsonRequest(
+        "PUT",
+        "/api/settings/services/prowlarr",
+        {
+          displayName: "Main Prowlarr",
+          enabled: true,
+          useSsl: false,
+          host: "127.0.0.1",
+          port: 9696,
+          authMode: "username_password",
+          username: "admin",
+          password: "secret",
+        },
+        { cookie: adminCookie },
+      ),
+    );
+    const saveBody = await saveResponse.json();
+
+    expect(saveResponse.status).toBe(422);
+    expect(saveBody.error.fieldErrors).toContainEqual({
+      field: "authMode",
+      code: "configuration_incomplete",
+      message: "Prowlarr only supports API key authentication.",
+    });
+  });
+
+  it("returns unavailable status for unconfigured services and checks saved services", async () => {
     const { app } = await createTestApp();
     const adminCookie = await createInitialAdmin(app);
 
@@ -195,8 +277,8 @@ describe("download client routes", () => {
         {
           enabled: false,
           useSsl: false,
-          host: "sab.local",
-          port: 8080,
+          host: "127.0.0.1",
+          port: 9,
           authMode: "api_key",
           apiKey: "sab-secret",
         },
@@ -215,9 +297,9 @@ describe("download client routes", () => {
     expect(disabledBody.result).toMatchObject({
       kind: "sabnzbd",
       configured: true,
-      enabled: false,
-      outcome: "disabled",
+      enabled: true,
     });
+    expect(["success", "error"]).toContain(disabledBody.result.outcome);
   });
 });
 

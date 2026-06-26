@@ -1,14 +1,14 @@
 import type {
-  DownloadClientAuthMode,
-  DownloadClientField,
-  DownloadClientOperationError,
-  DownloadClientProbeResult,
+  ServiceIntegrationAuthMode,
+  ServiceIntegrationField,
+  ServiceIntegrationOperationError,
+  ServiceIntegrationProbeResult,
 } from "@arrtemplar/shared";
 import {
-  buildDownloadClientBaseUrl,
-  createDownloadClientOperationError,
+  buildServiceIntegrationBaseUrl,
   createSameOriginHeaders,
-  requestDownloadClientText,
+  createServiceIntegrationOperationError,
+  requestServiceIntegrationText,
 } from "./outbound-request-policy";
 
 export type QbittorrentClientConfig = {
@@ -16,7 +16,7 @@ export type QbittorrentClientConfig = {
   host: string;
   port: number;
   urlBase?: string | null;
-  authMode: DownloadClientAuthMode;
+  authMode: ServiceIntegrationAuthMode;
   username?: string | null;
   apiKey?: string | null;
   password?: string | null;
@@ -24,14 +24,14 @@ export type QbittorrentClientConfig = {
 };
 
 export type QbittorrentProbeResult =
-  | { ok: true; result: DownloadClientProbeResult }
-  | { ok: false; result: DownloadClientProbeResult; error: DownloadClientOperationError };
+  | { ok: true; result: ServiceIntegrationProbeResult }
+  | { ok: false; result: ServiceIntegrationProbeResult; error: ServiceIntegrationOperationError };
 
 export async function probeQbittorrentClient(
   config: QbittorrentClientConfig,
 ): Promise<QbittorrentProbeResult> {
   const checkedAt = new Date().toISOString();
-  const baseUrlResult = buildDownloadClientBaseUrl({
+  const baseUrlResult = buildServiceIntegrationBaseUrl({
     serviceLabel: "qBittorrent",
     useSsl: config.useSsl,
     host: config.host,
@@ -114,11 +114,11 @@ type StepRequestResult<T> =
   | { ok: true; value: T }
   | {
       ok: false;
-      error: DownloadClientOperationError;
+      error: ServiceIntegrationOperationError;
       failure: {
         ok: false;
-        result: DownloadClientProbeResult;
-        error: DownloadClientOperationError;
+        result: ServiceIntegrationProbeResult;
+        error: ServiceIntegrationOperationError;
       };
     };
 
@@ -163,8 +163,8 @@ async function createAuthHeaders(
       ok: false;
       failure: {
         ok: false;
-        result: DownloadClientProbeResult;
-        error: DownloadClientOperationError;
+        result: ServiceIntegrationProbeResult;
+        error: ServiceIntegrationOperationError;
       };
     }
 > {
@@ -231,7 +231,7 @@ async function createAuthHeaders(
   }
 
   try {
-    const loginResult = await requestDownloadClientText({
+    const loginResult = await requestServiceIntegrationText({
       baseUrl,
       serviceLabel: "qBittorrent",
       path: "api/v2/auth/login",
@@ -309,7 +309,7 @@ function normalizeTimeout(timeoutMs: number | undefined): number {
 }
 
 async function requestText(baseUrl: URL, path: string, auth: AuthHeaders): Promise<string> {
-  const response = await requestDownloadClientText({
+  const response = await requestServiceIntegrationText({
     baseUrl,
     serviceLabel: "qBittorrent",
     path,
@@ -330,7 +330,7 @@ async function requestText(baseUrl: URL, path: string, auth: AuthHeaders): Promi
 }
 
 async function requestJson(baseUrl: URL, path: string, auth: AuthHeaders): Promise<unknown> {
-  const response = await requestDownloadClientText({
+  const response = await requestServiceIntegrationText({
     baseUrl,
     serviceLabel: "qBittorrent",
     path,
@@ -377,7 +377,7 @@ function readCookieHeader(headers: Headers): string | null {
 function mapHttpStatus(
   status: number,
   config: QbittorrentClientConfig,
-): DownloadClientOperationError | null {
+): ServiceIntegrationOperationError | null {
   if (status >= 300 && status < 400) {
     return createOperationError(
       "redirect_blocked",
@@ -412,7 +412,7 @@ function mapHttpStatus(
 function mapFetchError(
   error: unknown,
   _config: QbittorrentClientConfig,
-): DownloadClientOperationError {
+): ServiceIntegrationOperationError {
   if (isOperationError(error)) {
     return error;
   }
@@ -430,7 +430,7 @@ function mapFetchError(
 
 function responseFailureSignals(
   error: unknown,
-  mappedError?: DownloadClientOperationError,
+  mappedError?: ServiceIntegrationOperationError,
 ): FailureSignals | undefined {
   const operationError = mappedError ?? (isOperationError(error) ? error : null);
 
@@ -452,7 +452,7 @@ function responseFailureSignals(
   }
 }
 
-function isOperationError(error: unknown): error is DownloadClientOperationError {
+function isOperationError(error: unknown): error is ServiceIntegrationOperationError {
   if (!isRecord(error)) {
     return false;
   }
@@ -477,9 +477,9 @@ type FailureSignals = {
 function createFailure(
   config: QbittorrentClientConfig,
   checkedAt: string,
-  error: DownloadClientOperationError,
+  error: ServiceIntegrationOperationError,
   signals: FailureSignals = {},
-): { ok: false; result: DownloadClientProbeResult; error: DownloadClientOperationError } {
+): { ok: false; result: ServiceIntegrationProbeResult; error: ServiceIntegrationOperationError } {
   return {
     ok: false,
     error,
@@ -498,7 +498,7 @@ function createFailure(
 }
 
 type ProbeResultInput = {
-  outcome: DownloadClientProbeResult["outcome"];
+  outcome: ServiceIntegrationProbeResult["outcome"];
   summary: string;
   configured?: boolean;
   reachable: boolean;
@@ -513,7 +513,7 @@ function createProbeResult(
   _config: QbittorrentClientConfig,
   checkedAt: string,
   input: ProbeResultInput,
-): DownloadClientProbeResult {
+): ServiceIntegrationProbeResult {
   return {
     kind: "qbittorrent",
     configured: input.configured ?? true,
@@ -531,18 +531,18 @@ function createProbeResult(
 }
 
 function createOperationError(
-  code: DownloadClientOperationError["code"],
-  field: DownloadClientField,
+  code: ServiceIntegrationOperationError["code"],
+  field: ServiceIntegrationField,
   message = defaultErrorMessage(code),
-): DownloadClientOperationError {
-  return createDownloadClientOperationError(code, message, [field]);
+): ServiceIntegrationOperationError {
+  return createServiceIntegrationOperationError(code, message, [field]);
 }
 
-function credentialField(authMode: DownloadClientAuthMode): DownloadClientField {
+function credentialField(authMode: ServiceIntegrationAuthMode): ServiceIntegrationField {
   return authMode === "api_key" ? "apiKey" : "password";
 }
 
-function defaultErrorMessage(code: DownloadClientOperationError["code"]): string {
+function defaultErrorMessage(code: ServiceIntegrationOperationError["code"]): string {
   switch (code) {
     case "configuration_incomplete":
       return "qBittorrent configuration is incomplete.";

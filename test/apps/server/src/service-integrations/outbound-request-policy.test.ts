@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import * as dns from "node:dns/promises";
 import {
-  buildDownloadClientBaseUrl,
+  buildServiceIntegrationBaseUrl,
   createSameOriginHeaders,
-  requestDownloadClientText,
-} from "../../../../../apps/server/src/download-clients/outbound-request-policy";
+  requestServiceIntegrationText,
+} from "../../../../../apps/server/src/service-integrations/outbound-request-policy";
 
 const originalFetch = globalThis.fetch;
 
@@ -12,9 +12,9 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
-describe("download client outbound request policy", () => {
+describe("service integration outbound request policy", () => {
   it("builds base URLs for allowed local targets", () => {
-    const result = buildDownloadClientBaseUrl({
+    const result = buildServiceIntegrationBaseUrl({
       serviceLabel: "SABnzbd",
       useSsl: false,
       host: "192.168.1.50",
@@ -33,7 +33,7 @@ describe("download client outbound request policy", () => {
 
   it("rejects hosts with schemes, paths, or userinfo", () => {
     for (const host of ["http://sab.local", "sab.local/path", "user@sab.local"]) {
-      const result = buildDownloadClientBaseUrl({
+      const result = buildServiceIntegrationBaseUrl({
         serviceLabel: "SABnzbd",
         useSsl: false,
         host,
@@ -52,7 +52,7 @@ describe("download client outbound request policy", () => {
 
   it("rejects metadata and link-local IP literals", () => {
     for (const host of ["169.254.169.254", "[fe80::1]"]) {
-      const result = buildDownloadClientBaseUrl({
+      const result = buildServiceIntegrationBaseUrl({
         serviceLabel: "qBittorrent",
         useSsl: false,
         host,
@@ -77,7 +77,7 @@ describe("download client outbound request policy", () => {
     const baseUrl = new URL("http://resolver.test:8080/");
 
     await expect(
-      requestDownloadClientText({
+      requestServiceIntegrationText({
         baseUrl,
         serviceLabel: "SABnzbd",
         path: "api",
@@ -90,7 +90,7 @@ describe("download client outbound request policy", () => {
 
   it("rejects unsafe urlBase values", () => {
     for (const urlBase of ["relative", "/bad?query=1", "/bad#hash", "/../escape"]) {
-      const result = buildDownloadClientBaseUrl({
+      const result = buildServiceIntegrationBaseUrl({
         serviceLabel: "qBittorrent",
         useSsl: false,
         host: "qbittorrent.local",
@@ -112,7 +112,7 @@ describe("download client outbound request policy", () => {
     const baseUrl = new URL("http://127.0.0.1:8080/");
 
     await expect(
-      requestDownloadClientText({
+      requestServiceIntegrationText({
         baseUrl,
         serviceLabel: "SABnzbd",
         path: "api",
@@ -125,7 +125,7 @@ describe("download client outbound request policy", () => {
     const baseUrl = new URL("http://127.0.0.1:8080/");
 
     await expect(
-      requestDownloadClientText({
+      requestServiceIntegrationText({
         baseUrl,
         serviceLabel: "SABnzbd",
         path: "api",
@@ -146,7 +146,7 @@ describe("download client outbound request policy", () => {
     const baseUrl = new URL("http://127.0.0.1:8080/");
 
     await expect(
-      requestDownloadClientText({
+      requestServiceIntegrationText({
         baseUrl,
         serviceLabel: "SABnzbd",
         path: "api",

@@ -8,7 +8,6 @@ import type { LoginRateLimiter } from "./auth/rate-limit";
 import { createAuthRoutes } from "./auth/routes";
 import { env } from "./config/env";
 import { createDatabase, type DatabaseClient } from "./db/client";
-import { createDownloadClientRoutes } from "./download-clients/routes";
 import {
   corsAllowedHeaders,
   corsAllowedMethods,
@@ -17,6 +16,7 @@ import {
 import { enforceCsrfPolicy } from "./security/csrf";
 import { handleSafeError } from "./security/errors";
 import { appendSupplementalCspDirectives, securityHeaderConfig } from "./security/headers";
+import { createServiceIntegrationRoutes } from "./service-integrations/routes";
 
 const requestIdPattern = /^[A-Za-z0-9._:-]{1,128}$/;
 
@@ -139,7 +139,7 @@ export function createApp(options: CreateAppOptions = {}) {
     )
     .use(createAuthRoutes(authRoutesOptions))
     .use(
-      createDownloadClientRoutes({
+      createServiceIntegrationRoutes({
         database,
         secretEncryptionKey: authRoutesOptions.oauthClientSecretEncryptionKey,
       }),

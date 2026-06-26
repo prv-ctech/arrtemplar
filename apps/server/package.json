@@ -27,7 +27,6 @@
     "elysiajs-helmet": "1.0.5"
   },
   "devDependencies": {
-    "@libsql/client": "^0.17.4",
     "drizzle-kit": "^0.31.10",
     "typescript": "^6.0.3"
   },

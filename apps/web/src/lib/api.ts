@@ -27,12 +27,7 @@ import type {
   CreateLocalUserRequest,
   CreateNotificationHistoryRequest,
   CreateNotificationHistoryResponse,
-  DeleteDownloadClientResponse,
-  DownloadClientKind,
-  DownloadClientListResponse,
-  DownloadClientProbeResponse,
-  DownloadClientResponse,
-  DownloadClientSavedConfig,
+  DeleteServiceIntegrationResponse,
   HealthResponse,
   LoginRequest,
   LoginResponse,
@@ -45,10 +40,15 @@ import type {
   NotificationPreferences,
   PermissionCatalogEntry,
   PublicUser,
+  ServiceIntegrationKind,
+  ServiceIntegrationListResponse,
+  ServiceIntegrationProbeResponse,
+  ServiceIntegrationResponse,
+  ServiceIntegrationSavedConfig,
   UpdateManagedUserProfileRequest,
   UpdateNotificationPreferencesRequest,
   UpdateUserProfileRequest,
-  UpsertDownloadClientRequest,
+  UpsertServiceIntegrationRequest,
   UserPermission,
 } from "@arrtemplar/shared";
 import {
@@ -60,11 +60,11 @@ import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   DEFAULT_PROFILE_AVATAR_ID,
   DEFAULT_PROFILE_BANNER_ID,
-  isDownloadClientAuthMode,
-  isDownloadClientKind,
-  isDownloadClientProbeOutcome,
   isProfileAvatarId,
   isProfileBannerId,
+  isServiceIntegrationAuthMode,
+  isServiceIntegrationKind,
+  isServiceIntegrationProbeOutcome,
   isToastNotificationId,
   isToastNotificationImportance,
   isToastNotificationSeverity,
@@ -357,118 +357,121 @@ export async function deleteApiKey(apiKeyId: string): Promise<ApiKeySummary> {
   return normalizeApiKeyMutationResponse(response).apiKey;
 }
 
-export async function listDownloadClientConfigs(): Promise<DownloadClientSavedConfig[]> {
+export async function listServiceIntegrationConfigs(): Promise<ServiceIntegrationSavedConfig[]> {
   const response = await requestApiJson({
-    fallback: "Download client settings request failed.",
+    fallback: "Service integration settings request failed.",
     method: "GET",
     path: "/api/settings/services",
   });
 
-  return normalizeDownloadClientListResponse(response).clients;
+  return normalizeServiceIntegrationListResponse(response).integrations;
 }
 
-export async function upsertDownloadClientConfig(
-  kind: DownloadClientKind,
-  input: UpsertDownloadClientRequest,
-): Promise<DownloadClientSavedConfig> {
+export async function upsertServiceIntegrationConfig(
+  kind: ServiceIntegrationKind,
+  input: UpsertServiceIntegrationRequest,
+): Promise<ServiceIntegrationSavedConfig> {
   const response = await requestApiJson({
     body: input,
-    fallback: "Download client settings save failed.",
+    fallback: "Service integration settings save failed.",
     method: "PUT",
     path: `/api/settings/services/${encodeURIComponent(kind)}`,
   });
 
-  return requireDownloadClientConfig(normalizeDownloadClientResponse(response), kind);
+  return requireServiceIntegrationConfig(normalizeServiceIntegrationResponse(response), kind);
 }
 
-export async function createDownloadClientConfig(
-  kind: DownloadClientKind,
-  input: UpsertDownloadClientRequest,
-): Promise<DownloadClientSavedConfig> {
+export async function createServiceIntegrationConfig(
+  kind: ServiceIntegrationKind,
+  input: UpsertServiceIntegrationRequest,
+): Promise<ServiceIntegrationSavedConfig> {
   const response = await requestApiJson({
     body: input,
-    fallback: "Download client settings save failed.",
+    fallback: "Service integration settings save failed.",
     method: "POST",
     path: `/api/settings/services/${encodeURIComponent(kind)}/instances`,
   });
 
-  return requireDownloadClientConfig(normalizeDownloadClientResponse(response), kind);
+  return requireServiceIntegrationConfig(normalizeServiceIntegrationResponse(response), kind);
 }
 
-export async function updateDownloadClientConfig(
-  clientId: string,
-  input: UpsertDownloadClientRequest,
-): Promise<DownloadClientSavedConfig> {
+export async function updateServiceIntegrationConfig(
+  integrationId: string,
+  input: UpsertServiceIntegrationRequest,
+): Promise<ServiceIntegrationSavedConfig> {
   const response = await requestApiJson({
     body: input,
-    fallback: "Download client settings save failed.",
+    fallback: "Service integration settings save failed.",
     method: "PUT",
-    path: `/api/settings/services/instances/${encodeURIComponent(clientId)}`,
+    path: `/api/settings/services/instances/${encodeURIComponent(integrationId)}`,
   });
 
-  return requireDownloadClientConfigById(normalizeDownloadClientResponse(response), clientId);
+  return requireServiceIntegrationConfigById(
+    normalizeServiceIntegrationResponse(response),
+    integrationId,
+  );
 }
 
-export async function deleteDownloadClientConfigById(
-  clientId: string,
-): Promise<DeleteDownloadClientResponse> {
+export async function deleteServiceIntegrationConfigById(
+  integrationId: string,
+): Promise<DeleteServiceIntegrationResponse> {
   const response = await requestApiJson({
-    fallback: "Download client delete failed.",
+    fallback: "Service integration delete failed.",
     method: "DELETE",
-    path: `/api/settings/services/instances/${encodeURIComponent(clientId)}`,
+    path: `/api/settings/services/instances/${encodeURIComponent(integrationId)}`,
   });
 
-  return normalizeDeleteDownloadClientResponse(response, undefined, clientId);
+  return normalizeDeleteServiceIntegrationResponse(response, undefined, integrationId);
 }
 
-export async function testDownloadClientConfig(
-  kind: DownloadClientKind,
-): Promise<DownloadClientProbeResponse> {
+export async function testServiceIntegrationConfig(
+  kind: ServiceIntegrationKind,
+): Promise<ServiceIntegrationProbeResponse> {
   const response = await requestApiJson({
     body: {},
-    fallback: "Download client test failed.",
+    fallback: "Service integration test failed.",
     method: "POST",
     path: `/api/settings/services/${encodeURIComponent(kind)}/test`,
   });
 
-  return normalizeDownloadClientProbeResponse(response, kind);
+  return normalizeServiceIntegrationProbeResponse(response, kind);
 }
 
-export async function testDownloadClientConfigById(
-  clientId: string,
-): Promise<DownloadClientProbeResponse> {
+export async function testServiceIntegrationConfigById(
+  integrationId: string,
+): Promise<ServiceIntegrationProbeResponse> {
   const response = await requestApiJson({
     body: {},
-    fallback: "Download client test failed.",
+    fallback: "Service integration test failed.",
     method: "POST",
-    path: `/api/settings/services/instances/${encodeURIComponent(clientId)}/test`,
+    path: `/api/settings/services/instances/${encodeURIComponent(integrationId)}/test`,
   });
 
-  return normalizeDownloadClientProbeResponse(response);
+  return normalizeServiceIntegrationProbeResponse(response);
 }
 
-export async function getDownloadClientStatus(
-  kind: DownloadClientKind,
-): Promise<DownloadClientProbeResponse> {
+export async function getServiceIntegrationStatus(
+  kind: ServiceIntegrationKind,
+): Promise<ServiceIntegrationProbeResponse> {
   const response = await requestApiJson({
-    fallback: "Download client status request failed.",
+    fallback: "Service integration status request failed.",
     method: "GET",
     path: `/api/settings/services/${encodeURIComponent(kind)}/status`,
   });
 
-  return normalizeDownloadClientProbeResponse(response, kind);
+  return normalizeServiceIntegrationProbeResponse(response, kind);
 }
 
-export async function getDownloadClientStatusById(
-  clientId: string,
-): Promise<DownloadClientProbeResponse> {
+export async function getServiceIntegrationStatusById(
+  integrationId: string,
+): Promise<ServiceIntegrationProbeResponse> {
   const response = await requestApiJson({
-    fallback: "Download client status request failed.",
+    fallback: "Service integration status request failed.",
     method: "GET",
-    path: `/api/settings/services/instances/${encodeURIComponent(clientId)}/status`,
+    path: `/api/settings/services/instances/${encodeURIComponent(integrationId)}/status`,
   });
 
-  return normalizeDownloadClientProbeResponse(response);
+  return normalizeServiceIntegrationProbeResponse(response);
 }
 
 export async function createUser(input: CreateLocalUserRequest): Promise<AdminUserSummary> {
@@ -861,40 +864,41 @@ export function normalizeApiKeyListResponse(value: unknown): ApiKeyListResponse 
   return { apiKeys: value.apiKeys.map(normalizeApiKeySummary) };
 }
 
-function normalizeDownloadClientListResponse(value: unknown): DownloadClientListResponse {
-  if (!isRecord(value) || !Array.isArray(value.clients)) {
-    throwInvalidDownloadClientResponse();
+function normalizeServiceIntegrationListResponse(value: unknown): ServiceIntegrationListResponse {
+  if (!isRecord(value) || !Array.isArray(value.integrations)) {
+    throwInvalidServiceIntegrationResponse();
   }
 
-  return { clients: value.clients.map(normalizeDownloadClientSavedConfig) };
+  return { integrations: value.integrations.map(normalizeServiceIntegrationSavedConfig) };
 }
 
-function normalizeDownloadClientResponse(value: unknown): DownloadClientResponse {
-  if (!isRecord(value) || !("client" in value)) {
-    throwInvalidDownloadClientResponse();
+function normalizeServiceIntegrationResponse(value: unknown): ServiceIntegrationResponse {
+  if (!isRecord(value) || !("integration" in value)) {
+    throwInvalidServiceIntegrationResponse();
   }
 
   return {
-    client: value.client === null ? null : normalizeDownloadClientSavedConfig(value.client),
+    integration:
+      value.integration === null ? null : normalizeServiceIntegrationSavedConfig(value.integration),
   };
 }
 
-function normalizeDownloadClientProbeResponse(
+function normalizeServiceIntegrationProbeResponse(
   value: unknown,
-  expectedKind?: DownloadClientKind,
-): DownloadClientProbeResponse {
+  expectedKind?: ServiceIntegrationKind,
+): ServiceIntegrationProbeResponse {
   if (!isRecord(value) || !isRecord(value.result)) {
-    throwInvalidDownloadClientResponse();
+    throwInvalidServiceIntegrationResponse();
   }
 
   const result = value.result;
 
   if (
-    !isDownloadClientKind(result.kind) ||
+    !isServiceIntegrationKind(result.kind) ||
     (expectedKind && result.kind !== expectedKind) ||
     typeof result.configured !== "boolean" ||
     typeof result.enabled !== "boolean" ||
-    !isDownloadClientProbeOutcome(result.outcome) ||
+    !isServiceIntegrationProbeOutcome(result.outcome) ||
     typeof result.summary !== "string" ||
     !isDateTime(result.checkedAt) ||
     typeof result.reachable !== "boolean" ||
@@ -904,11 +908,11 @@ function normalizeDownloadClientProbeResponse(
     !isNullableString(result.webApiVersion) ||
     !isNullableString(result.connectionState)
   ) {
-    throwInvalidDownloadClientResponse();
+    throwInvalidServiceIntegrationResponse();
   }
 
   return {
-    ...(isDownloadClientOperationError(value.error) ? { error: value.error } : {}),
+    ...(isServiceIntegrationOperationError(value.error) ? { error: value.error } : {}),
     result: {
       kind: result.kind,
       configured: result.configured,
@@ -983,9 +987,9 @@ function normalizeApiKeySummary(value: unknown): ApiKeySummary {
   };
 }
 
-function normalizeDownloadClientSavedConfig(value: unknown): DownloadClientSavedConfig {
-  if (!isDownloadClientSavedConfigResponse(value)) {
-    throwInvalidDownloadClientResponse();
+function normalizeServiceIntegrationSavedConfig(value: unknown): ServiceIntegrationSavedConfig {
+  if (!isServiceIntegrationSavedConfigResponse(value)) {
+    throwInvalidServiceIntegrationResponse();
   }
 
   return {
@@ -1013,8 +1017,8 @@ function normalizeDownloadClientSavedConfig(value: unknown): DownloadClientSaved
   };
 }
 
-type DownloadClientSavedConfigResponse = {
-  authMode: DownloadClientSavedConfig["authMode"];
+type ServiceIntegrationSavedConfigResponse = {
+  authMode: ServiceIntegrationSavedConfig["authMode"];
   createdAt: string | Date;
   displayName: string;
   enabled: boolean;
@@ -1023,13 +1027,13 @@ type DownloadClientSavedConfigResponse = {
   host: string;
   id: string;
   isDefault: boolean;
-  kind: DownloadClientKind;
+  kind: ServiceIntegrationKind;
   lastStatusCheckedAt: string | Date | null;
   lastStatusMessage: string | null;
-  lastStatusOutcome: DownloadClientSavedConfig["lastStatusOutcome"];
+  lastStatusOutcome: ServiceIntegrationSavedConfig["lastStatusOutcome"];
   lastTestedAt: string | Date | null;
   lastTestMessage: string | null;
-  lastTestOutcome: DownloadClientSavedConfig["lastTestOutcome"];
+  lastTestOutcome: ServiceIntegrationSavedConfig["lastTestOutcome"];
   port: number;
   updatedAt: string | Date;
   urlBase: string | null;
@@ -1037,30 +1041,30 @@ type DownloadClientSavedConfigResponse = {
   useSsl: boolean;
 };
 
-function isDownloadClientSavedConfigResponse(
+function isServiceIntegrationSavedConfigResponse(
   value: unknown,
-): value is DownloadClientSavedConfigResponse {
+): value is ServiceIntegrationSavedConfigResponse {
   return (
     isRecord(value) &&
-    hasDownloadClientIdentityFields(value) &&
-    hasDownloadClientConnectionFields(value) &&
-    hasDownloadClientAuthFields(value) &&
-    hasDownloadClientProbeMetadataFields(value) &&
+    hasServiceIntegrationIdentityFields(value) &&
+    hasServiceIntegrationConnectionFields(value) &&
+    hasServiceIntegrationAuthFields(value) &&
+    hasServiceIntegrationProbeMetadataFields(value) &&
     isDateTime(value.createdAt) &&
     isDateTime(value.updatedAt)
   );
 }
 
-function hasDownloadClientIdentityFields(value: Record<string, unknown>): boolean {
+function hasServiceIntegrationIdentityFields(value: Record<string, unknown>): boolean {
   return (
     typeof value.id === "string" &&
-    isDownloadClientKind(value.kind) &&
+    isServiceIntegrationKind(value.kind) &&
     typeof value.displayName === "string" &&
     typeof value.isDefault === "boolean"
   );
 }
 
-function hasDownloadClientConnectionFields(value: Record<string, unknown>): boolean {
+function hasServiceIntegrationConnectionFields(value: Record<string, unknown>): boolean {
   return (
     typeof value.enabled === "boolean" &&
     typeof value.useSsl === "boolean" &&
@@ -1070,22 +1074,22 @@ function hasDownloadClientConnectionFields(value: Record<string, unknown>): bool
   );
 }
 
-function hasDownloadClientAuthFields(value: Record<string, unknown>): boolean {
+function hasServiceIntegrationAuthFields(value: Record<string, unknown>): boolean {
   return (
-    isDownloadClientAuthMode(value.authMode) &&
+    isServiceIntegrationAuthMode(value.authMode) &&
     isNullableString(value.username) &&
     typeof value.hasApiKey === "boolean" &&
     typeof value.hasPassword === "boolean"
   );
 }
 
-function hasDownloadClientProbeMetadataFields(value: Record<string, unknown>): boolean {
+function hasServiceIntegrationProbeMetadataFields(value: Record<string, unknown>): boolean {
   return (
     isNullableDateTime(value.lastTestedAt) &&
-    isNullableDownloadClientProbeOutcome(value.lastTestOutcome) &&
+    isNullableServiceIntegrationProbeOutcome(value.lastTestOutcome) &&
     isNullableString(value.lastTestMessage) &&
     isNullableDateTime(value.lastStatusCheckedAt) &&
-    isNullableDownloadClientProbeOutcome(value.lastStatusOutcome) &&
+    isNullableServiceIntegrationProbeOutcome(value.lastStatusOutcome) &&
     isNullableString(value.lastStatusMessage)
   );
 }
@@ -1097,15 +1101,15 @@ function isApiKeyCreatedBy(value: unknown): value is ApiKeySummary["createdBy"] 
   );
 }
 
-function isNullableDownloadClientProbeOutcome(
+function isNullableServiceIntegrationProbeOutcome(
   value: unknown,
-): value is DownloadClientSavedConfig["lastTestOutcome"] {
-  return value === null || isDownloadClientProbeOutcome(value);
+): value is ServiceIntegrationSavedConfig["lastTestOutcome"] {
+  return value === null || isServiceIntegrationProbeOutcome(value);
 }
 
-function isDownloadClientOperationError(
+function isServiceIntegrationOperationError(
   value: unknown,
-): value is NonNullable<DownloadClientProbeResponse["error"]> {
+): value is NonNullable<ServiceIntegrationProbeResponse["error"]> {
   if (!isRecord(value) || typeof value.code !== "string" || typeof value.message !== "string") {
     return false;
   }
@@ -1134,53 +1138,53 @@ function throwInvalidApiKeyResponse(): never {
   throw new ApiClientError("API key response was invalid.", 0, "INVALID_API_KEY_RESPONSE");
 }
 
-function throwInvalidDownloadClientResponse(): never {
+function throwInvalidServiceIntegrationResponse(): never {
   throw new ApiClientError(
-    "Download client response was invalid.",
+    "Service integration response was invalid.",
     0,
-    "INVALID_DOWNLOAD_CLIENT_RESPONSE",
+    "INVALID_SERVICE_INTEGRATION_RESPONSE",
   );
 }
 
-function normalizeDeleteDownloadClientResponse(
+function normalizeDeleteServiceIntegrationResponse(
   value: unknown,
-  expectedKind?: DownloadClientKind,
+  expectedKind?: ServiceIntegrationKind,
   expectedId?: string,
-): DeleteDownloadClientResponse {
+): DeleteServiceIntegrationResponse {
   if (
     !isRecord(value) ||
     value.status !== "ok" ||
     typeof value.deletedId !== "string" ||
-    !isDownloadClientKind(value.deletedKind) ||
+    !isServiceIntegrationKind(value.deletedKind) ||
     (expectedKind && value.deletedKind !== expectedKind) ||
     (expectedId && value.deletedId !== expectedId)
   ) {
-    throwInvalidDownloadClientResponse();
+    throwInvalidServiceIntegrationResponse();
   }
 
   return { status: "ok", deletedId: value.deletedId, deletedKind: value.deletedKind };
 }
 
-function requireDownloadClientConfig(
-  response: DownloadClientResponse,
-  kind: DownloadClientKind,
-): DownloadClientSavedConfig {
-  if (!response.client || response.client.kind !== kind) {
-    throwInvalidDownloadClientResponse();
+function requireServiceIntegrationConfig(
+  response: ServiceIntegrationResponse,
+  kind: ServiceIntegrationKind,
+): ServiceIntegrationSavedConfig {
+  if (!response.integration || response.integration.kind !== kind) {
+    throwInvalidServiceIntegrationResponse();
   }
 
-  return response.client;
+  return response.integration;
 }
 
-function requireDownloadClientConfigById(
-  response: DownloadClientResponse,
-  clientId: string,
-): DownloadClientSavedConfig {
-  if (!response.client || response.client.id !== clientId) {
-    throwInvalidDownloadClientResponse();
+function requireServiceIntegrationConfigById(
+  response: ServiceIntegrationResponse,
+  integrationId: string,
+): ServiceIntegrationSavedConfig {
+  if (!response.integration || response.integration.id !== integrationId) {
+    throwInvalidServiceIntegrationResponse();
   }
 
-  return response.client;
+  return response.integration;
 }
 
 function normalizeNotificationHistoryItem(value: unknown): NotificationHistoryItem {
