@@ -31,6 +31,7 @@ const posts = pgTable('posts', {
 ```
 
 **Problems:**
+
 - Mixed naming conventions in the database (camelCase vs snake_case)
 - Table not exported, so `drizzle-kit` won't detect it
 - No foreign key reference means no referential integrity
@@ -73,6 +74,7 @@ export * from './posts';
 ```
 
 **Why this is better:**
+
 - Consistent snake_case in the database, camelCase in TypeScript
 - Every table is exported for migration detection
 - Foreign keys enforce referential integrity
@@ -87,5 +89,5 @@ The `serial` type is a Postgres legacy — identity columns are the modern stand
 
 ## References
 
-- https://orm.drizzle.team/docs/sql-schema-declaration
-- https://orm.drizzle.team/docs/column-types/pg
+- <https://orm.drizzle.team/docs/sql-schema-declaration>
+- <https://orm.drizzle.team/docs/column-types/pg>

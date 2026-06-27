@@ -73,7 +73,7 @@ await queryClient.prefetchQuery(todoQueries.detail(5));
 Default is `0` — every mount triggers a background refetch. Tune per data type:
 
 | Data type | staleTime | Why |
-|-----------|-----------|-----|
+| --------- | --------- | --- |
 | Real-time (stocks, live) | `0` | Must always refresh |
 | Notifications, feeds | `30s – 1min` | Changes frequently |
 | User-generated content | `1 – 5min` | Changes on user action |
@@ -104,7 +104,7 @@ Override per-query when needed via `queryOptions` factory.
 ### `placeholderData` vs `initialData` — non-obvious gotcha
 
 | | `initialData` | `placeholderData` |
-|--|---------------|-------------------|
+| -- | ------------- | ----------------- |
 | Persists to cache | yes | no |
 | Considered fresh | yes (subject to `staleTime`) | no — always refetches |
 | Use case | seeded from SSR / known good | optimistic UI while loading |

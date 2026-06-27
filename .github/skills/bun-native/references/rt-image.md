@@ -73,7 +73,7 @@ img.resize(800, 600, { filter: "mitchell" });
 ```
 
 | `fit` | Behavior |
-|-------|----------|
+| ----- | -------- |
 | `"fill"` *(default)* | Stretch to exactly `width × height` |
 | `"inside"` | Preserve aspect ratio; result fits *within* the box |
 
@@ -82,7 +82,7 @@ img.resize(800, 600, { filter: "mitchell" });
 `filter` selects the resampling kernel. The default `"lanczos3"` is the right choice for photographs.
 
 | Filter | Use when |
-|--------|----------|
+| ------ | -------- |
 | `"lanczos3"` *(default)* | General-purpose, sharpest for photos |
 | `"lanczos2"` | Slightly softer, fewer ringing artifacts |
 | `"mitchell"` | Smooth gradients; the classic bicubic compromise |
@@ -190,7 +190,7 @@ if (img) {
 ### Platform Backends
 
 | | Linux | macOS | Windows |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | JPEG / PNG / WebP | libjpeg-turbo · spng · libwebp | same | same |
 | BMP / GIF (decode) | built-in | ImageIO | WIC |
 | TIFF (decode) | ❌ | ImageIO | WIC |
@@ -228,7 +228,7 @@ const out = await img
 Benchmarked on linux/x64 with 50 iterations vs sharp 0.34.5:
 
 | Operation | Bun.Image | sharp | Speedup |
-|-----------|-----------|-------|---------|
+| --------- | --------- | ----- | ------- |
 | `metadata()` | 0.004 ms | 0.28 ms | 70× |
 | 1080p PNG → 400×400 → JPEG | 28.6 ms | 39.5 ms | 1.38× |
 | 1080p PNG → 800×600 → WebP | 82.7 ms | 110.1 ms | 1.33× |

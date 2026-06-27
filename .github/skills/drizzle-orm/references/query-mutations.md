@@ -172,7 +172,7 @@ await db.transaction(async (tx) => {
 
 ## References
 
-- https://orm.drizzle.team/docs/insert
-- https://orm.drizzle.team/docs/update
-- https://orm.drizzle.team/docs/delete
-- https://orm.drizzle.team/docs/transactions
+- <https://orm.drizzle.team/docs/insert>
+- <https://orm.drizzle.team/docs/update>
+- <https://orm.drizzle.team/docs/delete>
+- <https://orm.drizzle.team/docs/transactions>

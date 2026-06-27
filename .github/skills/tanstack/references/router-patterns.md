@@ -88,7 +88,7 @@ const router = createRouter({
 Key options:
 
 | Option | When to use |
-|--------|-------------|
+| ------ | ----------- |
 | `defaultPreload: 'intent'` | Always — almost free win on hover/focus |
 | `defaultPreloadStaleTime: 0` | When using TanStack Query; let Query own caching |
 | `scrollRestoration` | Almost always — improves back/forward UX |
@@ -111,7 +111,7 @@ Without `from`, types collapse to `unknown` or the union of all possibilities. A
 
 ## File-Based Routing Structure
 
-```
+```text
 src/routes/
 ├── __root.tsx          # Root layout with providers
 ├── _authenticated.tsx  # Auth layout wrapper
@@ -140,7 +140,7 @@ src/routes/
 
 A file prefixed with `_` (e.g. `_authenticated.tsx`) creates a layout without contributing to the URL. Use it to share `beforeLoad`, context, or UI across siblings:
 
-```
+```text
 routes/
 ├── _authenticated.tsx        # auth check, no URL segment
 ├── _authenticated/

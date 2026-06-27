@@ -36,7 +36,7 @@ deployments.
 ## When to Use Which
 
 | Scenario | Command |
-|----------|---------|
+| -------- | ------- |
 | Production deployments | `generate` + `migrate` |
 | CI/CD pipelines | `migrate` |
 | Local development / prototyping | `push` |
@@ -147,8 +147,8 @@ import { migrate } from 'drizzle-orm/neon-serverless/migrator';
 
 ## References
 
-- https://orm.drizzle.team/docs/kit-overview
-- https://orm.drizzle.team/docs/drizzle-kit-generate
-- https://orm.drizzle.team/docs/drizzle-kit-migrate
-- https://orm.drizzle.team/docs/drizzle-kit-push
-- https://orm.drizzle.team/docs/drizzle-kit-pull
+- <https://orm.drizzle.team/docs/kit-overview>
+- <https://orm.drizzle.team/docs/drizzle-kit-generate>
+- <https://orm.drizzle.team/docs/drizzle-kit-migrate>
+- <https://orm.drizzle.team/docs/drizzle-kit-push>
+- <https://orm.drizzle.team/docs/drizzle-kit-pull>

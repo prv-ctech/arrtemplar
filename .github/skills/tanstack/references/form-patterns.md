@@ -571,7 +571,7 @@ const form = useForm<FormValues>({ ... });
 const form = useForm({ defaultValues: { ... } });
 ```
 
-2. **Don't forget to prevent default on form submission**
+1. **Don't forget to prevent default on form submission**
 
 ```typescript
 // GOOD
@@ -584,11 +584,11 @@ const form = useForm({ defaultValues: { ... } });
 >
 ```
 
-3. **Don't use onChange validation when onBlur would suffice**
+1. **Don't use onChange validation when onBlur would suffice**
 
-4. **Don't subscribe to the entire form state when you only need specific values**
+1. **Don't subscribe to the entire form state when you only need specific values**
 
-5. **Don't forget asyncDebounceMs for async validation**
+1. **Don't forget asyncDebounceMs for async validation**
 
 ```typescript
 // BAD
@@ -609,7 +609,7 @@ const form = useForm({ defaultValues: { ... } });
 />
 ```
 
-6. **Don't forget accessibility attributes**
+1. **Don't forget accessibility attributes**
 
 ```typescript
 // GOOD

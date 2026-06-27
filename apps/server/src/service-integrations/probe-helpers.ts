@@ -273,6 +273,61 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+export function isServiceIntegrationJsonResponse(
+  body: string,
+  headers: Headers,
+  options: { allowJsonArray?: boolean } = {},
+): boolean {
+  const contentType = headers.get("content-type")?.toLowerCase() ?? "";
+
+  return (
+    contentType.includes("application/json") ||
+    body.startsWith("{") ||
+    (options.allowJsonArray === true && body.startsWith("["))
+  );
+}
+
+export function readServiceIntegrationStringField(
+  record: Record<string, unknown> | null,
+  field: string,
+): string | null {
+  if (!record || typeof record[field] !== "string") {
+    return null;
+  }
+
+  return normalizeServiceIntegrationText(record[field]);
+}
+
+export function readServiceIntegrationXmlAttribute(
+  attributes: string,
+  name: string,
+): string | null {
+  const pattern = new RegExp(`\\b${escapeRegExp(name)}\\s*=\\s*("([^"]*)"|'([^']*)')`, "iu");
+  const match = pattern.exec(attributes);
+  const value = match?.[2] ?? match?.[3] ?? null;
+
+  return value ? normalizeServiceIntegrationText(decodeXmlEntities(value)) : null;
+}
+
+export function normalizeServiceIntegrationText(value: string): string | null {
+  const trimmed = value.trim();
+
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function decodeXmlEntities(value: string): string {
+  return value
+    .replace(/&quot;/gu, '"')
+    .replace(/&apos;/gu, "'")
+    .replace(/&lt;/gu, "<")
+    .replace(/&gt;/gu, ">")
+    .replace(/&amp;/gu, "&");
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
 function readServiceIntegrationFailureSignals(
   error: ServiceIntegrationOperationError,
   options: { responseTooLargeAuthenticated?: boolean } = {},

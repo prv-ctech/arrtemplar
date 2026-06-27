@@ -16,26 +16,31 @@ To ensure theme switching works correctly, always use design system tokens:
 ### Required Tokens
 
 **Backgrounds:**
+
 - `bg-background` - Main page background
 - `bg-card` - Card surfaces
 - `bg-muted` - Muted/subtle backgrounds
 - `bg-popover` - Popover/dropdown backgrounds
 
 **Text:**
+
 - `text-foreground` - Primary text
 - `text-muted-foreground` - Secondary/subtle text
 - `text-card-foreground` - Text on card surfaces
 
 **Borders:**
+
 - `border-border` - Standard borders
 - `border-input` - Form input borders
 - `border-ring` - Focus ring borders
 
 **Actions:**
+
 - `bg-primary text-primary-foreground` - Primary actions
 - `bg-secondary text-secondary-foreground` - Secondary actions
 
 **States:**
+
 - `bg-destructive text-destructive-foreground` - Destructive actions
 - `bg-accent text-accent-foreground` - Accent/highlight states
 
@@ -102,7 +107,7 @@ Always build mobile-first and add breakpoints for larger screens:
 ### Breakpoint Reference
 
 | Prefix | Min Width | Common Use |
-|--------|-----------|------------|
+| ------ | --------- | ---------- |
 | `sm:` | 640px | Small tablets |
 | `md:` | 768px | Tablets |
 | `lg:` | 1024px | Laptops |
@@ -363,5 +368,5 @@ Before finishing a task involving Tailwind CSS:
 
 ## Documentation
 
-- **Official Docs**: https://tailwindcss.com/docs
-- **Tailwind Merge**: https://github.com/dcastil/tailwind-merge
+- **Official Docs**: <https://tailwindcss.com/docs>
+- **Tailwind Merge**: <https://github.com/dcastil/tailwind-merge>

@@ -27,6 +27,7 @@ export const posts = pgTable('posts', {
 ```
 
 **Problems:**
+
 - No index on `email` despite being used in lookups
 - No unique constraint on `username`
 - Foreign key columns without indexes cause slow joins on large tables
@@ -135,4 +136,4 @@ authorId: integer('author_id').references(() => users.id),
 
 ## References
 
-- https://orm.drizzle.team/docs/indexes-constraints
+- <https://orm.drizzle.team/docs/indexes-constraints>

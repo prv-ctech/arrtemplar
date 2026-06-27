@@ -13,8 +13,12 @@ import {
 import {
   createServiceIntegrationProbeErrorFailure,
   isRecord,
+  isServiceIntegrationJsonResponse,
   mapServiceIntegrationStatusCode,
+  normalizeServiceIntegrationText,
   prepareApiKeyOnlyProbe,
+  readServiceIntegrationStringField,
+  readServiceIntegrationXmlAttribute,
 } from "./probe-helpers";
 
 const logger = getLogger([APP_LOG_CATEGORY, "service-integrations", "nzbhydra2"]);
@@ -171,7 +175,7 @@ function parseCapsResponse(text: string, headers: Headers): Nzbhydra2Caps | null
     return null;
   }
 
-  if (isJsonResponse(body, headers)) {
+  if (isServiceIntegrationJsonResponse(body, headers, { allowJsonArray: true })) {
     return parseJsonCaps(body);
   }
 
@@ -188,7 +192,7 @@ function mapNzbhydra2ApiError(
     return null;
   }
 
-  const errorMessage = isJsonResponse(body, headers)
+  const errorMessage = isServiceIntegrationJsonResponse(body, headers, { allowJsonArray: true })
     ? readJsonErrorMessage(body)
     : readXmlErrorMessage(body);
 
@@ -219,15 +223,15 @@ function readJsonErrorMessage(body: string): string | null {
   }
 
   if (typeof parsed.error === "string") {
-    return normalizeText(parsed.error);
+    return normalizeServiceIntegrationText(parsed.error);
   }
 
   const error = isRecord(parsed.error) ? parsed.error : parsed;
 
   return (
-    readStringField(error, "description") ??
-    readStringField(error, "message") ??
-    readStringField(error, "error")
+    readServiceIntegrationStringField(error, "description") ??
+    readServiceIntegrationStringField(error, "message") ??
+    readServiceIntegrationStringField(error, "error")
   );
 }
 
@@ -240,13 +244,10 @@ function readXmlErrorMessage(body: string): string | null {
 
   const attributes = match[1] ?? "";
 
-  return readXmlAttribute(attributes, "description") ?? normalizeText(body);
-}
-
-function isJsonResponse(body: string, headers: Headers): boolean {
-  const contentType = headers.get("content-type")?.toLowerCase() ?? "";
-
-  return contentType.includes("application/json") || body.startsWith("{") || body.startsWith("[");
+  return (
+    readServiceIntegrationXmlAttribute(attributes, "description") ??
+    normalizeServiceIntegrationText(body)
+  );
 }
 
 function parseJsonCaps(body: string): Nzbhydra2Caps | null {
@@ -278,8 +279,12 @@ function readJsonCaps(value: unknown): Nzbhydra2Caps | null {
   }
 
   return {
-    title: readStringField(server, "title") ?? readStringField(value, "title"),
-    version: readStringField(server, "version") ?? readStringField(value, "version"),
+    title:
+      readServiceIntegrationStringField(server, "title") ??
+      readServiceIntegrationStringField(value, "title"),
+    version:
+      readServiceIntegrationStringField(server, "version") ??
+      readServiceIntegrationStringField(value, "version"),
   };
 }
 
@@ -291,8 +296,10 @@ function parseXmlCaps(body: string): Nzbhydra2Caps | null {
   const serverAttributes = readServerAttributes(body);
 
   return {
-    title: serverAttributes ? readXmlAttribute(serverAttributes, "title") : null,
-    version: serverAttributes ? readXmlAttribute(serverAttributes, "version") : null,
+    title: serverAttributes ? readServiceIntegrationXmlAttribute(serverAttributes, "title") : null,
+    version: serverAttributes
+      ? readServiceIntegrationXmlAttribute(serverAttributes, "version")
+      : null,
   };
 }
 
@@ -307,40 +314,6 @@ function readServerAttributes(body: string): string | null {
   const match = /<\s*server\b([^>]*)\/?>/iu.exec(body);
 
   return match?.[1] ?? null;
-}
-
-function readXmlAttribute(
-  attributes: string,
-  name: "description" | "title" | "version",
-): string | null {
-  const pattern = new RegExp(`\\b${name}\\s*=\\s*("([^"]*)"|'([^']*)')`, "iu");
-  const match = pattern.exec(attributes);
-  const value = match?.[2] ?? match?.[3] ?? null;
-
-  return value ? normalizeText(decodeXmlEntities(value)) : null;
-}
-
-function decodeXmlEntities(value: string): string {
-  return value
-    .replace(/&quot;/gu, '"')
-    .replace(/&apos;/gu, "'")
-    .replace(/&lt;/gu, "<")
-    .replace(/&gt;/gu, ">")
-    .replace(/&amp;/gu, "&");
-}
-
-function readStringField(record: Record<string, unknown> | null, field: string): string | null {
-  if (!record || typeof record[field] !== "string") {
-    return null;
-  }
-
-  return normalizeText(record[field]);
-}
-
-function normalizeText(value: string): string | null {
-  const trimmed = value.trim();
-
-  return trimmed.length > 0 ? trimmed : null;
 }
 
 function buildSuccessSummary(caps: Nzbhydra2Caps): string {

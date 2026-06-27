@@ -13,8 +13,11 @@ import {
 import {
   createServiceIntegrationProbeErrorFailure,
   isRecord,
+  isServiceIntegrationJsonResponse,
   mapServiceIntegrationStatusCode,
   prepareApiKeyOnlyProbe,
+  readServiceIntegrationStringField,
+  readServiceIntegrationXmlAttribute,
 } from "./probe-helpers";
 
 const logger = getLogger([APP_LOG_CATEGORY, "service-integrations", "plex"]);
@@ -178,17 +181,11 @@ function parsePlexServerInfo(text: string, headers: Headers): PlexServerInfo | n
     return null;
   }
 
-  if (isJsonResponse(body, headers)) {
+  if (isServiceIntegrationJsonResponse(body, headers)) {
     return parsePlexJson(body);
   }
 
   return parsePlexXml(body);
-}
-
-function isJsonResponse(body: string, headers: Headers): boolean {
-  const contentType = headers.get("content-type")?.toLowerCase() ?? "";
-
-  return contentType.includes("application/json") || body.startsWith("{");
 }
 
 function parsePlexJson(body: string): PlexServerInfo | null {
@@ -221,67 +218,31 @@ function parsePlexXml(body: string): PlexServerInfo | null {
     return null;
   }
 
-  const machineIdentifier = readXmlAttribute(attributes, "machineIdentifier");
+  const machineIdentifier = readServiceIntegrationXmlAttribute(attributes, "machineIdentifier");
 
   if (!machineIdentifier) {
     return null;
   }
 
   return {
-    friendlyName: readXmlAttribute(attributes, "friendlyName"),
+    friendlyName: readServiceIntegrationXmlAttribute(attributes, "friendlyName"),
     machineIdentifier,
-    version: readXmlAttribute(attributes, "version"),
+    version: readServiceIntegrationXmlAttribute(attributes, "version"),
   };
 }
 
 function readPlexRecord(record: Record<string, unknown>): PlexServerInfo | null {
-  const machineIdentifier = readStringField(record, "machineIdentifier");
+  const machineIdentifier = readServiceIntegrationStringField(record, "machineIdentifier");
 
   if (!machineIdentifier) {
     return null;
   }
 
   return {
-    friendlyName: readStringField(record, "friendlyName"),
+    friendlyName: readServiceIntegrationStringField(record, "friendlyName"),
     machineIdentifier,
-    version: readStringField(record, "version"),
+    version: readServiceIntegrationStringField(record, "version"),
   };
-}
-
-function readStringField(record: Record<string, unknown>, field: string): string | null {
-  const value = record[field];
-
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  return normalizeText(value);
-}
-
-function readXmlAttribute(
-  attributes: string,
-  name: "friendlyName" | "machineIdentifier" | "version",
-): string | null {
-  const pattern = new RegExp(`\\b${name}\\s*=\\s*("([^"]*)"|'([^']*)')`, "iu");
-  const match = pattern.exec(attributes);
-  const value = match?.[2] ?? match?.[3] ?? null;
-
-  return value ? normalizeText(decodeXmlEntities(value)) : null;
-}
-
-function decodeXmlEntities(value: string): string {
-  return value
-    .replace(/&quot;/gu, '"')
-    .replace(/&apos;/gu, "'")
-    .replace(/&lt;/gu, "<")
-    .replace(/&gt;/gu, ">")
-    .replace(/&amp;/gu, "&");
-}
-
-function normalizeText(value: string): string | null {
-  const trimmed = value.trim();
-
-  return trimmed.length > 0 ? trimmed : null;
 }
 
 function buildSuccessSummary(info: PlexServerInfo): string {
