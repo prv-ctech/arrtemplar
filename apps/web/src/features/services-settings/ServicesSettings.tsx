@@ -139,6 +139,18 @@ const serviceIntegrationCards: readonly ServiceIntegrationCardDefinition[] = [
     logoPath: "/services/nzbhydra2.svg",
     authModeOptions: [{ label: "API key", value: "api_key" }],
   },
+  {
+    kind: "plex",
+    title: "Plex",
+    logoPath: "/services/plex.svg",
+    authModeOptions: [{ label: "Token", value: "api_key" }],
+  },
+  {
+    kind: "jellyfin",
+    title: "Jellyfin",
+    logoPath: "/services/jellyfin.svg",
+    authModeOptions: [{ label: "API key", value: "api_key" }],
+  },
 ] as const;
 
 const serviceIntegrationCardColumns = createServiceIntegrationCardColumns();

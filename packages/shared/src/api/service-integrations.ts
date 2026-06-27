@@ -4,6 +4,8 @@ export const SERVICE_INTEGRATION_KIND_VALUES = [
   "prowlarr",
   "jackett",
   "nzbhydra2",
+  "plex",
+  "jellyfin",
 ] as const;
 
 export type ServiceIntegrationKind = (typeof SERVICE_INTEGRATION_KIND_VALUES)[number];

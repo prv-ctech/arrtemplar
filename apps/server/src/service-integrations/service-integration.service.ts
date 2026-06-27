@@ -27,11 +27,17 @@ import {
   probeJackettClient,
 } from "./jackett-client";
 import {
+  type JellyfinClientConfig,
+  type JellyfinProbeResponse,
+  probeJellyfinClient,
+} from "./jellyfin-client";
+import {
   type Nzbhydra2ClientConfig,
   type Nzbhydra2ProbeResponse,
   probeNzbhydra2Client,
 } from "./nzbhydra2-client";
 import { buildServiceIntegrationBaseUrl } from "./outbound-request-policy";
+import { type PlexClientConfig, type PlexProbeResponse, probePlexClient } from "./plex-client";
 import {
   type ProwlarrClientConfig,
   type ProwlarrProbeResponse,
@@ -60,6 +66,8 @@ type ServiceIntegrationProbers = {
   prowlarr: (config: ProwlarrClientConfig) => Promise<ProwlarrProbeResponse>;
   jackett: (config: JackettClientConfig) => Promise<JackettProbeResponse>;
   nzbhydra2: (config: Nzbhydra2ClientConfig) => Promise<Nzbhydra2ProbeResponse>;
+  plex: (config: PlexClientConfig) => Promise<PlexProbeResponse>;
+  jellyfin: (config: JellyfinClientConfig) => Promise<JellyfinProbeResponse>;
 };
 
 type ServiceIntegrationServiceOptions = {
@@ -77,7 +85,9 @@ type ResolvedProbeConfig =
   | SabnzbdClientSettings
   | ProwlarrClientConfig
   | JackettClientConfig
-  | Nzbhydra2ClientConfig;
+  | Nzbhydra2ClientConfig
+  | PlexClientConfig
+  | JellyfinClientConfig;
 
 const maxServiceIntegrationInstancesPerKind = 10;
 const defaultServiceIntegrationIdByKind = {
@@ -86,6 +96,8 @@ const defaultServiceIntegrationIdByKind = {
   prowlarr: "prowlarr",
   jackett: "jackett",
   nzbhydra2: "nzbhydra2",
+  plex: "plex",
+  jellyfin: "jellyfin",
 } satisfies Record<ServiceIntegrationKind, string>;
 
 export class ServiceIntegrationService {
@@ -101,6 +113,8 @@ export class ServiceIntegrationService {
       prowlarr: options.probers?.prowlarr ?? probeProwlarrClient,
       jackett: options.probers?.jackett ?? probeJackettClient,
       nzbhydra2: options.probers?.nzbhydra2 ?? probeNzbhydra2Client,
+      plex: options.probers?.plex ?? probePlexClient,
+      jellyfin: options.probers?.jellyfin ?? probeJellyfinClient,
     };
   }
 
@@ -743,6 +757,10 @@ export class ServiceIntegrationService {
         return await this.probers.jackett(config as JackettClientConfig);
       case "nzbhydra2":
         return await this.probers.nzbhydra2(config as Nzbhydra2ClientConfig);
+      case "plex":
+        return await this.probers.plex(config as PlexClientConfig);
+      case "jellyfin":
+        return await this.probers.jellyfin(config as JellyfinClientConfig);
     }
   }
 
@@ -947,11 +965,21 @@ function readServiceLabel(kind: ServiceIntegrationKind): string {
       return "Jackett";
     case "nzbhydra2":
       return "NZBHydra2";
+    case "plex":
+      return "Plex";
+    case "jellyfin":
+      return "Jellyfin";
   }
 }
 
 function isApiKeyOnlyServiceKind(kind: ServiceIntegrationKind): boolean {
-  return kind === "prowlarr" || kind === "jackett" || kind === "nzbhydra2";
+  return (
+    kind === "prowlarr" ||
+    kind === "jackett" ||
+    kind === "nzbhydra2" ||
+    kind === "plex" ||
+    kind === "jellyfin"
+  );
 }
 
 function normalizeDisplayName(

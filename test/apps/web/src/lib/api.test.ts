@@ -19,6 +19,7 @@ const apiSourcePaths = {
   client: `${workspaceRoot}/apps/web/src/lib/api/client.ts`,
   normalizers: `${workspaceRoot}/apps/web/src/lib/api/normalizers.ts`,
   profile: `${workspaceRoot}/apps/web/src/lib/api/profile.ts`,
+  servicesSettings: `${workspaceRoot}/apps/web/src/features/services-settings/ServicesSettings.tsx`,
   serviceIntegrations: `${workspaceRoot}/apps/web/src/lib/api/service-integrations.ts`,
   users: `${workspaceRoot}/apps/web/src/lib/api/users.ts`,
 };
@@ -247,9 +248,39 @@ describe("service integration api client", () => {
     expect(normalizersSource).toContain("isServiceIntegrationProbeOutcome");
   });
 
-  it("accepts Jackett and NZBHydra2 service kinds", () => {
+  it("accepts Jackett, NZBHydra2, Plex, and Jellyfin service kinds", () => {
     expect(isServiceIntegrationKind("jackett")).toBe(true);
     expect(isServiceIntegrationKind("nzbhydra2")).toBe(true);
+    expect(isServiceIntegrationKind("plex")).toBe(true);
+    expect(isServiceIntegrationKind("jellyfin")).toBe(true);
+  });
+
+  it("renders Plex and Jellyfin services with API-key-only cards", async () => {
+    const servicesSettingsSource = await Bun.file(apiSourcePaths.servicesSettings).text();
+    const serviceIntegrationsSource = await Bun.file(apiSourcePaths.serviceIntegrations).text();
+
+    expect(servicesSettingsSource).toContain(
+      [
+        "  {",
+        '    kind: "plex",',
+        '    title: "Plex",',
+        '    logoPath: "/services/plex.svg",',
+        '    authModeOptions: [{ label: "Token", value: "api_key" }],',
+        "  },",
+      ].join("\n"),
+    );
+    expect(servicesSettingsSource).toContain(
+      [
+        "  {",
+        '    kind: "jellyfin",',
+        '    title: "Jellyfin",',
+        '    logoPath: "/services/jellyfin.svg",',
+        '    authModeOptions: [{ label: "API key", value: "api_key" }],',
+        "  },",
+      ].join("\n"),
+    );
+    expect(serviceIntegrationsSource).not.toContain("apiKeyEncrypted");
+    expect(serviceIntegrationsSource).not.toContain("passwordEncrypted");
   });
 });
 

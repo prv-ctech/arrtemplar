@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it } from "bun:test";
 import type { DatabaseClient } from "../../../../../apps/server/src/db/client";
 import { serviceIntegrations } from "../../../../../apps/server/src/db/schema";
 import type { JackettProbeResponse } from "../../../../../apps/server/src/service-integrations/jackett-client";
+import type { JellyfinProbeResponse } from "../../../../../apps/server/src/service-integrations/jellyfin-client";
 import type { Nzbhydra2ProbeResponse } from "../../../../../apps/server/src/service-integrations/nzbhydra2-client";
+import type { PlexProbeResponse } from "../../../../../apps/server/src/service-integrations/plex-client";
 import type { ProwlarrProbeResponse } from "../../../../../apps/server/src/service-integrations/prowlarr-client";
 import type { QbittorrentProbeResult } from "../../../../../apps/server/src/service-integrations/qbittorrent-client";
 import type { SabnzbdClientProbeResponse } from "../../../../../apps/server/src/service-integrations/sabnzbd-client";
@@ -16,7 +18,9 @@ describe("ServiceIntegrationService", () => {
     mockState.database?.close();
     mockState.database = null;
     mockState.jackettCalls = [];
+    mockState.jellyfinCalls = [];
     mockState.nzbhydra2Calls = [];
+    mockState.plexCalls = [];
     mockState.prowlarrCalls = [];
     mockState.qbittorrentCalls = [];
     mockState.sabnzbdCalls = [];
@@ -223,7 +227,7 @@ describe("ServiceIntegrationService", () => {
     expect(stored?.lastTestedAt).toEqual(expect.any(String));
   });
 
-  it("dispatches Jackett and NZBHydra2 probes with decrypted API keys only", async () => {
+  it("dispatches API-key-only probes with decrypted API keys only", async () => {
     const database = await openDatabase();
     const service = createService(database);
 
@@ -243,6 +247,22 @@ describe("ServiceIntegrationService", () => {
         port: 5076,
         apiKey: "nzbhydra-secret",
         calls: mockState.nzbhydra2Calls,
+      },
+      {
+        kind: "plex" as const,
+        displayName: "Main Plex",
+        host: "plex.local",
+        port: 32400,
+        apiKey: "plex-secret",
+        calls: mockState.plexCalls,
+      },
+      {
+        kind: "jellyfin" as const,
+        displayName: "Main Jellyfin",
+        host: "jellyfin.local",
+        port: 8096,
+        apiKey: "jellyfin-secret",
+        calls: mockState.jellyfinCalls,
       },
     ];
 
@@ -290,17 +310,17 @@ describe("ServiceIntegrationService", () => {
     }
   });
 
-  it("creates named Jackett and NZBHydra2 instances without replacing defaults", async () => {
+  it("creates named API-key-only instances without replacing defaults", async () => {
     const database = await openDatabase();
     const service = createService(database);
 
-    for (const kind of ["jackett", "nzbhydra2"] as const) {
+    for (const kind of ["jackett", "nzbhydra2", "plex", "jellyfin"] as const) {
       await service.upsertConfig(kind, {
         displayName: `Main ${kind}`,
         enabled: true,
         useSsl: false,
         host: `${kind}.local`,
-        port: kind === "jackett" ? 9117 : 5076,
+        port: readDefaultPort(kind),
         authMode: "api_key",
         apiKey: `${kind}-secret`,
       });
@@ -310,7 +330,7 @@ describe("ServiceIntegrationService", () => {
         enabled: true,
         useSsl: false,
         host: `${kind}-backup.local`,
-        port: kind === "jackett" ? 9118 : 5077,
+        port: readDefaultPort(kind) + 1,
         authMode: "api_key",
         apiKey: `${kind}-backup-secret`,
       });
@@ -323,7 +343,7 @@ describe("ServiceIntegrationService", () => {
 
     const configs = service.listConfigs().integrations;
 
-    for (const kind of ["jackett", "nzbhydra2"] as const) {
+    for (const kind of ["jackett", "nzbhydra2", "plex", "jellyfin"] as const) {
       const kindConfigs = configs.filter((config) => config.kind === kind);
 
       expect(kindConfigs).toHaveLength(2);
@@ -378,6 +398,47 @@ describe("ServiceIntegrationService", () => {
     expect(nzbhydra2?.lastStatusCheckedAt).toEqual(expect.any(String));
   });
 
+  it("persists test and status metadata for Plex and Jellyfin", async () => {
+    const database = await openDatabase();
+    const service = createService(database);
+
+    await service.upsertConfig("plex", {
+      displayName: "Plex",
+      enabled: true,
+      useSsl: false,
+      host: "plex.local",
+      port: 32400,
+      authMode: "api_key",
+      apiKey: "plex-secret",
+    });
+    await service.upsertConfig("jellyfin", {
+      displayName: "Jellyfin",
+      enabled: true,
+      useSsl: false,
+      host: "jellyfin.local",
+      port: 8096,
+      authMode: "api_key",
+      apiKey: "jellyfin-secret",
+    });
+
+    const plexTest = await service.testConfig("plex");
+    const jellyfinStatus = await service.getStatus("jellyfin");
+
+    expect(plexTest.ok).toBe(true);
+    expect(jellyfinStatus.ok).toBe(true);
+
+    const storedRows = database.db.select().from(serviceIntegrations).all();
+    const plex = storedRows.find((entry) => entry.kind === "plex");
+    const jellyfin = storedRows.find((entry) => entry.kind === "jellyfin");
+
+    expect(plex?.lastTestOutcome).toBe("success");
+    expect(plex?.lastTestMessage).toBe("Connected to Plex 1.41.6.9685.");
+    expect(plex?.lastTestedAt).toEqual(expect.any(String));
+    expect(jellyfin?.lastStatusOutcome).toBe("success");
+    expect(jellyfin?.lastStatusMessage).toBe("Connected to Jellyfin 10.10.7.");
+    expect(jellyfin?.lastStatusCheckedAt).toEqual(expect.any(String));
+  });
+
   it("rejects username/password auth for Prowlarr before probing", async () => {
     const database = await openDatabase();
     const service = createService(database);
@@ -407,17 +468,17 @@ describe("ServiceIntegrationService", () => {
     expect(mockState.prowlarrCalls).toHaveLength(0);
   });
 
-  it("rejects username/password auth for Jackett and NZBHydra2 before probing", async () => {
+  it("rejects username/password auth for API-key-only services before probing", async () => {
     const database = await openDatabase();
     const service = createService(database);
 
-    for (const kind of ["jackett", "nzbhydra2"] as const) {
+    for (const kind of ["jackett", "nzbhydra2", "plex", "jellyfin"] as const) {
       const result = await service.upsertConfig(kind, {
         displayName: kind,
         enabled: true,
         useSsl: false,
         host: `${kind}.local`,
-        port: kind === "jackett" ? 9117 : 5076,
+        port: readDefaultPort(kind),
         authMode: "username_password",
         username: "admin",
         password: "secret",
@@ -432,26 +493,32 @@ describe("ServiceIntegrationService", () => {
       expect(result.body.error.fieldErrors).toContainEqual({
         field: "authMode",
         code: "configuration_incomplete",
-        message: `${kind === "jackett" ? "Jackett" : "NZBHydra2"} only supports API key authentication.`,
+        message: `${readServiceName(kind)} only supports API key authentication.`,
       });
     }
 
     expect(mockState.jackettCalls).toHaveLength(0);
+    expect(mockState.jellyfinCalls).toHaveLength(0);
     expect(mockState.nzbhydra2Calls).toHaveLength(0);
+    expect(mockState.plexCalls).toHaveLength(0);
   });
 });
 
 const mockState: {
   database: DatabaseClient | null;
   jackettCalls: Array<Record<string, unknown>>;
+  jellyfinCalls: Array<Record<string, unknown>>;
   nzbhydra2Calls: Array<Record<string, unknown>>;
+  plexCalls: Array<Record<string, unknown>>;
   prowlarrCalls: Array<Record<string, unknown>>;
   qbittorrentCalls: Array<Record<string, unknown>>;
   sabnzbdCalls: Array<Record<string, unknown>>;
 } = {
   database: null,
   jackettCalls: [],
+  jellyfinCalls: [],
   nzbhydra2Calls: [],
+  plexCalls: [],
   prowlarrCalls: [],
   qbittorrentCalls: [],
   sabnzbdCalls: [],
@@ -471,9 +538,17 @@ function createService(database: DatabaseClient): ServiceIntegrationService {
         mockState.jackettCalls.push(config as Record<string, unknown>);
         return successJackettProbe();
       },
+      jellyfin: async (config) => {
+        mockState.jellyfinCalls.push(config as Record<string, unknown>);
+        return successJellyfinProbe();
+      },
       nzbhydra2: async (config) => {
         mockState.nzbhydra2Calls.push(config as Record<string, unknown>);
         return successNzbhydra2Probe();
+      },
+      plex: async (config) => {
+        mockState.plexCalls.push(config as Record<string, unknown>);
+        return successPlexProbe();
       },
       prowlarr: async (config) => {
         mockState.prowlarrCalls.push(config as Record<string, unknown>);
@@ -489,6 +564,26 @@ function createService(database: DatabaseClient): ServiceIntegrationService {
       },
     },
   });
+}
+
+function successJellyfinProbe(): JellyfinProbeResponse {
+  return {
+    ok: true,
+    result: {
+      kind: "jellyfin",
+      configured: true,
+      enabled: true,
+      outcome: "success",
+      summary: "Connected to Jellyfin 10.10.7.",
+      checkedAt: new Date().toISOString(),
+      reachable: true,
+      authenticated: true,
+      compatible: true,
+      version: "10.10.7",
+      webApiVersion: null,
+      connectionState: "connected",
+    },
+  };
 }
 
 function successJackettProbe(): JackettProbeResponse {
@@ -525,6 +620,26 @@ function successNzbhydra2Probe(): Nzbhydra2ProbeResponse {
       authenticated: true,
       compatible: true,
       version: "7.13.0",
+      webApiVersion: null,
+      connectionState: "connected",
+    },
+  };
+}
+
+function successPlexProbe(): PlexProbeResponse {
+  return {
+    ok: true,
+    result: {
+      kind: "plex",
+      configured: true,
+      enabled: true,
+      outcome: "success",
+      summary: "Connected to Plex 1.41.6.9685.",
+      checkedAt: new Date().toISOString(),
+      reachable: true,
+      authenticated: true,
+      compatible: true,
+      version: "1.41.6.9685",
       webApiVersion: null,
       connectionState: "connected",
     },
@@ -589,4 +704,30 @@ function successProwlarrProbe(): ProwlarrProbeResponse {
       connectionState: "connected",
     },
   };
+}
+
+function readDefaultPort(kind: "jackett" | "nzbhydra2" | "plex" | "jellyfin"): number {
+  switch (kind) {
+    case "jackett":
+      return 9117;
+    case "nzbhydra2":
+      return 5076;
+    case "plex":
+      return 32400;
+    case "jellyfin":
+      return 8096;
+  }
+}
+
+function readServiceName(kind: "jackett" | "nzbhydra2" | "plex" | "jellyfin"): string {
+  switch (kind) {
+    case "jackett":
+      return "Jackett";
+    case "nzbhydra2":
+      return "NZBHydra2";
+    case "plex":
+      return "Plex";
+    case "jellyfin":
+      return "Jellyfin";
+  }
 }

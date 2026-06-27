@@ -221,7 +221,7 @@ describe("service integration routes", () => {
     expect(statusBody.result.kind).toBe("prowlarr");
   });
 
-  it("saves, tests, reports status, and lists Jackett and NZBHydra2 configs without secrets", async () => {
+  it("saves, tests, reports status, and lists API-key-only configs without secrets", async () => {
     const { app } = await createTestApp();
     const adminCookie = await createInitialAdmin(app);
     const cases = [
@@ -236,6 +236,18 @@ describe("service integration routes", () => {
         displayName: "Main NZBHydra2",
         port: 9,
         apiKey: "nzbhydra-route-secret",
+      },
+      {
+        kind: "plex",
+        displayName: "Main Plex",
+        port: 9,
+        apiKey: "plex-route-secret",
+      },
+      {
+        kind: "jellyfin",
+        displayName: "Main Jellyfin",
+        port: 9,
+        apiKey: "jellyfin-route-secret",
       },
     ] as const;
 
@@ -311,10 +323,14 @@ describe("service integration routes", () => {
       expect.arrayContaining([
         expect.objectContaining({ kind: "jackett", hasApiKey: true }),
         expect.objectContaining({ kind: "nzbhydra2", hasApiKey: true }),
+        expect.objectContaining({ kind: "plex", hasApiKey: true }),
+        expect.objectContaining({ kind: "jellyfin", hasApiKey: true }),
       ]),
     );
     expect(listSnapshot).not.toContain("jackett-route-secret");
     expect(listSnapshot).not.toContain("nzbhydra-route-secret");
+    expect(listSnapshot).not.toContain("plex-route-secret");
+    expect(listSnapshot).not.toContain("jellyfin-route-secret");
   });
 
   it("rejects unsupported Prowlarr auth modes before outbound requests", async () => {
@@ -348,11 +364,11 @@ describe("service integration routes", () => {
     });
   });
 
-  it("rejects unsupported Jackett and NZBHydra2 auth modes", async () => {
+  it("rejects unsupported API-key-only auth modes", async () => {
     const { app } = await createTestApp();
     const adminCookie = await createInitialAdmin(app);
 
-    for (const kind of ["jackett", "nzbhydra2"] as const) {
+    for (const kind of ["jackett", "nzbhydra2", "plex", "jellyfin"] as const) {
       const saveResponse = await app.handle(
         jsonRequest(
           "PUT",
@@ -362,7 +378,7 @@ describe("service integration routes", () => {
             enabled: true,
             useSsl: false,
             host: "127.0.0.1",
-            port: kind === "jackett" ? 9117 : 5076,
+            port: readDefaultPort(kind),
             authMode: "username_password",
             username: "admin",
             password: "secret",
@@ -376,7 +392,7 @@ describe("service integration routes", () => {
       expect(saveBody.error.fieldErrors).toContainEqual({
         field: "authMode",
         code: "configuration_incomplete",
-        message: `${kind === "jackett" ? "Jackett" : "NZBHydra2"} only supports API key authentication.`,
+        message: `${readServiceName(kind)} only supports API key authentication.`,
       });
     }
   });
@@ -482,4 +498,30 @@ function jsonRequest(
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
+}
+
+function readDefaultPort(kind: "jackett" | "nzbhydra2" | "plex" | "jellyfin"): number {
+  switch (kind) {
+    case "jackett":
+      return 9117;
+    case "nzbhydra2":
+      return 5076;
+    case "plex":
+      return 32400;
+    case "jellyfin":
+      return 8096;
+  }
+}
+
+function readServiceName(kind: "jackett" | "nzbhydra2" | "plex" | "jellyfin"): string {
+  switch (kind) {
+    case "jackett":
+      return "Jackett";
+    case "nzbhydra2":
+      return "NZBHydra2";
+    case "plex":
+      return "Plex";
+    case "jellyfin":
+      return "Jellyfin";
+  }
 }
