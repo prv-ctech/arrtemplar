@@ -42,22 +42,6 @@ function readPort(value: string | undefined, environment: RuntimeEnvironment): n
   return port;
 }
 
-function readBoolean(value: string | undefined, defaultValue: boolean): boolean {
-  if (!value) {
-    return defaultValue;
-  }
-
-  if (value === "true") {
-    return true;
-  }
-
-  if (value === "false") {
-    return false;
-  }
-
-  throw new Error(`Expected boolean environment value to be true or false, received: ${value}`);
-}
-
 function readNamedBoolean(name: string, value: string | undefined, defaultValue: boolean): boolean {
   if (!value) {
     return defaultValue;
@@ -193,7 +177,11 @@ export function readRuntimeEnv(environment: RuntimeEnvironment = Bun.env): Runti
     serverPort: readPort(environment.SERVER_PORT, environment),
     webOrigin: environment.WEB_ORIGIN ?? DEFAULT_WEB_ORIGIN,
     databaseUrl: readDatabaseUrl(environment),
-    sessionCookieSecure: readBoolean(environment.SESSION_COOKIE_SECURE, true),
+    sessionCookieSecure: readNamedBoolean(
+      "SESSION_COOKIE_SECURE",
+      environment.SESSION_COOKIE_SECURE,
+      true,
+    ),
     logLevel: readLogLevel(environment.LOG_LEVEL, environment),
     logFilePath: readLogFilePath(environment.LOG_FILE_PATH),
     logFileMaxSizeBytes: readPositiveInteger(

@@ -72,6 +72,11 @@ type ServiceListItem = {
   mode: SaveServiceIntegrationConfigVariables["mode"];
 };
 
+type ServiceIntegrationCardColumnItem = {
+  card: ServiceIntegrationCardDefinition;
+  mobileOrder: number;
+};
+
 type StatusBadge = {
   label: string;
   variant: "default" | "destructive" | "outline" | "secondary";
@@ -136,20 +141,28 @@ const serviceIntegrationCards: readonly ServiceIntegrationCardDefinition[] = [
   },
 ] as const;
 
-const serviceIntegrationCardColumns = [
-  {
-    key: "primary-services",
-    items: serviceIntegrationCards
-      .filter((_, index) => index % 2 === 0)
-      .map((card, mobileOrder) => ({ card, mobileOrder: mobileOrder * 2 })),
-  },
-  {
-    key: "secondary-services",
-    items: serviceIntegrationCards
-      .filter((_, index) => index % 2 === 1)
-      .map((card, mobileOrder) => ({ card, mobileOrder: mobileOrder * 2 + 1 })),
-  },
-] as const;
+const serviceIntegrationCardColumns = createServiceIntegrationCardColumns();
+
+function createServiceIntegrationCardColumns() {
+  const primaryItems: ServiceIntegrationCardColumnItem[] = [];
+  const secondaryItems: ServiceIntegrationCardColumnItem[] = [];
+
+  for (const [mobileOrder, card] of serviceIntegrationCards.entries()) {
+    const item = { card, mobileOrder };
+
+    if (mobileOrder % 2 === 0) {
+      primaryItems.push(item);
+      continue;
+    }
+
+    secondaryItems.push(item);
+  }
+
+  return [
+    { key: "primary-services", items: primaryItems },
+    { key: "secondary-services", items: secondaryItems },
+  ] as const;
+}
 
 const compactServiceIntegrationFieldClassName =
   "h-9 w-full min-w-0 rounded-xl px-3 text-sm sm:w-52";

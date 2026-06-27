@@ -1,68 +1,78 @@
 import {
   type AdminChangeUserPasswordRequest,
-  type AdminChangeUserPasswordResponse,
-  type AdminDeleteUserResponse,
   type AdminUpdateUserPermissionsRequest,
   type AdminUpdateUserStatusRequest,
   type ApiErrorResponse,
   type AuthIdentitiesResponse,
-  type AuthMethod,
   type AuthProviderSlug,
   type AuthUnlinkAllIdentitiesResponse,
   type ChangePasswordRequest,
   type ChangePasswordResponse,
-  type ClearNotificationHistoryResponse,
   type CreateAdminRequest,
   type CreateLocalUserRequest,
   type CreateNotificationHistoryRequest,
-  type CreateNotificationHistoryResponse,
   DEFAULT_NOTIFICATION_PREFERENCES,
   DEFAULT_PROFILE_AVATAR_ID,
   DEFAULT_PROFILE_BANNER_ID,
   DEFAULT_SIGNED_IN_USER_PERMISSIONS,
   hasPermissionGrant,
-  isProfileAvatarId,
-  isProfileBannerId,
-  isToastNotificationId,
-  isUserPermission,
   type LoginRequest,
-  type ManagedUserProfile,
-  type ManagedUserSummary,
-  type MarkNotificationReadResponse,
-  NOTIFICATION_FREQUENCY_VALUES,
-  type NotificationFrequency,
-  type NotificationHistoryItem,
-  type NotificationHistoryListResponse,
-  type NotificationPreferences,
-  normalizePermissionList,
-  OAUTH_LOCAL_EMAIL_DOMAIN,
   type PublicUser,
   type AuthIdentity as SharedAuthIdentity,
   SYSTEM_ADMIN_PERMISSION,
-  TOAST_NOTIFICATION_EVENTS,
-  type ToastNotificationId,
   type UpdateManagedUserProfileRequest,
   type UpdateNotificationPreferencesRequest,
   type UpdateUserProfileRequest,
-  USER_PERMISSION_VALUES,
   type UserPermission,
 } from "@arrtemplar/shared";
-import { and, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { writeAuditLog } from "../audit/audit-log";
 import type { DatabaseClient } from "../db/client";
 import {
-  auditLogs,
   authIdentities,
   authProviders,
-  type NewNotificationHistory,
-  type NotificationHistory,
-  notificationHistory,
-  type AuthIdentity as StoredAuthIdentity,
   sessions,
   type User,
   userPermissionGrants,
   users,
 } from "../db/schema";
+import {
+  type CreateLocalUserResult,
+  createUserRecord,
+  lastSystemAdminRequiredError,
+  type ManagedUserDeleteResult,
+  type ManagedUserMutationResult,
+  type ManagedUserPasswordResult,
+  type ManagedUserProfileMutationResult,
+  type ManagedUserProfileResult,
+  ManagedUserService,
+  type ManagedUsersListResult,
+  userAlreadyExistsError,
+} from "./managed-user.service";
+import {
+  type ClearNotificationHistoryResult,
+  type CreateNotificationHistoryResult,
+  type MarkNotificationReadResult,
+  type NotificationHistoryListResult,
+  NotificationHistoryService,
+  type NotificationPreferencesResult,
+} from "./notification-history.service";
+import {
+  countOAuthIdentityRows,
+  countOAuthSessionRows,
+  createOAuthEmail,
+  createOAuthUsername,
+  createStoredOAuthIdentity,
+  findOAuthIdentity,
+  findUserByUsernameOrEmail,
+  normalizeEmail,
+  type OAuthIdentityInput,
+  readOAuthIdentityUserIds,
+  updateOAuthIdentityDisplayMetadata,
+  withActiveSystemAdminActor,
+} from "./oauth-identity.helpers";
 import { hashPassword, verifyPassword } from "./password";
+import { countActiveLocalSystemAdmins, readEffectivePermissions } from "./permissions";
 import { generatePublicUserId } from "./public-user-id";
 import {
   createOAuthRouteRateLimitKey,
@@ -70,6 +80,7 @@ import {
   type OAuthRouteRateLimitInput,
 } from "./rate-limit";
 import { createSessionExpiresAt, generateSessionToken, hashSessionToken } from "./session-token";
+import { readProviderKind, toPublicUser, toSharedAuthIdentity } from "./user-mappers";
 
 export type AuthRequestContext = {
   ipAddress: string | null;
@@ -124,19 +135,6 @@ type PermissionCheckFailure = {
 
 type PermissionCheckResult = PermissionCheckSuccess | PermissionCheckFailure;
 
-type CreateLocalUserSuccess = {
-  ok: true;
-  user: ManagedUserSummary;
-};
-
-type CreateLocalUserFailure = {
-  ok: false;
-  status: 401 | 403 | 409;
-  body: ApiErrorResponse;
-};
-
-type CreateLocalUserResult = CreateLocalUserSuccess | CreateLocalUserFailure;
-
 type UserProfileSuccess = {
   ok: true;
   user: PublicUser;
@@ -149,74 +147,6 @@ type UserProfileFailure = {
 };
 
 type UserProfileResult = UserProfileSuccess | UserProfileFailure;
-
-type NotificationPreferencesSuccess = {
-  ok: true;
-  notificationPreferences: NotificationPreferences;
-};
-
-type NotificationPreferencesFailure = {
-  ok: false;
-  status: 401;
-  body: ApiErrorResponse;
-};
-
-type NotificationPreferencesResult =
-  | NotificationPreferencesSuccess
-  | NotificationPreferencesFailure;
-
-type NotificationHistoryAuthFailure = {
-  ok: false;
-  status: 401;
-  body: ApiErrorResponse;
-};
-
-type NotificationHistoryCreateFailure =
-  | NotificationHistoryAuthFailure
-  | {
-      ok: false;
-      status: 422;
-      body: ApiErrorResponse;
-    };
-
-type NotificationHistoryReadFailure =
-  | NotificationHistoryAuthFailure
-  | {
-      ok: false;
-      status: 404;
-      body: ApiErrorResponse;
-    };
-
-type NotificationHistoryListSuccess = {
-  ok: true;
-  body: NotificationHistoryListResponse;
-};
-
-type CreateNotificationHistorySuccess = {
-  ok: true;
-  body: CreateNotificationHistoryResponse;
-};
-
-type MarkNotificationReadSuccess = {
-  ok: true;
-  body: MarkNotificationReadResponse;
-};
-
-type ClearNotificationHistorySuccess = {
-  ok: true;
-  body: ClearNotificationHistoryResponse;
-};
-
-type NotificationHistoryListResult =
-  | NotificationHistoryListSuccess
-  | NotificationHistoryAuthFailure;
-type CreateNotificationHistoryResult =
-  | CreateNotificationHistorySuccess
-  | NotificationHistoryCreateFailure;
-type MarkNotificationReadResult = MarkNotificationReadSuccess | NotificationHistoryReadFailure;
-type ClearNotificationHistoryResult =
-  | ClearNotificationHistorySuccess
-  | NotificationHistoryAuthFailure;
 
 type UpdateUserProfileFailure = {
   ok: false;
@@ -238,59 +168,6 @@ type ChangePasswordFailure = {
 };
 
 type ChangePasswordResult = ChangePasswordSuccess | ChangePasswordFailure;
-
-type ManagedUsersListSuccess = {
-  ok: true;
-  users: ManagedUserSummary[];
-};
-
-type ManagedUserProfileSuccess = {
-  ok: true;
-  user: ManagedUserProfile;
-};
-
-type ManagedUserProfileFailure = {
-  ok: false;
-  status: 401 | 403 | 404;
-  body: ApiErrorResponse;
-};
-
-type ManagedUserMutationSuccess = {
-  ok: true;
-  user: ManagedUserSummary;
-};
-
-type ManagedUserPasswordSuccess = {
-  ok: true;
-  body: AdminChangeUserPasswordResponse;
-};
-
-type ManagedUserDeleteSuccess = {
-  ok: true;
-  body: AdminDeleteUserResponse;
-};
-
-type ManagedUserMutationFailure = {
-  ok: false;
-  status: 401 | 403 | 404 | 409;
-  body: ApiErrorResponse;
-};
-
-type ManagedUsersListResult = ManagedUsersListSuccess | PermissionCheckFailure;
-type ManagedUserProfileResult = ManagedUserProfileSuccess | ManagedUserProfileFailure;
-type ManagedUserProfileMutationResult = ManagedUserProfileSuccess | ManagedUserMutationFailure;
-type ManagedUserMutationResult = ManagedUserMutationSuccess | ManagedUserMutationFailure;
-type ManagedUserPasswordResult = ManagedUserPasswordSuccess | ManagedUserMutationFailure;
-type ManagedUserDeleteResult = ManagedUserDeleteSuccess | ManagedUserMutationFailure;
-
-type OAuthIdentityInput = {
-  provider: AuthProviderSlug;
-  issuer: string;
-  subject: string;
-  preferredUsername?: string;
-  name?: string;
-  email?: string;
-};
 
 type OAuthSessionToken = {
   provider: AuthProviderSlug;
@@ -335,13 +212,8 @@ type OAuthUnlinkAllIdentitiesResult =
       status: 401 | 403 | 409;
       body: ApiErrorResponse;
     };
-type ActiveSystemAdminActorResult =
-  | { ok: true; user: User }
-  | { ok: false; status: 401 | 403; body: ApiErrorResponse };
-
 type DatabaseTransaction = Parameters<Parameters<DatabaseClient["db"]["transaction"]>[0]>[0];
 type DatabaseReader = DatabaseClient["db"] | DatabaseTransaction;
-type ManagedUserUpdateValues = Partial<Pick<User, "disabledAt" | "passwordHash" | "updatedAt">>;
 type CurrentUserUpdateValues = Partial<
   Pick<
     User,
@@ -397,52 +269,10 @@ const setupAlreadyCompleteError: ApiErrorResponse = {
   },
 };
 
-const userAlreadyExistsError: ApiErrorResponse = {
-  error: {
-    code: "USER_ALREADY_EXISTS",
-    message: "A user with that username or email already exists.",
-  },
-};
-
 const invalidCurrentPasswordError: ApiErrorResponse = {
   error: {
     code: "INVALID_CURRENT_PASSWORD",
     message: "Current password is incorrect.",
-  },
-};
-
-const invalidNotificationHistoryInputError: ApiErrorResponse = {
-  error: {
-    code: "INVALID_NOTIFICATION_HISTORY_INPUT",
-    message: "Notification history input is invalid.",
-  },
-};
-
-const notificationHistoryNotFoundError: ApiErrorResponse = {
-  error: {
-    code: "NOTIFICATION_NOT_FOUND",
-    message: "Notification history item was not found.",
-  },
-};
-
-const targetUserNotFoundError: ApiErrorResponse = {
-  error: {
-    code: "USER_NOT_FOUND",
-    message: "User account was not found.",
-  },
-};
-
-const selfServiceOnlyError: ApiErrorResponse = {
-  error: {
-    code: "SELF_SERVICE_ONLY",
-    message: "Use the self-service profile endpoints for your own account.",
-  },
-};
-
-const lastSystemAdminRequiredError: ApiErrorResponse = {
-  error: {
-    code: "LAST_SYSTEM_ADMIN_REQUIRED",
-    message: "At least one active user must keep the system:admin permission.",
   },
 };
 
@@ -467,14 +297,21 @@ const oauthAutoRegisterDisabledError: ApiErrorResponse = {
   },
 };
 
-const notificationHistoryTitleMaxLength = 160;
-const notificationHistoryDescriptionMaxLength = 500;
-
 export class AuthService {
+  private readonly managedUsers: ManagedUserService;
+  private readonly notificationHistory: NotificationHistoryService;
+
   constructor(
     private readonly database: DatabaseClient,
     private readonly rateLimiter = new LoginRateLimiter(),
-  ) {}
+  ) {
+    this.managedUsers = new ManagedUserService(database);
+    this.notificationHistory = new NotificationHistoryService(
+      database,
+      (sessionToken) => this.findSession(sessionToken),
+      (userId, values) => this.updateCurrentUser(userId, values),
+    );
+  }
 
   isSetupRequired(): boolean {
     return this.countUsers() === 0;
@@ -511,81 +348,23 @@ export class AuthService {
     actor: PublicUser,
     context: AuthRequestContext,
   ): Promise<CreateLocalUserResult> {
-    const actorResult = this.readActiveManagedActor(actor, "users:create");
-
-    if (!actorResult.ok) {
-      return actorResult;
-    }
-
-    const now = new Date();
-    const user = await createUserRecord(input, now);
-    const created = this.insertLocalUser(user, actorResult.actor, context, now);
-
-    if (!created) {
-      return { ok: false, status: 409, body: userAlreadyExistsError };
-    }
-
-    return {
-      ok: true,
-      user: toManagedUserSummary(user, readEffectivePermissions(this.database.db, user)),
-    };
+    return this.managedUsers.createLocalUser(input, actor, context);
   }
 
   listUsers(actor: PublicUser): ManagedUsersListResult {
-    const actorResult = this.readActiveManagedActor(actor);
-
-    if (!actorResult.ok) {
-      return actorResult;
-    }
-
-    return { ok: true, users: this.readManagedUserSummaries() };
+    return this.managedUsers.listUsers(actor);
   }
 
   listUsersForApiKey(): ManagedUsersListResult {
-    return { ok: true, users: this.readManagedUserSummaries() };
+    return this.managedUsers.listUsersForApiKey();
   }
 
   getManagedUserProfile(targetUserId: string, actor: PublicUser): ManagedUserProfileResult {
-    const actorResult = this.readActiveManagedActor(actor);
-
-    if (!actorResult.ok) {
-      return actorResult;
-    }
-
-    return this.readManagedUserProfileByPublicId(targetUserId);
+    return this.managedUsers.getManagedUserProfile(targetUserId, actor);
   }
 
   getManagedUserProfileForApiKey(targetUserId: string): ManagedUserProfileResult {
-    return this.readManagedUserProfileByPublicId(targetUserId);
-  }
-
-  private readManagedUserSummaries(): ManagedUserSummary[] {
-    const userRows = this.database.db.select().from(users).all();
-    const permissionsByUserId = readEffectivePermissionsByUserId(this.database.db, userRows);
-
-    return userRows
-      .map((user) =>
-        toManagedUserSummary(user, permissionsByUserId.get(user.id) ?? [], {
-          includeAuthMethod: true,
-        }),
-      )
-      .sort((left, right) => left.username.localeCompare(right.username));
-  }
-
-  private readManagedUserProfileByPublicId(targetUserId: string): ManagedUserProfileResult {
-    const targetUser = this.findUserByPublicId(targetUserId);
-
-    if (!targetUser) {
-      return { ok: false, status: 404, body: targetUserNotFoundError };
-    }
-
-    return {
-      ok: true,
-      user: toManagedUserProfile(
-        targetUser,
-        readEffectivePermissions(this.database.db, targetUser),
-      ),
-    };
+    return this.managedUsers.getManagedUserProfileForApiKey(targetUserId);
   }
 
   updateManagedUserProfile(
@@ -594,66 +373,7 @@ export class AuthService {
     actor: PublicUser,
     context: AuthRequestContext,
   ): ManagedUserProfileMutationResult {
-    return this.runManagedUserMutation({
-      actor,
-      context,
-      requiredPermission: "users:update",
-      targetUserId,
-      mutate: (tx, targetUser, actorUser, now) => {
-        const username = input.username?.trim();
-        const email = input.email ? normalizeEmail(input.email) : undefined;
-        const avatarId = input.avatarId;
-        const bannerId = input.bannerId;
-        const existingUser = findUserByUsernameOrEmail(tx, username, email);
-
-        if (existingUser && existingUser.id !== targetUser.id) {
-          return { ok: false, status: 409, body: userAlreadyExistsError };
-        }
-
-        if (!username && !email && !avatarId && !bannerId) {
-          return {
-            ok: true,
-            user: toManagedUserProfile(targetUser, readEffectivePermissions(tx, targetUser)),
-          };
-        }
-
-        tx.update(users)
-          .set({
-            ...(username ? { username } : {}),
-            ...(email ? { email } : {}),
-            ...(avatarId ? { avatarId } : {}),
-            ...(bannerId ? { bannerId } : {}),
-            updatedAt: now,
-          })
-          .where(eq(users.id, targetUser.id))
-          .run();
-
-        const updatedUser = tx.select().from(users).where(eq(users.id, targetUser.id)).get();
-
-        if (!updatedUser) {
-          return { ok: false, status: 404, body: targetUserNotFoundError };
-        }
-
-        writeManagedUserAuditLog(tx, {
-          action: "users.profile.updated",
-          actorUserId: actorUser.id,
-          context,
-          createdAt: now,
-          metadata: {
-            username: updatedUser.username,
-            email: updatedUser.email,
-            avatarId: updatedUser.avatarId,
-            bannerId: updatedUser.bannerId,
-          },
-          targetUser: updatedUser,
-        });
-
-        return {
-          ok: true,
-          user: toManagedUserProfile(updatedUser, readEffectivePermissions(tx, updatedUser)),
-        };
-      },
-    });
+    return this.managedUsers.updateManagedUserProfile(targetUserId, input, actor, context);
   }
 
   updateManagedUserPermissions(
@@ -662,53 +382,7 @@ export class AuthService {
     actor: PublicUser,
     context: AuthRequestContext,
   ): ManagedUserMutationResult {
-    return this.runManagedUserMutation({
-      actor,
-      context,
-      requiredPermission: "users:permissions",
-      targetUserId,
-      mutate: (tx, targetUser, actorUser, now) => {
-        const permissions = normalizePermissionList(input.permissions.filter(isUserPermission));
-
-        if (
-          !permissions.includes(SYSTEM_ADMIN_PERMISSION) &&
-          hasExplicitPermissionGrant(tx, targetUser.id, SYSTEM_ADMIN_PERMISSION) &&
-          countActiveSystemAdmins(tx) <= 1
-        ) {
-          return { ok: false, status: 409, body: lastSystemAdminRequiredError };
-        }
-
-        tx.delete(userPermissionGrants).where(eq(userPermissionGrants.userId, targetUser.id)).run();
-
-        if (permissions.length > 0) {
-          tx.insert(userPermissionGrants)
-            .values(
-              permissions.map((permission) => ({
-                id: Bun.randomUUIDv7(),
-                userId: targetUser.id,
-                permission,
-                grantedByUserId: actorUser.id,
-                createdAt: now,
-                updatedAt: now,
-              })),
-            )
-            .run();
-        }
-
-        tx.update(users).set({ updatedAt: now }).where(eq(users.id, targetUser.id)).run();
-        revokeUserSessions(tx, targetUser.id);
-        writeManagedUserAuditLog(tx, {
-          action: "users.permissions.updated",
-          actorUserId: actorUser.id,
-          context,
-          createdAt: now,
-          metadata: { permissions },
-          targetUser,
-        });
-
-        return readManagedUserSummarySuccess(tx, targetUser.id);
-      },
-    });
+    return this.managedUsers.updateManagedUserPermissions(targetUserId, input, actor, context);
   }
 
   async changeManagedUserPassword(
@@ -717,29 +391,7 @@ export class AuthService {
     actor: PublicUser,
     context: AuthRequestContext,
   ): Promise<ManagedUserPasswordResult> {
-    const passwordHash = await hashPassword(input.password);
-
-    return this.runManagedUserMutation({
-      actor,
-      context,
-      requiredPermission: "users:password",
-      targetUserId,
-      mutate: (tx, targetUser, actorUser, now) => {
-        updateManagedUserAndRevokeSessions(
-          tx,
-          targetUser,
-          { passwordHash, updatedAt: now },
-          {
-            action: "users.password.changed",
-            actorUserId: actorUser.id,
-            context,
-            createdAt: now,
-          },
-        );
-
-        return { ok: true, body: { status: "ok" } };
-      },
-    });
+    return this.managedUsers.changeManagedUserPassword(targetUserId, input, actor, context);
   }
 
   updateManagedUserStatus(
@@ -748,36 +400,7 @@ export class AuthService {
     actor: PublicUser,
     context: AuthRequestContext,
   ): ManagedUserMutationResult {
-    return this.runManagedUserMutation({
-      actor,
-      context,
-      requiredPermission: "users:disable",
-      targetUserId,
-      mutate: (tx, targetUser, actorUser, now) => {
-        if (
-          input.disabled &&
-          hasExplicitPermissionGrant(tx, targetUser.id, SYSTEM_ADMIN_PERMISSION)
-        ) {
-          if (countActiveSystemAdmins(tx) <= 1) {
-            return { ok: false, status: 409, body: lastSystemAdminRequiredError };
-          }
-        }
-
-        updateManagedUserAndRevokeSessions(
-          tx,
-          targetUser,
-          { disabledAt: input.disabled ? now : null, updatedAt: now },
-          {
-            action: input.disabled ? "users.disabled" : "users.restored",
-            actorUserId: actorUser.id,
-            context,
-            createdAt: now,
-          },
-        );
-
-        return readManagedUserSummarySuccess(tx, targetUser.id);
-      },
-    });
+    return this.managedUsers.updateManagedUserStatus(targetUserId, input, actor, context);
   }
 
   deleteManagedUser(
@@ -785,37 +408,7 @@ export class AuthService {
     actor: PublicUser,
     context: AuthRequestContext,
   ): ManagedUserDeleteResult {
-    return this.runManagedUserMutation({
-      actor,
-      context,
-      requiredPermission: "users:delete",
-      targetUserId,
-      mutate: (tx, targetUser, actorUser, now) => {
-        if (
-          !targetUser.disabledAt &&
-          hasExplicitPermissionGrant(tx, targetUser.id, SYSTEM_ADMIN_PERMISSION) &&
-          countActiveSystemAdmins(tx) <= 1
-        ) {
-          return { ok: false, status: 409, body: lastSystemAdminRequiredError };
-        }
-
-        writeManagedUserAuditLog(tx, {
-          action: "users.deleted",
-          actorUserId: actorUser.id,
-          context,
-          createdAt: now,
-          metadata: {
-            authMethod: targetUser.authMethod,
-            email: targetUser.email,
-            publicId: targetUser.publicId,
-          },
-          targetUser,
-        });
-        tx.delete(users).where(eq(users.id, targetUser.id)).run();
-
-        return { ok: true, body: { status: "ok", deletedUserId: targetUser.publicId } };
-      },
-    });
+    return this.managedUsers.deleteManagedUser(targetUserId, actor, context);
   }
 
   async login(input: LoginRequest, context: AuthRequestContext): Promise<LoginResult> {
@@ -823,7 +416,7 @@ export class AuthService {
     const rateLimitKey = createRateLimitKey(email);
 
     if (this.isOAuthLoginEnabled()) {
-      this.writeAuditLog({
+      writeAuditLog(this.database.db, {
         action: "auth.login.password_disabled",
         metadata: { email },
         ipAddress: context.ipAddress,
@@ -833,7 +426,7 @@ export class AuthService {
     }
 
     if (this.rateLimiter.isBlocked(rateLimitKey)) {
-      this.writeAuditLog({
+      writeAuditLog(this.database.db, {
         action: "auth.login.rate_limited",
         metadata: { email },
         ipAddress: context.ipAddress,
@@ -850,7 +443,7 @@ export class AuthService {
 
     if (!user || user.disabledAt || !passwordMatches) {
       this.rateLimiter.recordFailure(rateLimitKey);
-      this.writeAuditLog({
+      writeAuditLog(this.database.db, {
         action: "auth.login.failed",
         actorUserId: user?.id ?? null,
         targetType: "user",
@@ -875,7 +468,7 @@ export class AuthService {
 
     const updatedUser = { ...user, lastLoginAt: now.toISOString(), updatedAt: now.toISOString() };
 
-    this.writeAuditLog({
+    writeAuditLog(this.database.db, {
       action: "auth.login.success",
       actorUserId: user.id,
       targetType: "session",
@@ -906,7 +499,7 @@ export class AuthService {
       return { ok: true, key };
     }
 
-    this.writeAuditLog({
+    writeAuditLog(this.database.db, {
       action: "auth.oauth.route_rate_limited",
       metadata: {
         provider: input.provider,
@@ -967,7 +560,7 @@ export class AuthService {
       return sessionIds.length;
     });
 
-    this.writeAuditLog({
+    writeAuditLog(this.database.db, {
       action: "auth.oauth.backchannel_logout",
       metadata: {
         provider: input.provider,
@@ -1014,10 +607,12 @@ export class AuthService {
         const updatedUser = { ...existingUser, lastLoginAt: nowIso, updatedAt: nowIso };
         const session = this.createSession(updatedUser, context, now, tx, oauthSessionToken);
 
-        writeOAuthAuditLog(tx, {
+        writeAuditLog(tx, {
           action: "auth.oauth.login.success",
           actorUserId: updatedUser.id,
-          context,
+          targetType: "oauth_identity",
+          targetId: null,
+          ipAddress: context.ipAddress,
           createdAt: nowIso,
           metadata: {
             provider: input.provider,
@@ -1035,10 +630,12 @@ export class AuthService {
       }
 
       if (options.autoRegister === false) {
-        writeOAuthAuditLog(tx, {
+        writeAuditLog(tx, {
           action: "auth.oauth.auto_register_disabled",
           actorUserId: null,
-          context,
+          targetType: "oauth_identity",
+          targetId: null,
+          ipAddress: context.ipAddress,
           createdAt: nowIso,
           metadata: {
             provider: input.provider,
@@ -1089,10 +686,12 @@ export class AuthService {
 
       const session = this.createSession(user, context, now, tx, oauthSessionToken);
 
-      writeOAuthAuditLog(tx, {
+      writeAuditLog(tx, {
         action: "auth.oauth.user_created",
         actorUserId: user.id,
-        context,
+        targetType: "oauth_identity",
+        targetId: null,
+        ipAddress: context.ipAddress,
         createdAt: nowIso,
         metadata: {
           provider: input.provider,
@@ -1136,10 +735,12 @@ export class AuthService {
         const identity = createStoredOAuthIdentity(input, actorUser.id, nowIso);
 
         tx.insert(authIdentities).values(identity).run();
-        writeOAuthAuditLog(tx, {
+        writeAuditLog(tx, {
           action: "auth.oauth.identity.linked",
           actorUserId: actorUser.id,
-          context,
+          targetType: "oauth_identity",
+          targetId: null,
+          ipAddress: context.ipAddress,
           createdAt: nowIso,
           metadata: {
             provider: input.provider,
@@ -1193,10 +794,12 @@ export class AuthService {
         tx.delete(authIdentities).run();
         tx.delete(sessions).where(isNotNull(sessions.oauthProvider)).run();
 
-        writeOAuthAuditLog(tx, {
+        writeAuditLog(tx, {
           action: "auth.oauth.identities_unlinked_all",
           actorUserId: actorUser.id,
-          context,
+          targetType: "oauth_identity",
+          targetId: null,
+          ipAddress: context.ipAddress,
           createdAt: nowIso,
           metadata: {
             deletedIdentityCount,
@@ -1219,7 +822,7 @@ export class AuthService {
       return;
     }
 
-    const notificationHistoryRecorded = this.tryInsertNotificationHistoryItem({
+    const notificationHistoryRecorded = this.notificationHistory.tryInsertNotificationHistoryItem({
       userId: currentSession.user.id,
       eventId: "auth.signed_out",
       title: "Signed out.",
@@ -1228,7 +831,7 @@ export class AuthService {
 
     this.database.db.delete(sessions).where(eq(sessions.id, currentSession.session.id)).run();
 
-    this.writeAuditLog({
+    writeAuditLog(this.database.db, {
       action: "auth.logout",
       actorUserId: currentSession.user.id,
       targetType: "session",
@@ -1268,16 +871,7 @@ export class AuthService {
   }
 
   getNotificationPreferences(sessionToken: string | null): NotificationPreferencesResult {
-    const currentSession = this.findSession(sessionToken);
-
-    if (!currentSession) {
-      return { ok: false, status: 401, body: unauthenticatedError };
-    }
-
-    return {
-      ok: true,
-      notificationPreferences: toNotificationPreferences(currentSession.user),
-    };
+    return this.notificationHistory.getNotificationPreferences(sessionToken);
   }
 
   updateNotificationPreferences(
@@ -1285,178 +879,32 @@ export class AuthService {
     input: UpdateNotificationPreferencesRequest,
     context: AuthRequestContext,
   ): NotificationPreferencesResult {
-    const currentSession = this.findSession(sessionToken);
-
-    if (!currentSession) {
-      return { ok: false, status: 401, body: unauthenticatedError };
-    }
-
-    const now = new Date().toISOString();
-
-    const updatedUser = this.updateCurrentUser(currentSession.user.id, {
-      toastNotificationsEnabled: input.toastsEnabled,
-      toastNotificationFrequency: input.frequency,
-      updatedAt: now,
-    });
-
-    if (!updatedUser) {
-      return { ok: false, status: 401, body: unauthenticatedError };
-    }
-
-    const notificationPreferences = toNotificationPreferences(updatedUser);
-
-    this.writeAuditLog({
-      action: "profile.notifications.updated",
-      actorUserId: currentSession.user.id,
-      targetType: "user",
-      targetId: currentSession.user.id,
-      metadata: notificationPreferences,
-      ipAddress: context.ipAddress,
-    });
-
-    return { ok: true, notificationPreferences };
+    return this.notificationHistory.updateNotificationPreferences(sessionToken, input, context);
   }
 
   listNotificationHistory(
     sessionToken: string | null,
     input: { page?: number; pageSize?: number } = {},
   ): NotificationHistoryListResult {
-    const currentSession = this.findSession(sessionToken);
-
-    if (!currentSession) {
-      return { ok: false, status: 401, body: unauthenticatedError };
-    }
-
-    const page = normalizeNotificationHistoryPage(input.page);
-    const pageSize = normalizeNotificationHistoryPageSize(input.pageSize);
-    const totalItems = countNotificationHistoryRows(this.database.db, currentSession.user.id);
-    const unreadCount = countNotificationHistoryRows(this.database.db, currentSession.user.id, {
-      unreadOnly: true,
-    });
-    const rows = this.database.db
-      .select()
-      .from(notificationHistory)
-      .where(eq(notificationHistory.userId, currentSession.user.id))
-      .orderBy(desc(notificationHistory.createdAt))
-      .limit(pageSize)
-      .offset((page - 1) * pageSize)
-      .all();
-
-    return {
-      ok: true,
-      body: {
-        notifications: rows.map(toNotificationHistoryItem),
-        unreadCount,
-        pagination: {
-          page,
-          pageSize,
-          totalItems,
-          totalPages: Math.ceil(totalItems / pageSize),
-        },
-      },
-    };
+    return this.notificationHistory.listNotificationHistory(sessionToken, input);
   }
 
   createNotificationHistory(
     sessionToken: string | null,
     input: CreateNotificationHistoryRequest,
   ): CreateNotificationHistoryResult {
-    const currentSession = this.findSession(sessionToken);
-
-    if (!currentSession) {
-      return { ok: false, status: 401, body: unauthenticatedError };
-    }
-
-    if (!isToastNotificationId(input.eventId)) {
-      return { ok: false, status: 422, body: invalidNotificationHistoryInputError };
-    }
-
-    const title = normalizeNotificationHistoryText(input.title, notificationHistoryTitleMaxLength);
-
-    if (!title) {
-      return { ok: false, status: 422, body: invalidNotificationHistoryInputError };
-    }
-
-    const description = normalizeOptionalNotificationHistoryText(
-      input.description,
-      notificationHistoryDescriptionMaxLength,
-    );
-
-    return {
-      ok: true,
-      body: {
-        notification: this.insertNotificationHistoryItem({
-          userId: currentSession.user.id,
-          eventId: input.eventId,
-          title,
-          description,
-        }),
-      },
-    };
+    return this.notificationHistory.createNotificationHistory(sessionToken, input);
   }
 
   markNotificationHistoryRead(
     sessionToken: string | null,
     notificationId: string,
   ): MarkNotificationReadResult {
-    const currentSession = this.findSession(sessionToken);
-
-    if (!currentSession) {
-      return { ok: false, status: 401, body: unauthenticatedError };
-    }
-
-    const existingNotification = readNotificationHistoryItem(
-      this.database.db,
-      currentSession.user.id,
-      notificationId,
-    );
-
-    if (!existingNotification) {
-      return { ok: false, status: 404, body: notificationHistoryNotFoundError };
-    }
-
-    if (!existingNotification.readAt) {
-      this.database.db
-        .update(notificationHistory)
-        .set({ readAt: new Date().toISOString() })
-        .where(
-          and(
-            eq(notificationHistory.id, notificationId),
-            eq(notificationHistory.userId, currentSession.user.id),
-          ),
-        )
-        .run();
-    }
-
-    const notification = readNotificationHistoryItem(
-      this.database.db,
-      currentSession.user.id,
-      notificationId,
-    );
-
-    if (!notification) {
-      return { ok: false, status: 404, body: notificationHistoryNotFoundError };
-    }
-
-    return { ok: true, body: { notification: toNotificationHistoryItem(notification) } };
+    return this.notificationHistory.markNotificationHistoryRead(sessionToken, notificationId);
   }
 
   clearNotificationHistory(sessionToken: string | null): ClearNotificationHistoryResult {
-    const currentSession = this.findSession(sessionToken);
-
-    if (!currentSession) {
-      return { ok: false, status: 401, body: unauthenticatedError };
-    }
-
-    return this.database.db.transaction((tx) => {
-      const deletedCount = countNotificationHistoryRows(tx, currentSession.user.id);
-
-      tx.delete(notificationHistory)
-        .where(eq(notificationHistory.userId, currentSession.user.id))
-        .run();
-
-      return { ok: true, body: { status: "ok", deletedCount } };
-    });
+    return this.notificationHistory.clearNotificationHistory(sessionToken);
   }
 
   updateUserProfile(
@@ -1474,7 +922,7 @@ export class AuthService {
     const email = input.email ? normalizeEmail(input.email) : undefined;
     const avatarId = input.avatarId;
     const bannerId = input.bannerId;
-    const existingUser = this.findUserByUsernameOrEmail(username, email);
+    const existingUser = findUserByUsernameOrEmail(this.database.db, username, email);
 
     if (existingUser && existingUser.id !== currentSession.user.id) {
       return { ok: false, status: 409, body: userAlreadyExistsError };
@@ -1503,7 +951,7 @@ export class AuthService {
       return { ok: false, status: 401, body: unauthenticatedError };
     }
 
-    this.writeAuditLog({
+    writeAuditLog(this.database.db, {
       action: "profile.updated",
       actorUserId: currentSession.user.id,
       targetType: "user",
@@ -1540,7 +988,7 @@ export class AuthService {
     );
 
     if (!passwordMatches) {
-      this.writeAuditLog({
+      writeAuditLog(this.database.db, {
         action: "profile.password.change_failed",
         actorUserId: currentSession.user.id,
         targetType: "user",
@@ -1558,7 +1006,7 @@ export class AuthService {
       .where(eq(users.id, currentSession.user.id))
       .run();
 
-    this.writeAuditLog({
+    writeAuditLog(this.database.db, {
       action: "profile.password.changed",
       actorUserId: currentSession.user.id,
       targetType: "user",
@@ -1582,7 +1030,7 @@ export class AuthService {
     const permissions = readEffectivePermissions(this.database.db, currentSession.user);
 
     if (!hasPermissionGrant(permissions, permission)) {
-      this.writeAuditLog({
+      writeAuditLog(this.database.db, {
         action: "auth.permission.denied",
         actorUserId: currentSession.user.id,
         targetType: "permission",
@@ -1593,64 +1041,6 @@ export class AuthService {
     }
 
     return { ok: true, user: toPublicUser(currentSession.user, permissions) };
-  }
-
-  private readActiveManagedActor(
-    actor: PublicUser,
-    requiredPermission?: UserPermission,
-  ): { ok: true; actor: User } | PermissionCheckFailure {
-    const actorUser = this.findUserByPublicId(actor.id);
-
-    if (!actorUser || actorUser.disabledAt) {
-      return { ok: false, status: 401, body: unauthenticatedError };
-    }
-
-    const permissions = readEffectivePermissions(this.database.db, actorUser);
-
-    if (!hasPermissionGrant(permissions, "users:manage")) {
-      return { ok: false, status: 403, body: forbiddenError("users:manage") };
-    }
-
-    if (requiredPermission && !hasPermissionGrant(permissions, requiredPermission)) {
-      return { ok: false, status: 403, body: forbiddenError(requiredPermission) };
-    }
-
-    return { ok: true, actor: actorUser };
-  }
-
-  private runManagedUserMutation<TSuccess>(input: {
-    actor: PublicUser;
-    context: AuthRequestContext;
-    mutate: (
-      tx: DatabaseTransaction,
-      targetUser: User,
-      actorUser: User,
-      now: string,
-    ) => TSuccess | ManagedUserMutationFailure;
-    requiredPermission: UserPermission;
-    targetUserId: string;
-  }): TSuccess | ManagedUserMutationFailure {
-    const actorResult = this.readActiveManagedActor(input.actor, input.requiredPermission);
-
-    if (!actorResult.ok) {
-      return actorResult;
-    }
-
-    const now = new Date().toISOString();
-
-    return this.database.db.transaction((tx) => {
-      const targetUser = readManagedTargetUser(tx, input.targetUserId);
-
-      if (!targetUser) {
-        return { ok: false, status: 404, body: targetUserNotFoundError };
-      }
-
-      if (targetUser.id === actorResult.actor.id) {
-        return { ok: false, status: 409, body: selfServiceOnlyError };
-      }
-
-      return input.mutate(tx, targetUser, actorResult.actor, now);
-    });
   }
 
   private findSession(
@@ -1704,17 +1094,6 @@ export class AuthService {
     return Boolean(provider);
   }
 
-  private findUserByUsernameOrEmail(
-    username: string | undefined,
-    email: string | undefined,
-  ): User | undefined {
-    return findUserByUsernameOrEmail(this.database.db, username, email);
-  }
-
-  private findUserByPublicId(publicUserId: string): User | undefined {
-    return this.database.db.select().from(users).where(eq(users.publicId, publicUserId)).get();
-  }
-
   private findUserById(userId: string): User | undefined {
     return this.database.db.select().from(users).where(eq(users.id, userId)).get();
   }
@@ -1722,43 +1101,6 @@ export class AuthService {
   private updateCurrentUser(userId: string, values: CurrentUserUpdateValues): User | undefined {
     this.database.db.update(users).set(values).where(eq(users.id, userId)).run();
     return this.findUserById(userId);
-  }
-
-  private insertNotificationHistoryItem(input: {
-    description: string | null;
-    eventId: ToastNotificationId;
-    title: string;
-    userId: string;
-  }): NotificationHistoryItem {
-    const classification = TOAST_NOTIFICATION_EVENTS[input.eventId];
-    const now = new Date().toISOString();
-    const notificationId = Bun.randomUUIDv7();
-    const notification = {
-      id: notificationId,
-      userId: input.userId,
-      eventId: input.eventId,
-      title: input.title,
-      description: input.description,
-      severity: classification.severity,
-      importance: classification.importance,
-      readAt: null,
-      createdAt: now,
-    } satisfies NewNotificationHistory;
-
-    this.database.db.insert(notificationHistory).values(notification).run();
-
-    return toNotificationHistoryItem(notification);
-  }
-
-  private tryInsertNotificationHistoryItem(
-    input: Parameters<AuthService["insertNotificationHistoryItem"]>[0],
-  ): boolean {
-    try {
-      this.insertNotificationHistoryItem(input);
-      return true;
-    } catch {
-      return false;
-    }
   }
 
   private insertInitialAdmin(user: User, context: AuthRequestContext, now: Date): boolean {
@@ -1783,53 +1125,19 @@ export class AuthService {
           updatedAt: now.toISOString(),
         })
         .run();
-      tx.insert(auditLogs)
-        .values({
-          id: Bun.randomUUIDv7(),
-          actorUserId: user.id,
-          action: "auth.setup.admin_created",
-          targetType: "user",
-          targetId: user.id,
-          metadataJson: JSON.stringify({
-            username: user.username,
-            email: user.email,
-            permissions: [SYSTEM_ADMIN_PERMISSION],
-          }),
-          ipAddress: context.ipAddress,
-          createdAt: now.toISOString(),
-        })
-        .run();
-
-      return true;
-    });
-  }
-
-  private insertLocalUser(
-    user: User,
-    actor: User,
-    context: AuthRequestContext,
-    now: Date,
-  ): boolean {
-    return this.database.db.transaction((tx) => {
-      const existingUser = findUserByUsernameOrEmail(tx, user.username, user.email);
-
-      if (existingUser) {
-        return false;
-      }
-
-      tx.insert(users).values(user).run();
-      tx.insert(auditLogs)
-        .values({
-          id: Bun.randomUUIDv7(),
-          actorUserId: actor.id,
-          action: "users.created",
-          targetType: "user",
-          targetId: user.id,
-          metadataJson: JSON.stringify({ username: user.username, email: user.email }),
-          ipAddress: context.ipAddress,
-          createdAt: now.toISOString(),
-        })
-        .run();
+      writeAuditLog(tx, {
+        actorUserId: user.id,
+        action: "auth.setup.admin_created",
+        targetType: "user",
+        targetId: user.id,
+        metadata: {
+          username: user.username,
+          email: user.email,
+          permissions: [SYSTEM_ADMIN_PERMISSION],
+        },
+        ipAddress: context.ipAddress,
+        createdAt: now.toISOString(),
+      });
 
       return true;
     });
@@ -1868,655 +1176,6 @@ export class AuthService {
 
     return { sessionId, sessionToken, expiresAt };
   }
-
-  private writeAuditLog(input: {
-    action: string;
-    actorUserId?: string | null;
-    targetType?: string | null;
-    targetId?: string | null;
-    metadata?: Record<string, unknown>;
-    ipAddress?: string | null;
-  }): void {
-    this.database.db
-      .insert(auditLogs)
-      .values({
-        id: Bun.randomUUIDv7(),
-        actorUserId: input.actorUserId ?? null,
-        action: input.action,
-        targetType: input.targetType ?? null,
-        targetId: input.targetId ?? null,
-        metadataJson: input.metadata ? JSON.stringify(input.metadata) : null,
-        ipAddress: input.ipAddress ?? null,
-        createdAt: new Date().toISOString(),
-      })
-      .run();
-  }
-}
-
-function toPublicUser(user: User, permissions: UserPermission[]): PublicUser {
-  return {
-    id: user.publicId,
-    username: user.username,
-    email: user.email,
-    avatarId: isProfileAvatarId(user.avatarId) ? user.avatarId : DEFAULT_PROFILE_AVATAR_ID,
-    bannerId: isProfileBannerId(user.bannerId) ? user.bannerId : DEFAULT_PROFILE_BANNER_ID,
-    notificationPreferences: toNotificationPreferences(user),
-    permissions,
-    createdAt: user.createdAt,
-    lastLoginAt: user.lastLoginAt,
-  };
-}
-
-function toManagedUserSummary(
-  user: User,
-  permissions: UserPermission[],
-  options: { includeAuthMethod?: boolean } = {},
-): ManagedUserSummary {
-  return {
-    id: user.publicId,
-    username: user.username,
-    ...(options.includeAuthMethod ? { authMethod: user.authMethod } : {}),
-    disabledAt: user.disabledAt,
-    createdAt: user.createdAt,
-    updatedAt: user.updatedAt,
-    permissions,
-  };
-}
-
-function toManagedUserProfile(user: User, permissions: UserPermission[]): ManagedUserProfile {
-  return {
-    ...toManagedUserSummary(user, permissions),
-    email: user.email,
-    avatarId: isProfileAvatarId(user.avatarId) ? user.avatarId : DEFAULT_PROFILE_AVATAR_ID,
-    bannerId: isProfileBannerId(user.bannerId) ? user.bannerId : DEFAULT_PROFILE_BANNER_ID,
-    lastLoginAt: user.lastLoginAt,
-  };
-}
-
-function toNotificationPreferences(user: User): NotificationPreferences {
-  return {
-    toastsEnabled: user.toastNotificationsEnabled,
-    frequency: isNotificationFrequency(user.toastNotificationFrequency)
-      ? user.toastNotificationFrequency
-      : DEFAULT_NOTIFICATION_PREFERENCES.frequency,
-  };
-}
-
-function toNotificationHistoryItem(row: NotificationHistory): NotificationHistoryItem {
-  return {
-    id: row.id,
-    eventId: row.eventId,
-    title: row.title,
-    description: row.description,
-    severity: row.severity,
-    importance: row.importance,
-    readAt: row.readAt,
-    createdAt: row.createdAt,
-  };
-}
-
-function readNotificationHistoryItem(
-  tx: DatabaseReader,
-  userId: string,
-  notificationId: string,
-): NotificationHistory | undefined {
-  return tx
-    .select()
-    .from(notificationHistory)
-    .where(and(eq(notificationHistory.id, notificationId), eq(notificationHistory.userId, userId)))
-    .get();
-}
-
-function countNotificationHistoryRows(
-  tx: DatabaseReader,
-  userId: string,
-  options: { unreadOnly?: boolean } = {},
-): number {
-  const result = tx
-    .select({ count: sql<number>`count(*)`.mapWith(Number) })
-    .from(notificationHistory)
-    .where(
-      options.unreadOnly
-        ? and(eq(notificationHistory.userId, userId), isNull(notificationHistory.readAt))
-        : eq(notificationHistory.userId, userId),
-    )
-    .get();
-
-  return result?.count ?? 0;
-}
-
-function normalizeNotificationHistoryPage(page: number | undefined): number {
-  if (!page || !Number.isInteger(page) || page < 1) {
-    return 1;
-  }
-
-  return page;
-}
-
-function normalizeNotificationHistoryPageSize(pageSize: number | undefined): number {
-  if (!pageSize || !Number.isInteger(pageSize) || pageSize < 1) {
-    return 25;
-  }
-
-  return Math.min(pageSize, 50);
-}
-
-function normalizeNotificationHistoryText(value: string, maxLength: number): string {
-  return value.trim().slice(0, maxLength);
-}
-
-function normalizeOptionalNotificationHistoryText(
-  value: string | undefined,
-  maxLength: number,
-): string | null {
-  if (!value) {
-    return null;
-  }
-
-  const normalized = normalizeNotificationHistoryText(value, maxLength);
-
-  return normalized || null;
-}
-
-function isNotificationFrequency(value: string): value is NotificationFrequency {
-  return NOTIFICATION_FREQUENCY_VALUES.some((frequency) => frequency === value);
-}
-
-function readManagedTargetUser(tx: DatabaseTransaction, targetUserId: string): User | null {
-  return tx.select().from(users).where(eq(users.publicId, targetUserId)).get() ?? null;
-}
-
-function readManagedUserSummarySuccess(
-  tx: DatabaseTransaction,
-  targetInternalUserId: string,
-): ManagedUserMutationResult {
-  const updatedUser = tx.select().from(users).where(eq(users.id, targetInternalUserId)).get();
-
-  if (!updatedUser) {
-    return { ok: false, status: 404, body: targetUserNotFoundError };
-  }
-
-  return {
-    ok: true,
-    user: toManagedUserSummary(updatedUser, readEffectivePermissions(tx, updatedUser)),
-  };
-}
-
-function readExplicitPermissionGrantsByUserId(
-  tx: DatabaseTransaction | DatabaseClient["db"],
-): Map<string, UserPermission[]> {
-  const permissionsByUserId = new Map<string, UserPermission[]>();
-
-  for (const grant of tx
-    .select({ permission: userPermissionGrants.permission, userId: userPermissionGrants.userId })
-    .from(userPermissionGrants)
-    .all()) {
-    if (!isUserPermission(grant.permission)) {
-      continue;
-    }
-
-    permissionsByUserId.set(grant.userId, [
-      ...(permissionsByUserId.get(grant.userId) ?? []),
-      grant.permission,
-    ]);
-  }
-
-  for (const [userId, permissions] of permissionsByUserId) {
-    permissionsByUserId.set(userId, normalizePermissionList(permissions));
-  }
-
-  return permissionsByUserId;
-}
-
-function readEffectivePermissionsByUserId(
-  tx: DatabaseTransaction | DatabaseClient["db"],
-  userRows: readonly User[],
-): Map<string, UserPermission[]> {
-  const explicitPermissionsByUserId = readExplicitPermissionGrantsByUserId(tx);
-  const effectivePermissionsByUserId = new Map<string, UserPermission[]>();
-
-  for (const user of userRows) {
-    effectivePermissionsByUserId.set(
-      user.id,
-      computeEffectivePermissions(explicitPermissionsByUserId.get(user.id) ?? []),
-    );
-  }
-
-  return effectivePermissionsByUserId;
-}
-
-function readExplicitPermissionGrants(
-  tx: DatabaseTransaction | DatabaseClient["db"],
-  userId: string,
-): UserPermission[] {
-  return normalizePermissionList(
-    tx
-      .select({ permission: userPermissionGrants.permission })
-      .from(userPermissionGrants)
-      .where(eq(userPermissionGrants.userId, userId))
-      .all()
-      .map((grant) => grant.permission)
-      .filter(isUserPermission),
-  );
-}
-
-function readEffectivePermissions(
-  tx: DatabaseTransaction | DatabaseClient["db"],
-  user: User,
-): UserPermission[] {
-  return computeEffectivePermissions(readExplicitPermissionGrants(tx, user.id));
-}
-
-function computeEffectivePermissions(
-  explicitPermissions: readonly UserPermission[],
-): UserPermission[] {
-  if (explicitPermissions.includes(SYSTEM_ADMIN_PERMISSION)) {
-    return [...USER_PERMISSION_VALUES];
-  }
-
-  return normalizePermissionList([...DEFAULT_SIGNED_IN_USER_PERMISSIONS, ...explicitPermissions]);
-}
-
-function hasExplicitPermissionGrant(
-  tx: DatabaseTransaction,
-  userId: string,
-  permission: UserPermission,
-): boolean {
-  const grant = tx
-    .select({ id: userPermissionGrants.id })
-    .from(userPermissionGrants)
-    .where(
-      and(eq(userPermissionGrants.userId, userId), eq(userPermissionGrants.permission, permission)),
-    )
-    .get();
-
-  return Boolean(grant);
-}
-
-function readActiveSystemAdminActor(
-  tx: DatabaseTransaction,
-  actor: PublicUser,
-): ActiveSystemAdminActorResult {
-  const user = tx.select().from(users).where(eq(users.publicId, actor.id)).get();
-
-  if (!user || user.disabledAt) {
-    return { ok: false, status: 401, body: unauthenticatedError };
-  }
-
-  if (!hasPermissionGrant(readEffectivePermissions(tx, user), SYSTEM_ADMIN_PERMISSION)) {
-    return { ok: false, status: 403, body: forbiddenError(SYSTEM_ADMIN_PERMISSION) };
-  }
-
-  return { ok: true, user };
-}
-
-function withActiveSystemAdminActor<TResult>(
-  tx: DatabaseTransaction,
-  actor: PublicUser,
-  callback: (actorUser: User) => TResult,
-): TResult | Extract<ActiveSystemAdminActorResult, { ok: false }> {
-  const actorResult = readActiveSystemAdminActor(tx, actor);
-
-  return actorResult.ok ? callback(actorResult.user) : actorResult;
-}
-
-function countActiveSystemAdmins(tx: DatabaseTransaction): number {
-  return countActiveSystemAdminGrants(tx);
-}
-
-function countActiveLocalSystemAdmins(tx: DatabaseTransaction): number {
-  return countActiveSystemAdminGrants(tx, { authMethod: "local" });
-}
-
-function countActiveSystemAdminGrants(
-  tx: DatabaseTransaction,
-  input: { authMethod?: AuthMethod } = {},
-): number {
-  const userFilters = [
-    eq(userPermissionGrants.permission, SYSTEM_ADMIN_PERMISSION),
-    isNull(users.disabledAt),
-  ];
-
-  if (input.authMethod) {
-    userFilters.push(eq(users.authMethod, input.authMethod));
-  }
-
-  return readCountResult(
-    tx
-      .select({ count: sql<number>`count(*)`.mapWith(Number) })
-      .from(userPermissionGrants)
-      .innerJoin(users, eq(users.id, userPermissionGrants.userId))
-      .where(and(...userFilters))
-      .get(),
-  );
-}
-
-function countOAuthIdentityRows(tx: DatabaseTransaction): number {
-  return readCountResult(
-    tx
-      .select({ count: sql<number>`count(*)`.mapWith(Number) })
-      .from(authIdentities)
-      .get(),
-  );
-}
-
-function countOAuthSessionRows(tx: DatabaseTransaction): number {
-  return readCountResult(
-    tx
-      .select({ count: sql<number>`count(*)`.mapWith(Number) })
-      .from(sessions)
-      .where(isNotNull(sessions.oauthProvider))
-      .get(),
-  );
-}
-
-function readCountResult(result: { count: number } | undefined): number {
-  return result?.count ?? 0;
-}
-
-function readOAuthIdentityUserIds(
-  tx: DatabaseTransaction,
-  input: { issuer: string; provider: AuthProviderSlug; subject: string },
-): string[] {
-  return tx
-    .select({ userId: authIdentities.userId })
-    .from(authIdentities)
-    .where(
-      and(
-        eq(authIdentities.provider, input.provider),
-        eq(authIdentities.issuer, input.issuer),
-        eq(authIdentities.subject, input.subject),
-      ),
-    )
-    .all()
-    .map((identity) => identity.userId);
-}
-
-function updateManagedUserAndRevokeSessions(
-  tx: DatabaseTransaction,
-  targetUser: User,
-  values: ManagedUserUpdateValues,
-  auditLog: {
-    action: string;
-    actorUserId: string;
-    context: AuthRequestContext;
-    createdAt: string;
-    metadata?: Record<string, unknown>;
-  },
-): void {
-  tx.update(users).set(values).where(eq(users.id, targetUser.id)).run();
-  revokeUserSessions(tx, targetUser.id);
-  writeManagedUserAuditLog(tx, { ...auditLog, targetUser });
-}
-
-function revokeUserSessions(tx: DatabaseTransaction, targetUserId: string): void {
-  tx.delete(sessions).where(eq(sessions.userId, targetUserId)).run();
-}
-
-function writeManagedUserAuditLog(
-  tx: DatabaseTransaction,
-  input: {
-    action: string;
-    actorUserId: string;
-    context: AuthRequestContext;
-    createdAt: string;
-    metadata?: Record<string, unknown>;
-    targetUser: User;
-  },
-): void {
-  tx.insert(auditLogs)
-    .values({
-      id: Bun.randomUUIDv7(),
-      actorUserId: input.actorUserId,
-      action: input.action,
-      targetType: "user",
-      targetId: input.targetUser.id,
-      metadataJson: JSON.stringify({
-        username: input.targetUser.username,
-        ...(input.metadata ?? {}),
-      }),
-      ipAddress: input.context.ipAddress,
-      createdAt: input.createdAt,
-    })
-    .run();
-}
-
-function findOAuthIdentity(
-  tx: DatabaseReader,
-  input: Pick<OAuthIdentityInput, "issuer" | "provider" | "subject">,
-): StoredAuthIdentity | undefined {
-  return tx
-    .select()
-    .from(authIdentities)
-    .where(
-      and(
-        eq(authIdentities.provider, input.provider),
-        eq(authIdentities.issuer, input.issuer),
-        eq(authIdentities.subject, input.subject),
-      ),
-    )
-    .get();
-}
-
-function createStoredOAuthIdentity(
-  input: OAuthIdentityInput,
-  userId: string,
-  createdAt: string,
-): StoredAuthIdentity {
-  return {
-    id: Bun.randomUUIDv7(),
-    userId,
-    provider: input.provider,
-    issuer: input.issuer,
-    subject: input.subject,
-    preferredUsername: normalizeOptionalIdentityClaim(input.preferredUsername),
-    name: normalizeOptionalIdentityClaim(input.name),
-    email: normalizeOptionalIdentityClaim(input.email),
-    createdAt,
-  };
-}
-
-function updateOAuthIdentityDisplayMetadata(
-  tx: DatabaseTransaction,
-  identityId: string,
-  input: OAuthIdentityInput,
-): void {
-  tx.update(authIdentities)
-    .set({
-      preferredUsername: normalizeOptionalIdentityClaim(input.preferredUsername),
-      name: normalizeOptionalIdentityClaim(input.name),
-      email: normalizeOptionalIdentityClaim(input.email),
-    })
-    .where(eq(authIdentities.id, identityId))
-    .run();
-}
-
-function toSharedAuthIdentity(
-  identity: StoredAuthIdentity,
-  providerKind: SharedAuthIdentity["providerKind"] = "custom",
-): SharedAuthIdentity {
-  return {
-    id: identity.id,
-    provider: identity.provider,
-    providerKind,
-    issuer: identity.issuer,
-    subjectPreview: createShortSubject(identity.subject),
-    displayName: createIdentityDisplayName(identity),
-    preferredUsername: identity.preferredUsername,
-    name: identity.name,
-    email: identity.email,
-    createdAt: identity.createdAt,
-  };
-}
-
-function readProviderKind(
-  tx: DatabaseReader,
-  provider: AuthProviderSlug,
-): SharedAuthIdentity["providerKind"] {
-  return (
-    tx
-      .select({ providerKind: authProviders.providerKind })
-      .from(authProviders)
-      .where(eq(authProviders.slug, provider))
-      .get()?.providerKind ?? "custom"
-  );
-}
-
-function createIdentityDisplayName(identity: StoredAuthIdentity): string {
-  return (
-    identity.preferredUsername ??
-    identity.name ??
-    identity.email ??
-    createShortSubject(identity.subject)
-  );
-}
-
-function createShortSubject(subject: string): string {
-  return subject.length > 12 ? `${subject.slice(0, 6)}…${subject.slice(-4)}` : subject;
-}
-
-function normalizeOptionalIdentityClaim(value: string | undefined): string | null {
-  const normalized = value?.trim();
-
-  return normalized || null;
-}
-
-function createOAuthUsername(tx: DatabaseReader, input: OAuthIdentityInput): string {
-  const subjectHash = createSubjectHash(input.subject);
-  const baseUsername = normalizeOAuthUsername(input.preferredUsername ?? input.name) ?? "oidc";
-  const baseCandidate = baseUsername.slice(0, 80);
-
-  if (!findUserByUsername(tx, baseCandidate)) {
-    return baseCandidate;
-  }
-
-  const suffix = `-${subjectHash.slice(0, 8)}`;
-  const suffixedCandidate = `${baseUsername.slice(0, 80 - suffix.length)}${suffix}`;
-
-  if (!findUserByUsername(tx, suffixedCandidate)) {
-    return suffixedCandidate;
-  }
-
-  const fallbackBase = `oidc-${subjectHash.slice(0, 16)}`;
-
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    const candidate = attempt === 0 ? fallbackBase : `${fallbackBase}-${attempt}`;
-
-    if (!findUserByUsername(tx, candidate)) {
-      return candidate;
-    }
-  }
-
-  throw new Error("Unable to create a unique OAuth username.");
-}
-
-function createOAuthEmail(tx: DatabaseReader, email: string | undefined, publicId: string): string {
-  const normalizedEmail = email ? normalizeEmail(email) : null;
-
-  if (normalizedEmail && isUsableEmail(normalizedEmail) && !findUserByEmail(tx, normalizedEmail)) {
-    return normalizedEmail;
-  }
-
-  return `${publicId.toLowerCase()}@${OAUTH_LOCAL_EMAIL_DOMAIN}`;
-}
-
-function normalizeOAuthUsername(value: string | undefined): string | null {
-  const normalized = value?.trim().replace(/\s+/gu, "-");
-
-  return normalized || null;
-}
-
-function createSubjectHash(subject: string): string {
-  const hasher = new Bun.CryptoHasher("sha256");
-  hasher.update(subject);
-
-  return hasher.digest("hex");
-}
-
-function isUsableEmail(value: string): boolean {
-  return value.length <= 320 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value);
-}
-
-function findUserByUsername(tx: DatabaseReader, username: string): Pick<User, "id"> | undefined {
-  return tx.select({ id: users.id }).from(users).where(eq(users.username, username)).get();
-}
-
-function findUserByEmail(tx: DatabaseReader, email: string): Pick<User, "id"> | undefined {
-  return tx.select({ id: users.id }).from(users).where(eq(users.email, email)).get();
-}
-
-function writeOAuthAuditLog(
-  tx: DatabaseReader,
-  input: {
-    action: string;
-    actorUserId: string | null;
-    context: AuthRequestContext;
-    createdAt: string;
-    metadata: Record<string, unknown>;
-  },
-): void {
-  tx.insert(auditLogs)
-    .values({
-      id: Bun.randomUUIDv7(),
-      actorUserId: input.actorUserId,
-      action: input.action,
-      targetType: "oauth_identity",
-      targetId: null,
-      metadataJson: JSON.stringify(input.metadata),
-      ipAddress: input.context.ipAddress,
-      createdAt: input.createdAt,
-    })
-    .run();
-}
-
-async function createUserRecord(
-  input: CreateAdminRequest | CreateLocalUserRequest,
-  now: Date,
-): Promise<User> {
-  return {
-    id: Bun.randomUUIDv7(),
-    publicId: generatePublicUserId(),
-    username: input.username.trim(),
-    email: normalizeEmail(input.email),
-    avatarId: DEFAULT_PROFILE_AVATAR_ID,
-    bannerId: DEFAULT_PROFILE_BANNER_ID,
-    toastNotificationsEnabled: DEFAULT_NOTIFICATION_PREFERENCES.toastsEnabled,
-    toastNotificationFrequency: DEFAULT_NOTIFICATION_PREFERENCES.frequency,
-    authMethod: "local",
-    passwordHash: await hashPassword(input.password),
-    disabledAt: null,
-    createdAt: now.toISOString(),
-    updatedAt: now.toISOString(),
-    lastLoginAt: null,
-  };
-}
-
-function findUserByUsernameOrEmail(
-  tx: DatabaseTransaction | DatabaseClient["db"],
-  username: string | undefined,
-  email: string | undefined,
-): User | undefined {
-  if (username && email) {
-    return tx
-      .select()
-      .from(users)
-      .where(or(eq(users.username, username), eq(users.email, email)))
-      .get();
-  }
-
-  if (username) {
-    return tx.select().from(users).where(eq(users.username, username)).get();
-  }
-
-  if (email) {
-    return tx.select().from(users).where(eq(users.email, email)).get();
-  }
-
-  return undefined;
-}
-
-function normalizeEmail(email: string): string {
-  return email.trim().toLowerCase();
 }
 
 function createRateLimitKey(email: string): string {

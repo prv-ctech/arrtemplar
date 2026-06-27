@@ -619,6 +619,11 @@ function OidcAccountLinking({
   onUnlinkAll: () => void;
 }) {
   const isConnected = identities.length > 0;
+  const compactButtonClassName = "h-8 rounded-lg px-2.5 text-xs";
+  const unlinkAllButtonClassName = cn(
+    compactButtonClassName,
+    "border border-[#a83a45] bg-[#8f2d38] text-white hover:bg-[#7c2630]",
+  );
 
   return (
     <section
@@ -639,20 +644,22 @@ function OidcAccountLinking({
       </div>
       <div className="flex flex-wrap items-center gap-2 sm:justify-end">
         <Button
-          className="w-fit rounded-xl"
+          className={cn(compactButtonClassName, "w-fit")}
           disabled={!isProviderEnabled}
           onClick={startOidcLinkFlow}
+          size="sm"
           type="button"
           variant="secondary"
         >
           Link Accounts
         </Button>
         <Button
-          className="rounded-xl"
+          className={unlinkAllButtonClassName}
           disabled={!isConnected}
           onClick={onUnlinkAll}
+          size="sm"
           type="button"
-          variant="destructive"
+          variant="secondary"
         >
           Unlink all
         </Button>

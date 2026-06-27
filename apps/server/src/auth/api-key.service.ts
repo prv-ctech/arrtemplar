@@ -11,22 +11,15 @@ import {
   type CreateApiKeyRequest,
   hasPermissionGrant,
   isApiKeySecret,
-  normalizePermissionList,
   type PublicUser,
-  USER_PERMISSION_VALUES,
 } from "@arrtemplar/shared";
 import { getLogger } from "@logtape/logtape";
 import { eq, isNull } from "drizzle-orm";
+import { writeAuditLog } from "../audit/audit-log";
 import type { DatabaseClient } from "../db/client";
-import {
-  type ApiKey,
-  apiKeys,
-  auditLogs,
-  type User,
-  userPermissionGrants,
-  users,
-} from "../db/schema";
+import { type ApiKey, apiKeys, type User, users } from "../db/schema";
 import type { AuthRequestContext } from "./auth.service";
+import { readEffectivePermissions } from "./permissions";
 import { LoginRateLimiter } from "./rate-limit";
 import { hashSessionToken } from "./session-token";
 
@@ -366,10 +359,13 @@ export class ApiKeyService {
       const keyPrefix = readSecretDisplayPrefix(rejectedQuerySecret);
 
       this.invalidAttemptLimiter.recordFailure(createInvalidAttemptKey(context));
-      this.writeDeniedApiKeyAuditLog({
+      writeAuditLog(this.database.db, {
         action: "api_keys.auth.query_transport_rejected",
-        context,
-        keyPrefix,
+        actorUserId: null,
+        targetType: "api_key",
+        targetId: null,
+        metadata: { keyPrefix, path: context.path },
+        ipAddress: context.ipAddress,
       });
       logger.warn("Rejected API key query transport.", {
         ipAddress: context.ipAddress,
@@ -392,10 +388,13 @@ export class ApiKeyService {
     if (this.invalidAttemptLimiter.isBlocked(rateLimitKey)) {
       const keyPrefix = readSecretDisplayPrefix(secret);
 
-      this.writeDeniedApiKeyAuditLog({
+      writeAuditLog(this.database.db, {
         action: "api_keys.auth.rate_limited",
-        context,
-        keyPrefix,
+        actorUserId: null,
+        targetType: "api_key",
+        targetId: null,
+        metadata: { keyPrefix, path: context.path },
+        ipAddress: context.ipAddress,
       });
       logger.warn("API key authentication rate limited.", {
         ipAddress: context.ipAddress,
@@ -423,11 +422,13 @@ export class ApiKeyService {
 
     if (apiKey.deletedAt) {
       this.invalidAttemptLimiter.recordFailure(rateLimitKey);
-      this.writeDeniedApiKeyAuditLog({
+      writeAuditLog(this.database.db, {
         action: "api_keys.auth.deleted",
-        context,
-        keyPrefix: apiKey.keyPrefix,
+        actorUserId: null,
+        targetType: "api_key",
         targetId: apiKey.id,
+        metadata: { keyPrefix: apiKey.keyPrefix, path: context.path },
+        ipAddress: context.ipAddress,
       });
       logger.warn("Deleted API key used for authentication.", {
         apiKeyId: apiKey.id,
@@ -487,10 +488,13 @@ export class ApiKeyService {
     const keyPrefix = readSecretDisplayPrefix(secret);
 
     this.invalidAttemptLimiter.recordFailure(createInvalidAttemptKey(context));
-    this.writeDeniedApiKeyAuditLog({
+    writeAuditLog(this.database.db, {
       action,
-      context,
-      keyPrefix,
+      actorUserId: null,
+      targetType: "api_key",
+      targetId: null,
+      metadata: { keyPrefix, path: context.path },
+      ipAddress: context.ipAddress,
     });
     logger.warn("Invalid API key attempt.", {
       ipAddress: context.ipAddress,
@@ -587,27 +591,6 @@ export class ApiKeyService {
       rotatedAt: apiKey.rotatedAt,
       deletedAt: apiKey.deletedAt,
     };
-  }
-
-  private writeDeniedApiKeyAuditLog(input: {
-    action: string;
-    context: AuthRequestContext;
-    keyPrefix: string;
-    targetId?: string;
-  }): void {
-    this.database.db
-      .insert(auditLogs)
-      .values({
-        id: Bun.randomUUIDv7(),
-        actorUserId: null,
-        action: input.action,
-        targetType: "api_key",
-        targetId: input.targetId ?? null,
-        metadataJson: JSON.stringify({ keyPrefix: input.keyPrefix, path: input.context.path }),
-        ipAddress: input.context.ipAddress,
-        createdAt: new Date().toISOString(),
-      })
-      .run();
   }
 }
 
@@ -717,28 +700,6 @@ function readApiKeyById(tx: DatabaseReader, apiKeyId: string): ApiKey | undefine
   return tx.select().from(apiKeys).where(eq(apiKeys.id, apiKeyId)).get();
 }
 
-function readEffectivePermissions(tx: DatabaseReader, user: User) {
-  const explicitPermissions: (typeof USER_PERMISSION_VALUES)[number][] = [];
-
-  for (const grant of tx
-    .select({ permission: userPermissionGrants.permission })
-    .from(userPermissionGrants)
-    .where(eq(userPermissionGrants.userId, user.id))
-    .all()) {
-    if (grant.permission) {
-      explicitPermissions.push(grant.permission);
-    }
-  }
-
-  const normalizedPermissions = normalizePermissionList(explicitPermissions);
-
-  if (normalizedPermissions.includes("system:admin")) {
-    return [...USER_PERMISSION_VALUES];
-  }
-
-  return normalizedPermissions;
-}
-
 function createInvalidAttemptKey(context: AuthRequestContext): string {
   return ["api-key", context.ipAddress ?? "unknown"].join(":");
 }
@@ -761,13 +722,14 @@ function writeApiKeyMutationAuditLog(
     createdAt: string;
   },
 ): void {
-  writeApiKeyAuditLog(tx, {
+  writeAuditLog(tx, {
     action: input.action,
     actorUserId: input.actorUserId,
-    context: input.context,
-    createdAt: input.createdAt,
-    metadata: buildAuditMetadata(input.apiKey, input.context),
+    targetType: "api_key",
     targetId: input.apiKey.id,
+    metadata: buildAuditMetadata(input.apiKey, input.context),
+    ipAddress: input.context.ipAddress,
+    createdAt: input.createdAt,
   });
 }
 
@@ -784,29 +746,4 @@ function updateApiKeyAndWriteMutationAuditLog(
 ): void {
   tx.update(apiKeys).set(input.values).where(eq(apiKeys.id, input.apiKey.id)).run();
   writeApiKeyMutationAuditLog(tx, input);
-}
-
-function writeApiKeyAuditLog(
-  tx: DatabaseTransaction,
-  input: {
-    action: string;
-    actorUserId: string;
-    context: AuthRequestContext;
-    createdAt: string;
-    metadata: Record<string, unknown>;
-    targetId: string;
-  },
-): void {
-  tx.insert(auditLogs)
-    .values({
-      id: Bun.randomUUIDv7(),
-      actorUserId: input.actorUserId,
-      action: input.action,
-      targetType: "api_key",
-      targetId: input.targetId,
-      metadataJson: JSON.stringify(input.metadata),
-      ipAddress: input.context.ipAddress,
-      createdAt: input.createdAt,
-    })
-    .run();
 }

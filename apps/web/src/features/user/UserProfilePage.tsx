@@ -48,143 +48,12 @@ type ProfileMediaTriggerButtonProps = ComponentProps<"button"> & {
   children: ReactNode;
 };
 
-type ActivityInsight = {
-  label: string;
-  value: string;
-  detail: string;
-  values: number[];
-  visual: "bars" | "line";
-};
-
-const activityInsights: ActivityInsight[] = [
-  {
-    label: "Books read",
-    value: "42",
-    detail: "+6 this month",
-    values: [7, 10, 8, 12, 15, 17, 20],
-    visual: "line",
-  },
-  {
-    label: "Music listened",
-    value: "128h",
-    detail: "lo-fi, jazz, synth",
-    values: [18, 24, 16, 32, 28, 36, 30],
-    visual: "bars",
-  },
-  {
-    label: "Manga watched",
-    value: "18",
-    detail: "placeholder arcs",
-    values: [4, 7, 5, 9, 11, 8, 13],
-    visual: "line",
-  },
-  {
-    label: "Recently read",
-    value: "7",
-    detail: "chapters saved",
-    values: [3, 5, 4, 8, 6, 10, 7],
-    visual: "bars",
-  },
-];
-
 function formatDate(value: string | null | undefined) {
   if (!value) {
     return "Never";
   }
 
   return new Date(value).toLocaleDateString();
-}
-
-function MiniLineChart({ values }: { values: number[] }) {
-  const width = 180;
-  const height = 44;
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = Math.max(max - min, 1);
-  const points = values
-    .map((value, index) => {
-      const x = values.length === 1 ? width / 2 : (index / (values.length - 1)) * width;
-      const y = height - 4 - ((value - min) / range) * (height - 10);
-
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ");
-
-  return (
-    <svg
-      aria-hidden="true"
-      className="h-11 w-full text-primary"
-      preserveAspectRatio="none"
-      viewBox={`0 0 ${width} ${height}`}
-    >
-      <polygon
-        fill="currentColor"
-        opacity="0.12"
-        points={`0,${height} ${points} ${width},${height}`}
-      />
-      <polyline
-        fill="none"
-        points={points}
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="3"
-      />
-    </svg>
-  );
-}
-
-function MiniBarChart({ values }: { values: number[] }) {
-  const width = 180;
-  const height = 44;
-  const slotWidth = width / values.length;
-  const barWidth = Math.max(slotWidth - 5, 8);
-  const max = Math.max(...values, 1);
-
-  return (
-    <svg
-      aria-hidden="true"
-      className="h-11 w-full text-primary"
-      preserveAspectRatio="none"
-      viewBox={`0 0 ${width} ${height}`}
-    >
-      {values.map((value, index) => {
-        const barHeight = Math.max((value / max) * (height - 8), 6);
-        const x = index * slotWidth + (slotWidth - barWidth) / 2;
-        const y = height - barHeight;
-
-        return (
-          <rect
-            fill="currentColor"
-            height={barHeight}
-            key={`bar-${value}-${x.toFixed(1)}`}
-            opacity={index === values.length - 1 ? 0.95 : 0.32 + index * 0.08}
-            rx="3"
-            width={barWidth}
-            x={x}
-            y={y}
-          />
-        );
-      })}
-    </svg>
-  );
-}
-
-function ActivityInsightCard({ detail, label, value, values, visual }: ActivityInsight) {
-  return (
-    <article className="min-w-0 rounded-xl border border-border bg-background/34 p-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="truncate text-sm font-medium text-foreground">{label}</h3>
-          <p className="mt-1 truncate text-xs text-muted-foreground">{detail}</p>
-        </div>
-        <p className="shrink-0 text-lg font-semibold tracking-tight text-foreground">{value}</p>
-      </div>
-      <div className="mt-3 rounded-lg bg-card/68 px-2 py-2">
-        {visual === "line" ? <MiniLineChart values={values} /> : <MiniBarChart values={values} />}
-      </div>
-    </article>
-  );
 }
 
 function ProfileFact({
@@ -256,7 +125,6 @@ function ProfileDashboard({
         />
         <ProfileDashboardTitle />
         <ProfileFacts user={user} />
-        <ProfileActivitySection />
       </div>
     </section>
   );
@@ -422,35 +290,6 @@ function ProfileFacts({ user }: { user: ProfileDashboardUser }) {
       <ProfileFact label="Joined" value={formatDate(user.createdAt)} />
       <ProfileFact label="Permissions" value={`${user.permissions.length} grants`} />
     </dl>
-  );
-}
-
-function ProfileActivitySection() {
-  return (
-    <div className="mt-5 border-t border-border pt-5">
-      <ProfileActivityHeader />
-      <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {activityInsights.map((insight) => (
-          <ActivityInsightCard key={insight.label} {...insight} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ProfileActivityHeader() {
-  return (
-    <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-      <div>
-        <h2 className="text-base font-semibold tracking-tight text-foreground">
-          Personal activity
-        </h2>
-        <p className="text-sm text-muted-foreground">Placeholder visuals for future media stats.</p>
-      </div>
-      <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-        Sample data
-      </p>
-    </div>
   );
 }
 

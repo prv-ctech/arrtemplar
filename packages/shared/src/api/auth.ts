@@ -317,8 +317,6 @@ export type CreateLocalUserRequest = {
   password: string;
 };
 
-export type CreateUserRequest = CreateLocalUserRequest;
-
 export type UpdateUserProfileRequest = {
   avatarId?: ProfileAvatarId;
   bannerId?: ProfileBannerId;
@@ -337,13 +335,9 @@ export type AdminChangeUserPasswordRequest = {
   password: string;
 };
 
-export type UpdateManagedUserPasswordRequest = AdminChangeUserPasswordRequest;
-
 export type AdminUpdateUserPermissionsRequest = {
   permissions: UserPermission[];
 };
-
-export type UpdateUserPermissionsRequest = AdminUpdateUserPermissionsRequest;
 
 export type AdminDisableUserRequest = Record<string, never>;
 
@@ -352,7 +346,6 @@ export type AdminUpdateUserStatusRequest = {
 };
 
 export type UpdateManagedUserProfileRequest = UpdateUserProfileRequest;
-export type UpdateManagedUserStatusRequest = AdminUpdateUserStatusRequest;
 
 export type LoginResponse = {
   user: PublicUser;
@@ -366,18 +359,8 @@ export type CreateLocalUserResponse = {
   user: ManagedUserSummary;
 };
 
-export type CreateUserResponse = CreateLocalUserResponse;
-
-export type AdminUsersListResponse = {
-  users: AdminUserSummary[];
-};
-
 export type ManagedUsersListResponse = {
   users: ManagedUserSummary[];
-};
-
-export type AdminUserResponse = {
-  user: AdminUserSummary;
 };
 
 export type ManagedUserResponse = {
@@ -391,8 +374,6 @@ export type ManagedUserProfileResponse = {
 export type PermissionCatalogResponse = {
   permissions: readonly PermissionCatalogEntry[];
 };
-
-export type AdminPermissionCatalogResponse = PermissionCatalogResponse;
 
 export type AdminChangeUserPasswordResponse = {
   status: "ok";
@@ -417,8 +398,6 @@ export type UserProfileResponse = {
   user: PublicUser;
 };
 
-export type ProfileResponse = UserProfileResponse;
-
 export type UpdateUserProfileResponse = {
   user: PublicUser;
 };
@@ -436,8 +415,6 @@ export type MarkNotificationReadResponse = {
 };
 
 export type UpdateNotificationPreferencesResponse = NotificationPreferencesResponse;
-
-export type UpdateManagedUserProfileResponse = ManagedUserProfileResponse;
 
 export type LogoutResponse = {
   status: "ok";

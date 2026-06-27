@@ -13,7 +13,15 @@ import {
 } from "../../../../../packages/shared/src";
 
 const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../../");
-const apiSourcePath = `${workspaceRoot}/apps/web/src/lib/api.ts`;
+const apiSourcePaths = {
+  apiKeys: `${workspaceRoot}/apps/web/src/lib/api/api-keys.ts`,
+  auth: `${workspaceRoot}/apps/web/src/lib/api/auth.ts`,
+  client: `${workspaceRoot}/apps/web/src/lib/api/client.ts`,
+  normalizers: `${workspaceRoot}/apps/web/src/lib/api/normalizers.ts`,
+  profile: `${workspaceRoot}/apps/web/src/lib/api/profile.ts`,
+  serviceIntegrations: `${workspaceRoot}/apps/web/src/lib/api/service-integrations.ts`,
+  users: `${workspaceRoot}/apps/web/src/lib/api/users.ts`,
+};
 
 describe("api client CSRF headers", () => {
   it("adds the CSRF proof only for unsafe requests", () => {
@@ -28,21 +36,22 @@ describe("api client CSRF headers", () => {
   });
 
   it("handles logout as JSON with optional OAuth redirect URI", async () => {
-    const source = await Bun.file(apiSourcePath).text();
+    const authSource = await Bun.file(apiSourcePaths.auth).text();
+    const clientSource = await Bun.file(apiSourcePaths.client).text();
 
-    expect(source).toContain("export type LogoutResult");
-    expect(source).toContain('fetch(resolveApiRequestUrl("/api/auth/logout")');
-    expect(source).toContain("redirectUri");
-    expect(source).not.toContain('response.headers.get("content-type")');
-    expect(source).not.toContain('contentType.includes("text/html")');
-    expect(source).not.toContain("html: await response.text()");
-    expect(source).not.toContain("unwrapData(await api.api.auth.logout.post()");
+    expect(clientSource).toContain("export type LogoutResult");
+    expect(authSource).toContain('fetch(resolveApiRequestUrl("/api/auth/logout")');
+    expect(authSource).toContain("redirectUri");
+    expect(authSource).not.toContain('response.headers.get("content-type")');
+    expect(authSource).not.toContain('contentType.includes("text/html")');
+    expect(authSource).not.toContain("html: await response.text()");
+    expect(authSource).not.toContain("unwrapData(await api.api.auth.logout.post()");
   });
 });
 
 describe("user profile api client", () => {
   it("exposes typed client functions for profile and password endpoints", async () => {
-    const source = await Bun.file(apiSourcePath).text();
+    const source = await Bun.file(apiSourcePaths.profile).text();
 
     expect(source).toContain("UpdateUserProfileRequest");
     expect(source).toContain("ChangePasswordRequest");
@@ -55,7 +64,7 @@ describe("user profile api client", () => {
   });
 
   it("normalizes notification preferences on public user payloads", async () => {
-    const source = await Bun.file(apiSourcePath).text();
+    const source = await Bun.file(apiSourcePaths.normalizers).text();
 
     expect(source).toContain("NotificationPreferences");
     expect(source).toContain("DEFAULT_NOTIFICATION_PREFERENCES");
@@ -66,26 +75,29 @@ describe("user profile api client", () => {
   });
 
   it("exposes typed notification history helpers and validates response taxonomy", async () => {
-    const source = await Bun.file(apiSourcePath).text();
+    const normalizersSource = await Bun.file(apiSourcePaths.normalizers).text();
+    const profileSource = await Bun.file(apiSourcePaths.profile).text();
 
-    expect(source).toContain("NotificationHistoryListResponse");
-    expect(source).toContain("CreateNotificationHistoryRequest");
-    expect(source).toContain("MarkNotificationReadRequest");
-    expect(source).toContain("export async function listNotificationHistory");
-    expect(source).toContain("api.api.profile.notifications.history.get");
-    expect(source).toContain("export async function createNotificationHistory");
-    expect(source).toContain("api.api.profile.notifications.history.post(input)");
-    expect(source).toContain("export async function markNotificationRead");
-    expect(source).toContain("api.api.profile.notifications.history({ notificationId }).patch");
-    expect(source).toContain("export async function clearNotificationHistory");
-    expect(source).toContain("api.api.profile.notifications.history.delete");
-    expect(source).toContain("normalizeNotificationHistoryListResponse");
-    expect(source).toContain("isToastNotificationId");
-    expect(source).toContain("isToastNotificationSeverity");
-    expect(source).toContain("isToastNotificationImportance");
-    expect(source).toContain("value instanceof Date");
-    expect(source).toContain("isoDateTimePattern");
-    expect(source).toContain("toISOString()");
+    expect(profileSource).toContain("NotificationHistoryListResponse");
+    expect(profileSource).toContain("CreateNotificationHistoryRequest");
+    expect(profileSource).toContain("MarkNotificationReadRequest");
+    expect(profileSource).toContain("export async function listNotificationHistory");
+    expect(profileSource).toContain("api.api.profile.notifications.history.get");
+    expect(profileSource).toContain("export async function createNotificationHistory");
+    expect(profileSource).toContain("api.api.profile.notifications.history.post(input)");
+    expect(profileSource).toContain("export async function markNotificationRead");
+    expect(profileSource).toContain(
+      "api.api.profile.notifications.history({ notificationId }).patch",
+    );
+    expect(profileSource).toContain("export async function clearNotificationHistory");
+    expect(profileSource).toContain("api.api.profile.notifications.history.delete");
+    expect(profileSource).toContain("normalizeNotificationHistoryListResponse");
+    expect(normalizersSource).toContain("isToastNotificationId");
+    expect(normalizersSource).toContain("isToastNotificationSeverity");
+    expect(normalizersSource).toContain("isToastNotificationImportance");
+    expect(normalizersSource).toContain("value instanceof Date");
+    expect(normalizersSource).toContain("isoDateTimePattern");
+    expect(normalizersSource).toContain("toISOString()");
   });
 
   it("rejects malformed notification history timestamps", () => {
@@ -138,7 +150,7 @@ function createNotificationHistoryResponse({
 
 describe("permission api client", () => {
   it("exposes typed client functions for permission catalog and managed-user grant updates", async () => {
-    const source = await Bun.file(apiSourcePath).text();
+    const source = await Bun.file(apiSourcePaths.users).text();
 
     expect(source).toContain("PermissionCatalogEntry");
     expect(source).toContain("AdminUpdateUserPermissionsRequest");
@@ -154,18 +166,19 @@ describe("permission api client", () => {
 
 describe("api key api client", () => {
   it("exposes typed client functions and response normalizers", async () => {
-    const source = await Bun.file(apiSourcePath).text();
+    const apiKeysSource = await Bun.file(apiSourcePaths.apiKeys).text();
+    const normalizersSource = await Bun.file(apiSourcePaths.normalizers).text();
 
-    expect(source).toContain("ApiKeySummary");
-    expect(source).toContain("CreateApiKeyRequest");
-    expect(source).toContain("export async function listApiKeys");
-    expect(source).toContain('path: "/api/api-keys"');
-    expect(source).toContain("export async function createApiKey");
-    expect(source).toContain("export async function rotateApiKey");
-    expect(source).toContain("export async function deleteApiKey");
-    expect(source).toContain("normalizeApiKeyListResponse");
-    expect(source).toContain("normalizeApiKeyReveal");
-    expect(source).toContain("API_KEY_STATUS_VALUES");
+    expect(apiKeysSource).toContain("ApiKeySummary");
+    expect(apiKeysSource).toContain("CreateApiKeyRequest");
+    expect(apiKeysSource).toContain("export async function listApiKeys");
+    expect(apiKeysSource).toContain('path: "/api/api-keys"');
+    expect(apiKeysSource).toContain("export async function createApiKey");
+    expect(apiKeysSource).toContain("export async function rotateApiKey");
+    expect(apiKeysSource).toContain("export async function deleteApiKey");
+    expect(apiKeysSource).toContain("normalizeApiKeyListResponse");
+    expect(apiKeysSource).toContain("normalizeApiKeyReveal");
+    expect(normalizersSource).toContain("API_KEY_STATUS_VALUES");
   });
 
   it("rejects malformed API key statuses", () => {
@@ -194,25 +207,44 @@ describe("api key api client", () => {
 
 describe("service integration api client", () => {
   it("exposes typed client functions and response normalizers for settings/services", async () => {
-    const source = await Bun.file(apiSourcePath).text();
+    const normalizersSource = await Bun.file(apiSourcePaths.normalizers).text();
+    const serviceIntegrationsSource = await Bun.file(apiSourcePaths.serviceIntegrations).text();
 
-    expect(source).toContain("ServiceIntegrationKind");
-    expect(source).toContain("UpsertServiceIntegrationRequest");
-    expect(source).toContain("export async function listServiceIntegrationConfigs");
-    expect(source).toContain('path: "/api/settings/services"');
-    expect(source).toContain("export async function upsertServiceIntegrationConfig");
-    expect(source).toContain("export async function createServiceIntegrationConfig");
-    expect(source).toContain("export async function updateServiceIntegrationConfig");
-    expect(source).toContain("export async function deleteServiceIntegrationConfigById");
-    expect(source).toContain("export async function testServiceIntegrationConfig");
-    expect(source).toContain("export async function testServiceIntegrationConfigById");
-    expect(source).toContain("export async function getServiceIntegrationStatus");
-    expect(source).toContain("export async function getServiceIntegrationStatusById");
-    expect(source).toContain("normalizeServiceIntegrationListResponse");
-    expect(source).toContain("normalizeServiceIntegrationProbeResponse");
-    expect(source).toContain("isServiceIntegrationKind");
-    expect(source).toContain("isServiceIntegrationAuthMode");
-    expect(source).toContain("isServiceIntegrationProbeOutcome");
+    expect(serviceIntegrationsSource).toContain("ServiceIntegrationKind");
+    expect(serviceIntegrationsSource).toContain("UpsertServiceIntegrationRequest");
+    expect(serviceIntegrationsSource).toContain(
+      "export async function listServiceIntegrationConfigs",
+    );
+    expect(serviceIntegrationsSource).toContain('path: "/api/settings/services"');
+    expect(serviceIntegrationsSource).toContain(
+      "export async function upsertServiceIntegrationConfig",
+    );
+    expect(serviceIntegrationsSource).toContain(
+      "export async function createServiceIntegrationConfig",
+    );
+    expect(serviceIntegrationsSource).toContain(
+      "export async function updateServiceIntegrationConfig",
+    );
+    expect(serviceIntegrationsSource).toContain(
+      "export async function deleteServiceIntegrationConfigById",
+    );
+    expect(serviceIntegrationsSource).toContain(
+      "export async function testServiceIntegrationConfig",
+    );
+    expect(serviceIntegrationsSource).toContain(
+      "export async function testServiceIntegrationConfigById",
+    );
+    expect(serviceIntegrationsSource).toContain(
+      "export async function getServiceIntegrationStatus",
+    );
+    expect(serviceIntegrationsSource).toContain(
+      "export async function getServiceIntegrationStatusById",
+    );
+    expect(serviceIntegrationsSource).toContain("normalizeServiceIntegrationListResponse");
+    expect(serviceIntegrationsSource).toContain("normalizeServiceIntegrationProbeResponse");
+    expect(normalizersSource).toContain("isServiceIntegrationKind");
+    expect(normalizersSource).toContain("isServiceIntegrationAuthMode");
+    expect(normalizersSource).toContain("isServiceIntegrationProbeOutcome");
   });
 
   it("accepts Jackett and NZBHydra2 service kinds", () => {
@@ -248,23 +280,26 @@ function createApiKeyListResponse(overrides: Record<string, unknown> = {}) {
 
 describe("users api client", () => {
   it("uses typed managed-user endpoints with public user ids", async () => {
-    const source = await Bun.file(apiSourcePath).text();
+    const normalizersSource = await Bun.file(apiSourcePaths.normalizers).text();
+    const usersSource = await Bun.file(apiSourcePaths.users).text();
 
-    expect(source).toContain("normalizeManagedUserSummary");
-    expect(source).toContain("normalizeManagedUserProfile");
-    expect(source).toContain("export async function listUsers");
-    expect(source).toContain("api.api.users.get()");
-    expect(source).toContain("export async function getManagedUserProfile");
-    expect(source).toContain("api.api.users({ publicUserId: userId }).get()");
-    expect(source).toContain("export async function updateManagedUserProfile");
-    expect(source).toContain("api.api.users({ publicUserId: userId }).settings.main.put(input)");
-    expect(source).toContain("export async function changeManagedUserPassword");
-    expect(source).toContain(
+    expect(normalizersSource).toContain("normalizeManagedUserSummary");
+    expect(normalizersSource).toContain("normalizeManagedUserProfile");
+    expect(usersSource).toContain("export async function listUsers");
+    expect(usersSource).toContain("api.api.users.get()");
+    expect(usersSource).toContain("export async function getManagedUserProfile");
+    expect(usersSource).toContain("api.api.users({ publicUserId: userId }).get()");
+    expect(usersSource).toContain("export async function updateManagedUserProfile");
+    expect(usersSource).toContain(
+      "api.api.users({ publicUserId: userId }).settings.main.put(input)",
+    );
+    expect(usersSource).toContain("export async function changeManagedUserPassword");
+    expect(usersSource).toContain(
       "api.api.users({ publicUserId: userId }).settings.password.put(input)",
     );
-    expect(source).toContain("export async function updateManagedUserStatus");
-    expect(source).toContain("api.api.users({ publicUserId: userId }).status.patch(input)");
-    expect(source).toContain("CreateLocalUserRequest");
-    expect(source).not.toContain("api.api.admin");
+    expect(usersSource).toContain("export async function updateManagedUserStatus");
+    expect(usersSource).toContain("api.api.users({ publicUserId: userId }).status.patch(input)");
+    expect(usersSource).toContain("CreateLocalUserRequest");
+    expect(usersSource).not.toContain("api.api.admin");
   });
 });

@@ -13,9 +13,10 @@ import type {
 import { APP_LOG_CATEGORY } from "@arrtemplar/shared";
 import { getLogger } from "@logtape/logtape";
 import { and, asc, desc, eq } from "drizzle-orm";
+import { type AuditLogInput, writeAuditLog } from "../audit/audit-log";
 import type { AuthRequestContext } from "../auth/auth.service";
 import type { DatabaseClient } from "../db/client";
-import { auditLogs, type ServiceIntegration, serviceIntegrations, users } from "../db/schema";
+import { type ServiceIntegration, serviceIntegrations, users } from "../db/schema";
 import {
   decryptServiceIntegrationSecret,
   encryptServiceIntegrationSecret,
@@ -240,12 +241,17 @@ export class ServiceIntegrationService {
       return { ok: false, status: 404, body: notFoundByIdError(id) };
     }
 
-    this.writeAuditLog(actor, context, {
+    const auditLog = this.createAuditLogInput({
       action: "settings.services.saved",
-      id: savedConfig.id,
-      kind,
+      actor,
+      context,
       metadata: readAuditMetadata(savedConfig),
+      targetId: savedConfig.id,
     });
+
+    if (auditLog) {
+      writeAuditLog(this.database.db, auditLog);
+    }
 
     logger.info("Saved service integration {id} for {kind}.", {
       id: savedConfig.id,
@@ -267,22 +273,10 @@ export class ServiceIntegrationService {
       return { ok: false, status: 404, body: notFoundError(kind) };
     }
 
-    this.writeAuditLog(actor, context, {
-      action: "settings.services.deleted",
-      id: config.id,
-      kind,
-      metadata: readAuditMetadata(config),
-    });
-
-    this.database.db.delete(serviceIntegrations).where(eq(serviceIntegrations.id, config.id)).run();
-
-    logger.info("Deleted service integration {id} for {kind}.", {
-      id: config.id,
-      kind,
-      isDefault: true,
-    });
-
-    return { ok: true, body: { status: "ok", deletedId: config.id, deletedKind: kind } };
+    return {
+      ok: true,
+      body: this.deleteExistingConfig(config, { actor, context, isDefault: true }),
+    };
   }
 
   deleteConfigById(
@@ -300,22 +294,41 @@ export class ServiceIntegrationService {
       return { ok: false, status: 422, body: defaultInstanceDeleteError(config.kind) };
     }
 
-    this.writeAuditLog(actor, context, {
+    return {
+      ok: true,
+      body: this.deleteExistingConfig(config, { actor, context, isDefault: false }),
+    };
+  }
+
+  private deleteExistingConfig(
+    config: ServiceIntegration,
+    input: {
+      actor: PublicUser | undefined;
+      context: AuthRequestContext | undefined;
+      isDefault: boolean;
+    },
+  ): DeleteServiceIntegrationResponse {
+    const auditLog = this.createAuditLogInput({
       action: "settings.services.deleted",
-      id: config.id,
-      kind: config.kind,
+      actor: input.actor,
+      context: input.context,
       metadata: readAuditMetadata(config),
+      targetId: config.id,
     });
 
-    this.database.db.delete(serviceIntegrations).where(eq(serviceIntegrations.id, id)).run();
+    if (auditLog) {
+      writeAuditLog(this.database.db, auditLog);
+    }
+
+    this.database.db.delete(serviceIntegrations).where(eq(serviceIntegrations.id, config.id)).run();
 
     logger.info("Deleted service integration {id} for {kind}.", {
-      id,
+      id: config.id,
       kind: config.kind,
-      isDefault: false,
+      isDefault: input.isDefault,
     });
 
-    return { ok: true, body: { status: "ok", deletedId: id, deletedKind: config.kind } };
+    return { status: "ok", deletedId: config.id, deletedKind: config.kind };
   }
 
   async testConfig(
@@ -366,10 +379,10 @@ export class ServiceIntegrationService {
     }
 
     const result = probeResult.body;
-    this.writeAuditLog(actor, context, {
+    const auditLog = this.createAuditLogInput({
       action: "settings.services.tested",
-      id: config.id,
-      kind,
+      actor,
+      context,
       metadata: {
         displayName: config.displayName,
         isDefault: config.isDefault,
@@ -380,7 +393,12 @@ export class ServiceIntegrationService {
         version: result.result.version,
         errorCode: result.error?.code ?? null,
       },
+      targetId: config.id,
     });
+
+    if (auditLog) {
+      writeAuditLog(this.database.db, auditLog);
+    }
     this.logProbeResult("test", config.id, kind, result);
 
     return { ok: true, body: result };
@@ -780,37 +798,41 @@ export class ServiceIntegrationService {
       .all().length;
   }
 
-  private writeAuditLog(
-    actor: PublicUser | undefined,
-    context: AuthRequestContext | undefined,
-    payload: AuditPayload,
-  ): void {
-    if (!actor || !context) {
-      return;
-    }
-    const actorRow = this.database.db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.publicId, actor.id))
-      .get();
+  private createAuditLogInput(input: {
+    action: string;
+    actor: PublicUser | undefined;
+    context: AuthRequestContext | undefined;
+    metadata: Record<string, unknown>;
+    targetId: string;
+  }): AuditLogInput | null {
+    const actorUserId = this.readAuditActorUserId(input.actor);
 
-    if (!actorRow) {
-      return;
+    if (!actorUserId || !input.context) {
+      return null;
     }
 
-    this.database.db
-      .insert(auditLogs)
-      .values({
-        id: Bun.randomUUIDv7(),
-        actorUserId: actorRow.id,
-        action: payload.action,
-        targetType: "service_integration",
-        targetId: payload.id,
-        metadataJson: JSON.stringify(payload.metadata),
-        ipAddress: context.ipAddress,
-        createdAt: new Date().toISOString(),
-      })
-      .run();
+    return {
+      action: input.action,
+      actorUserId,
+      targetType: "service_integration",
+      targetId: input.targetId,
+      metadata: input.metadata,
+      ipAddress: input.context.ipAddress,
+    };
+  }
+
+  private readAuditActorUserId(actor: PublicUser | undefined): string | null {
+    if (!actor) {
+      return null;
+    }
+
+    return (
+      this.database.db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.publicId, actor.id))
+        .get()?.id ?? null
+    );
   }
 
   private logProbeResult(
@@ -1011,10 +1033,3 @@ function encryptionUnavailableError(): ApiErrorResponse {
     },
   };
 }
-
-type AuditPayload = {
-  action: string;
-  id: string;
-  kind: ServiceIntegrationKind;
-  metadata: Record<string, unknown>;
-};
