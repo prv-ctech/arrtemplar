@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  canAccessHelp,
   canAccessSettings,
   canManageUsers,
   hasAnyRequiredPermission,
@@ -12,6 +13,10 @@ import {
   DEFAULT_PROFILE_AVATAR_ID,
   DEFAULT_PROFILE_BANNER_ID,
   DEFAULT_SIGNED_IN_USER_PERMISSIONS,
+  HELP_TICKET_ACCEPTED_UPLOAD_EXTENSIONS,
+  HELP_TICKET_ACCEPTED_UPLOAD_MIME_TYPES,
+  HELP_TICKET_ID_PREFIX,
+  HELP_TICKET_STATUS_VALUES,
   PERMISSION_CATALOG,
   type PublicUser,
   SYSTEM_ADMIN_PERMISSION,
@@ -57,10 +62,26 @@ describe("permission-first shared auth contracts", () => {
       "profile:update",
       "profile:password",
       "profile:notifications",
+      "help:view",
+      "help:create",
+      "help:read",
       "settings:view",
       "settings:about",
       "settings:theme",
     ]);
+
+    expect(PERMISSION_CATALOG.find((entry) => entry.permission === "help:view")).toMatchObject({
+      label: "Help",
+      category: "help",
+      route: { surface: "help", path: "/help" },
+      defaultGrant: "signed-in-user",
+    });
+    expect(PERMISSION_CATALOG.find((entry) => entry.permission === "help:manage")).toMatchObject({
+      label: "Manage tickets",
+      category: "help",
+      route: { surface: "help", path: "/help/tickets" },
+      defaultGrant: "explicit",
+    });
 
     expect(PERMISSION_CATALOG.find((entry) => entry.permission === "settings:view")).toMatchObject({
       label: "Settings",
@@ -102,6 +123,7 @@ describe("permission helpers", () => {
 
   it("supports multi-permission checks and route-neutral access helpers", () => {
     expect(hasAnyRequiredPermission(baseUser, ["users:manage", "settings:view"])).toBe(true);
+    expect(canAccessHelp(baseUser)).toBe(true);
     expect(canAccessSettings(baseUser)).toBe(true);
     expect(canManageUsers(baseUser)).toBe(false);
     expect(
@@ -110,5 +132,27 @@ describe("permission helpers", () => {
         permissions: [...DEFAULT_SIGNED_IN_USER_PERMISSIONS, "users:manage"],
       }),
     ).toBe(true);
+  });
+
+  it("exports compact help ticket contracts from the shared package", () => {
+    expect(HELP_TICKET_STATUS_VALUES).toEqual(["new", "in_progress", "completed"]);
+    expect(HELP_TICKET_ID_PREFIX).toBe("arr");
+    expect(HELP_TICKET_ACCEPTED_UPLOAD_MIME_TYPES).toEqual([
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "video/mp4",
+      "video/webm",
+      "video/quicktime",
+    ]);
+    expect(HELP_TICKET_ACCEPTED_UPLOAD_EXTENSIONS).toEqual([
+      ".jpg",
+      ".jpeg",
+      ".png",
+      ".webp",
+      ".mp4",
+      ".webm",
+      ".mov",
+    ]);
   });
 });

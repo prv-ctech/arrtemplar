@@ -41,3 +41,11 @@ export function canManageUsers(user: PublicUser): boolean {
 export function canAccessSettings(user: PublicUser): boolean {
   return hasRequiredPermission(user, "settings:view");
 }
+
+export function canAccessHelp(user: PublicUser): boolean {
+  return hasRequiredPermission(user, "help:view");
+}
+
+export function canManageHelpTickets(user: PublicUser): boolean {
+  return hasRequiredPermission(user, "help:manage");
+}

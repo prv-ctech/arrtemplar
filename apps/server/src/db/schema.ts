@@ -4,6 +4,8 @@ import {
   AUTH_PROVIDER_SLUGS,
   DEFAULT_PROFILE_AVATAR_ID,
   DEFAULT_PROFILE_BANNER_ID,
+  HELP_TICKET_MEDIA_KIND_VALUES,
+  HELP_TICKET_STATUS_VALUES,
   NOTIFICATION_FREQUENCY_VALUES,
   OIDC_PROFILE_SIGNING_ALGORITHM_VALUES,
   OIDC_SIGNING_ALGORITHM_VALUES,
@@ -50,12 +52,20 @@ const tokenEndpointAuthMethodEnum = nonEmptyEnum(TOKEN_ENDPOINT_AUTH_METHOD_VALU
 const oidcSigningAlgorithmEnum = nonEmptyEnum(OIDC_SIGNING_ALGORITHM_VALUES);
 const oidcProfileSigningAlgorithmEnum = nonEmptyEnum(OIDC_PROFILE_SIGNING_ALGORITHM_VALUES);
 const notificationFrequencyEnum = nonEmptyEnum(NOTIFICATION_FREQUENCY_VALUES);
+const helpTicketStatusEnum = nonEmptyEnum(HELP_TICKET_STATUS_VALUES);
+const helpTicketMediaKindEnum = nonEmptyEnum(HELP_TICKET_MEDIA_KIND_VALUES);
 const serviceIntegrationKindEnum = nonEmptyEnum(SERVICE_INTEGRATION_KIND_VALUES);
 const serviceIntegrationAuthModeEnum = nonEmptyEnum(SERVICE_INTEGRATION_AUTH_MODE_VALUES);
 const serviceIntegrationProbeOutcomeEnum = nonEmptyEnum(SERVICE_INTEGRATION_PROBE_OUTCOME_VALUES);
 const toastNotificationIdEnum = nonEmptyEnum(TOAST_NOTIFICATION_EVENT_IDS);
 const toastNotificationSeverityEnum = nonEmptyEnum(TOAST_NOTIFICATION_SEVERITY_VALUES);
 const toastNotificationImportanceEnum = nonEmptyEnum(TOAST_NOTIFICATION_IMPORTANCE_VALUES);
+const helpTicketScanStatusEnum = nonEmptyEnum([
+  "not_configured",
+  "clean",
+  "infected",
+  "failed",
+] as const);
 
 function permissionGrantMetadataColumns() {
   return {
@@ -254,6 +264,60 @@ export const apiKeys = sqliteTable(
   ],
 );
 
+export const helpTickets = sqliteTable(
+  "help_tickets",
+  {
+    id: text("id").primaryKey(),
+    createdByUserId: text("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    status: text("status", { enum: helpTicketStatusEnum }).notNull().default("new"),
+    statusUpdatedAt: text("status_updated_at").notNull().default(timestampNow),
+    statusUpdatedByUserId: text("status_updated_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    ...timestampColumns(),
+  },
+  (table) => [
+    index("help_tickets_created_by_user_id_created_at_idx").on(
+      table.createdByUserId,
+      sql`created_at DESC`,
+    ),
+    index("help_tickets_status_created_at_idx").on(table.status, sql`created_at DESC`),
+  ],
+);
+
+export const helpTicketAttachments = sqliteTable(
+  "help_ticket_attachments",
+  {
+    id: text("id").primaryKey(),
+    ticketId: text("ticket_id")
+      .notNull()
+      .references(() => helpTickets.id, { onDelete: "cascade" }),
+    uploadedByUserId: text("uploaded_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    originalFileName: text("original_file_name").notNull(),
+    storedFileName: text("stored_file_name").notNull(),
+    mediaKind: text("media_kind", { enum: helpTicketMediaKindEnum }).notNull(),
+    mimeType: text("mime_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    storedSizeBytes: integer("stored_size_bytes").notNull(),
+    width: integer("width"),
+    height: integer("height"),
+    sha256: text("sha256").notNull(),
+    scanStatus: text("scan_status", { enum: helpTicketScanStatusEnum })
+      .notNull()
+      .default("not_configured"),
+    scanEngine: text("scan_engine"),
+    scanResult: text("scan_result"),
+    createdAt: createdAtColumn(),
+  },
+  (table) => [index("help_ticket_attachments_ticket_id_idx").on(table.ticketId)],
+);
+
 export const serviceIntegrations = sqliteTable(
   "service_integrations",
   {
@@ -323,6 +387,10 @@ export type Session = InferSelectModel<typeof sessions>;
 export type NewSession = InferInsertModel<typeof sessions>;
 export type ApiKey = InferSelectModel<typeof apiKeys>;
 export type NewApiKey = InferInsertModel<typeof apiKeys>;
+export type HelpTicket = InferSelectModel<typeof helpTickets>;
+export type NewHelpTicket = InferInsertModel<typeof helpTickets>;
+export type HelpTicketAttachment = InferSelectModel<typeof helpTicketAttachments>;
+export type NewHelpTicketAttachment = InferInsertModel<typeof helpTicketAttachments>;
 export type ServiceIntegration = InferSelectModel<typeof serviceIntegrations>;
 export type NewServiceIntegration = InferInsertModel<typeof serviceIntegrations>;
 export type AuditLog = InferSelectModel<typeof auditLogs>;

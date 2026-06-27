@@ -6,6 +6,7 @@ import {
   CSRF_HEADER_NAME,
   CSRF_HEADER_VALUE,
 } from "@arrtemplar/shared";
+import { SESSION_COOKIE_NAME } from "../auth/session-token";
 
 const unsafeMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const csrfExemptApiPaths = new Set(["/api/auth/oauth/backchannel-logout"]);
@@ -69,7 +70,8 @@ function requiresCsrfProtection(request: Request): boolean {
 function isBearerCsrfExemptRequest(pathname: string, headers: Headers): boolean {
   return (
     API_KEY_CSRF_EXEMPT_PATH_PREFIXES.some((pathPrefix) => pathname.startsWith(pathPrefix)) &&
-    hasApiKeyTransport(headers)
+    hasApiKeyTransport(headers) &&
+    !hasSessionCookie(headers)
   );
 }
 
@@ -81,6 +83,19 @@ function hasApiKeyTransport(headers: Headers): boolean {
   const authorization = headers.get("authorization");
 
   return typeof authorization === "string" && /^Bearer\s+\S+$/i.test(authorization);
+}
+
+function hasSessionCookie(headers: Headers): boolean {
+  const cookieHeader = headers.get("cookie");
+
+  if (!cookieHeader) {
+    return false;
+  }
+
+  return cookieHeader
+    .split(";")
+    .map((entry) => entry.trim())
+    .some((entry) => entry.startsWith(`${SESSION_COOKIE_NAME}=`));
 }
 
 function hasTrustedSourceOrigin(headers: Headers, allowedOrigin: string): boolean {

@@ -397,9 +397,9 @@ describe("auth routes", () => {
 
     expect(grantResponse.status).toBe(200);
     expect(grantBody.user.permissions).toEqual([
-      ...DEFAULT_SIGNED_IN_USER_PERMISSIONS.slice(0, 4),
+      ...DEFAULT_SIGNED_IN_USER_PERMISSIONS.slice(0, 7),
       "settings:services",
-      ...DEFAULT_SIGNED_IN_USER_PERMISSIONS.slice(4),
+      ...DEFAULT_SIGNED_IN_USER_PERMISSIONS.slice(7),
     ]);
     await expectSessionRejected(app, viewerCookie);
 
@@ -411,9 +411,9 @@ describe("auth routes", () => {
 
     expect(meResponse.status).toBe(200);
     expect(meBody.user.permissions).toEqual([
-      ...DEFAULT_SIGNED_IN_USER_PERMISSIONS.slice(0, 4),
+      ...DEFAULT_SIGNED_IN_USER_PERMISSIONS.slice(0, 7),
       "settings:services",
-      ...DEFAULT_SIGNED_IN_USER_PERMISSIONS.slice(4),
+      ...DEFAULT_SIGNED_IN_USER_PERMISSIONS.slice(7),
     ]);
   });
 

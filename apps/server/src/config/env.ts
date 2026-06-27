@@ -13,6 +13,8 @@ export type RuntimeEnv = {
   webOrigin: string;
   databaseUrl: string;
   sessionCookieSecure: boolean;
+  helpTicketStorageRoot: string;
+  helpTicketScanMode: HelpTicketScanMode;
   logLevel: RuntimeLogLevel;
   logFilePath: string;
   logFileMaxSizeBytes: number;
@@ -22,8 +24,11 @@ export type RuntimeEnv = {
 };
 
 export type RuntimeLogLevel = "trace" | "debug" | "info" | "warning" | "error" | "fatal";
+export type HelpTicketScanMode = "none" | "clamscan" | "clamd";
 
 const runtimeLogLevels = ["trace", "debug", "info", "warning", "error", "fatal"] as const;
+const helpTicketScanModes = ["none", "clamscan", "clamd"] as const;
+const DEFAULT_HELP_TICKET_STORAGE_ROOT = "data/media/ticket";
 const DEFAULT_LOG_FILE_PATH = `data/logs/${APP_IDENTIFIER}.jsonl`;
 const DEFAULT_LOG_FILE_MAX_SIZE_BYTES = 10 * 1024 * 1024;
 const DEFAULT_LOG_FILE_MAX_FILES = 5;
@@ -172,6 +177,32 @@ function isTestEnvironment(environment: RuntimeEnvironment): boolean {
   return environment.NODE_ENV === "test";
 }
 
+function readHelpTicketStorageRoot(value: string | undefined): string {
+  const storageRoot = value?.trim() ?? DEFAULT_HELP_TICKET_STORAGE_ROOT;
+
+  if (!storageRoot) {
+    throw new Error("HELP_TICKET_STORAGE_ROOT must not be empty.");
+  }
+
+  return storageRoot;
+}
+
+function readHelpTicketScanMode(value: string | undefined): HelpTicketScanMode {
+  const scanMode = value?.trim() ?? "none";
+
+  if (isHelpTicketScanMode(scanMode)) {
+    return scanMode;
+  }
+
+  throw new Error(
+    `HELP_TICKET_SCAN_MODE must be one of ${helpTicketScanModes.join(", ")}, received: ${value}`,
+  );
+}
+
+function isHelpTicketScanMode(value: string): value is HelpTicketScanMode {
+  return helpTicketScanModes.some((scanMode) => scanMode === value);
+}
+
 export function readRuntimeEnv(environment: RuntimeEnvironment = Bun.env): RuntimeEnv {
   return {
     serverPort: readPort(environment.SERVER_PORT, environment),
@@ -182,6 +213,8 @@ export function readRuntimeEnv(environment: RuntimeEnvironment = Bun.env): Runti
       environment.SESSION_COOKIE_SECURE,
       true,
     ),
+    helpTicketStorageRoot: readHelpTicketStorageRoot(environment.HELP_TICKET_STORAGE_ROOT),
+    helpTicketScanMode: readHelpTicketScanMode(environment.HELP_TICKET_SCAN_MODE),
     logLevel: readLogLevel(environment.LOG_LEVEL, environment),
     logFilePath: readLogFilePath(environment.LOG_FILE_PATH),
     logFileMaxSizeBytes: readPositiveInteger(

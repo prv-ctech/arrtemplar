@@ -14,6 +14,8 @@ describe("server environment database paths", () => {
 
     expect(env.databaseUrl).toBe(DEV_DATABASE_URL);
     expect(env.serverPort).toBe(DEV_SERVER_PORT);
+    expect(env.helpTicketStorageRoot).toBe("data/media/ticket");
+    expect(env.helpTicketScanMode).toBe("none");
     expect(env.logLevel).toBe("debug");
     expect(env.logFilePath).toBe(`data/logs/${APP_IDENTIFIER}.jsonl`);
     expect(env.logFileMaxSizeBytes).toBe(10 * 1024 * 1024);
@@ -54,6 +56,8 @@ describe("server environment database paths", () => {
   it("keeps logging settings overridable", () => {
     expect(
       readRuntimeEnv({
+        HELP_TICKET_STORAGE_ROOT: "tmp/ticket-media",
+        HELP_TICKET_SCAN_MODE: "clamd",
         LOG_LEVEL: "trace",
         LOG_FILE_PATH: "tmp/custom-app.jsonl",
         LOG_FILE_MAX_SIZE_BYTES: "1024",
@@ -61,6 +65,8 @@ describe("server environment database paths", () => {
         LOG_CONSOLE: "false",
       }),
     ).toMatchObject({
+      helpTicketStorageRoot: "tmp/ticket-media",
+      helpTicketScanMode: "clamd",
       logLevel: "trace",
       logFilePath: "tmp/custom-app.jsonl",
       logFileMaxSizeBytes: 1024,
@@ -101,6 +107,12 @@ describe("server environment database paths", () => {
     );
     expect(() => readRuntimeEnv({ LOG_FILE_PATH: "   " })).toThrow(
       "LOG_FILE_PATH must not be empty",
+    );
+    expect(() => readRuntimeEnv({ HELP_TICKET_STORAGE_ROOT: "   " })).toThrow(
+      "HELP_TICKET_STORAGE_ROOT must not be empty",
+    );
+    expect(() => readRuntimeEnv({ HELP_TICKET_SCAN_MODE: "manual" })).toThrow(
+      "HELP_TICKET_SCAN_MODE must be one of none, clamscan, clamd",
     );
     expect(() => readRuntimeEnv({ LOG_FILE_MAX_SIZE_BYTES: "0" })).toThrow(
       "LOG_FILE_MAX_SIZE_BYTES must be a positive integer",

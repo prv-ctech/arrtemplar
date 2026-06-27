@@ -8,6 +8,7 @@ import type { LoginRateLimiter } from "./auth/rate-limit";
 import { createAuthRoutes } from "./auth/routes";
 import { env } from "./config/env";
 import { createDatabase, type DatabaseClient } from "./db/client";
+import { createHelpRoutes } from "./help/routes";
 import {
   corsAllowedHeaders,
   corsAllowedMethods,
@@ -129,6 +130,7 @@ export function createApp(options: CreateAppOptions = {}) {
           tags: [
             { name: "System", description: "Application status and diagnostics" },
             { name: "Auth", description: "Authentication, sessions, and role checks" },
+            { name: "Help", description: "Help tickets, attachments, and FAQ scaffolding" },
             {
               name: "Settings",
               description: "Admin-controlled settings and integration endpoints",
@@ -138,6 +140,13 @@ export function createApp(options: CreateAppOptions = {}) {
       }),
     )
     .use(createAuthRoutes(authRoutesOptions))
+    .use(
+      createHelpRoutes({
+        database,
+        scanMode: env.helpTicketScanMode,
+        storageRoot: env.helpTicketStorageRoot,
+      }),
+    )
     .use(
       createServiceIntegrationRoutes({
         database,

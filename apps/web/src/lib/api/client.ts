@@ -65,7 +65,7 @@ export function createApiRequestHeaders(
 export type ApiJsonRequest = {
   body?: unknown;
   fallback: string;
-  method: "DELETE" | "GET" | "POST" | "PUT";
+  method: "DELETE" | "GET" | "PATCH" | "POST" | "PUT";
   path: string;
 };
 

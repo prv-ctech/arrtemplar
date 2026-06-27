@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../../");
 const routerSourcePath = `${workspaceRoot}/apps/web/src/routes/router.tsx`;
+const appShellSourcePath = `${workspaceRoot}/apps/web/src/components/layout/AppShell.tsx`;
 const managedProfileSettingsRedirectSourcePath = `${workspaceRoot}/apps/web/src/routes/components/managed-profile-settings-index-redirect.tsx`;
 const userProfileSourcePath = `${workspaceRoot}/apps/web/src/features/user/UserProfilePage.tsx`;
 
@@ -46,6 +47,21 @@ describe("router route taxonomy", () => {
 
     expect(source).toContain("AdminThemeRoute");
     expect(source).not.toContain("AccountThemeRoute");
+  });
+
+  it("defines help routes and sidebar entry", async () => {
+    const source = await Bun.file(routerSourcePath).text();
+    const appShellSource = await Bun.file(appShellSourcePath).text();
+
+    expect(source).toContain("HelpHomeRoute");
+    expect(source).toContain("HelpTicketsRoute");
+    expect(source).toContain("HelpFaqRoute");
+    expect(source).toContain('path: "help"');
+    expect(source).toContain('path: "tickets"');
+    expect(source).toContain('path: "faq"');
+    expect(appShellSource).toContain('label: "Help"');
+    expect(appShellSource).toContain('to: "/help"');
+    expect(appShellSource).toContain("activeExact: false");
   });
 
   it("removes legacy admin and delegated account route paths", async () => {

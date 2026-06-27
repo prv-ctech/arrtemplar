@@ -1,4 +1,4 @@
-export const PERMISSION_CATEGORIES = ["system", "users", "profile", "settings"] as const;
+export const PERMISSION_CATEGORIES = ["system", "users", "profile", "help", "settings"] as const;
 
 export type PermissionCategory = (typeof PERMISSION_CATEGORIES)[number];
 
@@ -14,7 +14,7 @@ export const PERMISSION_DEFAULT_GRANTS = [
 
 export type PermissionDefaultGrant = (typeof PERMISSION_DEFAULT_GRANTS)[number];
 
-export const PERMISSION_ROUTE_SURFACES = ["profile", "settings", "users"] as const;
+export const PERMISSION_ROUTE_SURFACES = ["profile", "help", "settings", "users"] as const;
 
 export type PermissionRouteSurface = (typeof PERMISSION_ROUTE_SURFACES)[number];
 
@@ -132,6 +132,42 @@ export const PERMISSION_CATALOG = [
     risk: "low",
     defaultGrant: "signed-in-user",
     route: { surface: "profile", path: "/profile/settings/notifications" },
+  },
+  {
+    permission: "help:view",
+    category: "help",
+    label: "Help",
+    description: "Open the help shell and FAQ surfaces.",
+    risk: "low",
+    defaultGrant: "signed-in-user",
+    route: { surface: "help", path: "/help" },
+  },
+  {
+    permission: "help:create",
+    category: "help",
+    label: "Create tickets",
+    description: "Create help tickets with optional image or video attachments.",
+    risk: "low",
+    defaultGrant: "signed-in-user",
+    route: { surface: "help", path: "/help/tickets" },
+  },
+  {
+    permission: "help:read",
+    category: "help",
+    label: "View own tickets",
+    description: "View help tickets created by the signed-in user.",
+    risk: "low",
+    defaultGrant: "signed-in-user",
+    route: { surface: "help", path: "/help/tickets" },
+  },
+  {
+    permission: "help:manage",
+    category: "help",
+    label: "Manage tickets",
+    description: "View all help tickets and update ticket status across users.",
+    risk: "high",
+    defaultGrant: "explicit",
+    route: { surface: "help", path: "/help/tickets" },
   },
   {
     permission: "settings:view",

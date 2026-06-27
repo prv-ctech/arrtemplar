@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createApiRequestHeaders,
+  normalizeHelpTicketDetailResponse,
   normalizeApiKeyListResponse,
   normalizeNotificationHistoryListResponse,
 } from "../../../../../apps/web/src/lib/api";
@@ -16,6 +17,7 @@ const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..
 const apiSourcePaths = {
   apiKeys: `${workspaceRoot}/apps/web/src/lib/api/api-keys.ts`,
   auth: `${workspaceRoot}/apps/web/src/lib/api/auth.ts`,
+  help: `${workspaceRoot}/apps/web/src/lib/api/help.ts`,
   client: `${workspaceRoot}/apps/web/src/lib/api/client.ts`,
   normalizers: `${workspaceRoot}/apps/web/src/lib/api/normalizers.ts`,
   profile: `${workspaceRoot}/apps/web/src/lib/api/profile.ts`,
@@ -284,6 +286,37 @@ describe("service integration api client", () => {
   });
 });
 
+describe("help ticket api client", () => {
+  it("exposes typed client functions and normalizers for help tickets", async () => {
+    const helpSource = await Bun.file(apiSourcePaths.help).text();
+    const normalizersSource = await Bun.file(apiSourcePaths.normalizers).text();
+
+    expect(helpSource).toContain("CreateHelpTicketInput");
+    expect(helpSource).toContain("HelpTicketListParams");
+    expect(helpSource).toContain("export async function listHelpTickets");
+    expect(helpSource).toContain("searchParams.toString()");
+    expect(helpSource).toContain("export async function createHelpTicket");
+    expect(helpSource).toContain('resolveApiRequestUrl("/api/help/tickets")');
+    expect(helpSource).toContain("export async function getHelpTicket");
+    expect(helpSource).toContain("export async function updateHelpTicketStatus");
+    expect(helpSource).toContain("getHelpTicketAttachmentUrl");
+    expect(normalizersSource).toContain("normalizeHelpTicketListResponse");
+    expect(normalizersSource).toContain("normalizeHelpTicketDetailResponse");
+    expect(normalizersSource).toContain("isHelpTicketId");
+    expect(normalizersSource).toContain("INVALID_HELP_TICKET_RESPONSE");
+  });
+
+  it("rejects malformed help ticket statuses", () => {
+    expect(() =>
+      normalizeHelpTicketDetailResponse(
+        createHelpTicketDetailResponse({
+          status: "pending",
+        }),
+      ),
+    ).toThrow("Help ticket response was invalid.");
+  });
+});
+
 function createApiKeyListResponse(overrides: Record<string, unknown> = {}) {
   return {
     apiKeys: [
@@ -306,6 +339,37 @@ function createApiKeyListResponse(overrides: Record<string, unknown> = {}) {
         ...overrides,
       },
     ],
+  };
+}
+
+function createHelpTicketDetailResponse(overrides: Record<string, unknown> = {}) {
+  return {
+    ticket: {
+      id: "arr1241415",
+      title: "Playback issue",
+      description: "Episode import is stuck.",
+      status: "new",
+      attachmentCount: 1,
+      createdAt: "2026-06-27T12:00:00.000Z",
+      updatedAt: "2026-06-27T12:01:00.000Z",
+      createdBy: { id: "HelpUsr01", username: "viewer" },
+      attachments: [
+        {
+          id: "attachment-1",
+          originalFileName: "capture.png",
+          mediaKind: "image",
+          mimeType: "image/webp",
+          sizeBytes: 1024,
+          storedSizeBytes: 768,
+          width: 1,
+          height: 1,
+          createdAt: "2026-06-27T12:00:00.000Z",
+        },
+      ],
+      statusUpdatedAt: "2026-06-27T12:01:00.000Z",
+      statusUpdatedByUserId: null,
+      ...overrides,
+    },
   };
 }
 

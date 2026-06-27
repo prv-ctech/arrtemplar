@@ -12,6 +12,11 @@ import type {
   AuthProviderSummary,
   AuthUnlinkAllIdentitiesResponse,
   DeleteServiceIntegrationResponse,
+  HelpTicketDetail,
+  HelpTicketDetailResponse,
+  HelpTicketListParams,
+  HelpTicketListResponse,
+  HelpTicketStatus,
   LogoutResponse,
   ManagedUserProfile,
   NotificationHistoryItem,
@@ -32,6 +37,9 @@ import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   DEFAULT_PROFILE_AVATAR_ID,
   DEFAULT_PROFILE_BANNER_ID,
+  HELP_TICKET_ACCEPTED_UPLOAD_MIME_TYPES,
+  HELP_TICKET_STATUS_VALUES,
+  isHelpTicketId,
   isProfileAvatarId,
   isProfileBannerId,
   isServiceIntegrationAuthMode,
@@ -261,6 +269,52 @@ export function normalizeNotificationHistoryQuery(
   };
 }
 
+export type NormalizedHelpTicketListParams = {
+  page: number;
+  pageSize: number;
+  scope: "all" | "mine";
+  sortBy: "createdAt";
+  sortOrder: "asc" | "desc";
+  status?: HelpTicketStatus;
+};
+
+export function normalizeHelpTicketListParams(
+  input: HelpTicketListParams,
+): NormalizedHelpTicketListParams {
+  return {
+    page: isPositiveInteger(input.page) ? input.page : 1,
+    pageSize: isPositiveInteger(input.pageSize) ? Math.min(input.pageSize, 50) : 20,
+    scope: input.scope === "all" ? "all" : "mine",
+    sortBy: "createdAt",
+    sortOrder: input.sortOrder === "asc" ? "asc" : "desc",
+    ...(isHelpTicketStatus(input.status) ? { status: input.status } : {}),
+  };
+}
+
+export function normalizeHelpTicketListResponse(value: unknown): HelpTicketListResponse {
+  if (!isRecord(value) || !Array.isArray(value.items) || !isRecord(value.pagination)) {
+    throwInvalidHelpTicketResponse();
+  }
+
+  return {
+    items: value.items.map(normalizeHelpTicketSummary),
+    pagination: {
+      page: readPositiveNumber(value.pagination.page),
+      pageSize: readPositiveNumber(value.pagination.pageSize),
+      total: readNonNegativeNumber(value.pagination.total),
+      totalPages: readNonNegativeNumber(value.pagination.totalPages),
+    },
+  };
+}
+
+export function normalizeHelpTicketDetailResponse(value: unknown): HelpTicketDetailResponse {
+  if (!isRecord(value) || !isRecord(value.ticket)) {
+    throwInvalidHelpTicketResponse();
+  }
+
+  return { ticket: normalizeHelpTicketDetail(value.ticket) };
+}
+
 export function normalizeNotificationHistoryListResponse(
   value: unknown,
 ): NotificationHistoryListResponse {
@@ -413,6 +467,87 @@ function normalizeApiKeySummary(value: unknown): ApiKeySummary {
   };
 }
 
+function normalizeHelpTicketSummary(value: unknown): HelpTicketListResponse["items"][number] {
+  if (
+    !isRecord(value) ||
+    !isHelpTicketId(value.id) ||
+    typeof value.title !== "string" ||
+    !isHelpTicketStatus(value.status) ||
+    typeof value.attachmentCount !== "number" ||
+    !isDateTime(value.createdAt) ||
+    !isDateTime(value.updatedAt) ||
+    !isRecord(value.createdBy) ||
+    typeof value.createdBy.id !== "string" ||
+    typeof value.createdBy.username !== "string"
+  ) {
+    throwInvalidHelpTicketResponse();
+  }
+
+  return {
+    id: value.id,
+    title: value.title,
+    status: value.status,
+    attachmentCount: readNonNegativeNumber(value.attachmentCount),
+    createdAt: normalizeDateTime(value.createdAt),
+    updatedAt: normalizeDateTime(value.updatedAt),
+    createdBy: {
+      id: value.createdBy.id,
+      username: value.createdBy.username,
+    },
+  };
+}
+
+function normalizeHelpTicketDetail(value: unknown): HelpTicketDetail {
+  if (
+    !isRecord(value) ||
+    typeof value.description !== "string" ||
+    !Array.isArray(value.attachments) ||
+    !isDateTime(value.statusUpdatedAt) ||
+    !isNullableString(value.statusUpdatedByUserId)
+  ) {
+    throwInvalidHelpTicketResponse();
+  }
+
+  const summary = normalizeHelpTicketSummary(value);
+
+  return {
+    ...summary,
+    description: value.description,
+    attachments: value.attachments.map(normalizeHelpTicketAttachment),
+    statusUpdatedAt: normalizeDateTime(value.statusUpdatedAt),
+    statusUpdatedByUserId: value.statusUpdatedByUserId,
+  };
+}
+
+function normalizeHelpTicketAttachment(value: unknown): HelpTicketDetail["attachments"][number] {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== "string" ||
+    typeof value.originalFileName !== "string" ||
+    (value.mediaKind !== "image" && value.mediaKind !== "video") ||
+    !isHelpTicketAttachmentMimeType(value.mimeType) ||
+    typeof value.sizeBytes !== "number" ||
+    typeof value.storedSizeBytes !== "number" ||
+    !(value.width === null || typeof value.width === "number") ||
+    !(value.height === null || typeof value.height === "number") ||
+    !isDateTime(value.createdAt)
+  ) {
+    throwInvalidHelpTicketResponse();
+  }
+
+  return {
+    id: value.id,
+    originalFileName: value.originalFileName,
+    mediaKind: value.mediaKind,
+    mimeType: value.mimeType,
+    sizeBytes: readNonNegativeNumber(value.sizeBytes),
+    storedSizeBytes: readNonNegativeNumber(value.storedSizeBytes),
+    width: typeof value.width === "number" ? value.width : null,
+    height: typeof value.height === "number" ? value.height : null,
+    createdAt: normalizeDateTime(value.createdAt),
+  };
+}
+
 function normalizeServiceIntegrationSavedConfig(value: unknown): ServiceIntegrationSavedConfig {
   if (!isServiceIntegrationSavedConfigResponse(value)) {
     throwInvalidServiceIntegrationResponse();
@@ -560,8 +695,25 @@ function isApiKeyStatus(value: unknown): value is ApiKeyStatus {
   return API_KEY_STATUS_VALUES.some((status) => status === value);
 }
 
+function isHelpTicketStatus(value: unknown): value is HelpTicketStatus {
+  return HELP_TICKET_STATUS_VALUES.some((status) => status === value);
+}
+
+function isHelpTicketAttachmentMimeType(
+  value: unknown,
+): value is HelpTicketDetail["attachments"][number]["mimeType"] {
+  return (
+    typeof value === "string" &&
+    HELP_TICKET_ACCEPTED_UPLOAD_MIME_TYPES.some((mimeType) => mimeType === value)
+  );
+}
+
 function throwInvalidApiKeyResponse(): never {
   throw new ApiClientError("API key response was invalid.", 0, "INVALID_API_KEY_RESPONSE");
+}
+
+function throwInvalidHelpTicketResponse(): never {
+  throw new ApiClientError("Help ticket response was invalid.", 0, "INVALID_HELP_TICKET_RESPONSE");
 }
 
 function throwInvalidServiceIntegrationResponse(): never {

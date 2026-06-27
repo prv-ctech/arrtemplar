@@ -1,5 +1,6 @@
 import type { PublicUser } from "@arrtemplar/shared";
 import {
+  BookOpenIcon,
   GearSixIcon,
   HouseIcon,
   MagnifyingGlassIcon,
@@ -26,8 +27,9 @@ import { getProfileAvatarOption } from "../../features/user/profile-media-option
 
 type ShellNavLinkItem = {
   label: string;
-  to: "/dashboard";
+  to: "/dashboard" | "/help";
   icon: ReactNode;
+  activeExact?: boolean;
 };
 
 const shellNavItems: ShellNavLinkItem[] = [
@@ -35,6 +37,12 @@ const shellNavItems: ShellNavLinkItem[] = [
     label: "Dashboard",
     to: "/dashboard",
     icon: <HouseIcon aria-hidden="true" className="size-5" />,
+  },
+  {
+    label: "Help",
+    to: "/help",
+    icon: <BookOpenIcon aria-hidden="true" className="size-5" />,
+    activeExact: false,
   },
 ];
 
@@ -273,6 +281,7 @@ function ShellBrandLink() {
 function ShellNavLink({ item }: { item: ShellNavLinkItem }) {
   return (
     <Link
+      activeOptions={{ exact: item.activeExact ?? true }}
       activeProps={{
         className: "border-primary/35 bg-primary text-primary-foreground shadow-(--shadow-button)",
       }}
