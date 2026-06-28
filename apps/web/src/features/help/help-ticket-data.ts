@@ -10,6 +10,7 @@ import { HELP_TICKET_ACCEPTED_UPLOAD_EXTENSIONS, HELP_TICKET_LIMITS } from "@arr
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createHelpTicket,
+  deleteHelpTicket,
   getHelpTicket,
   listHelpTickets,
   updateHelpTicketStatus,
@@ -115,6 +116,47 @@ export function useUpdateHelpTicketStatusMutation() {
   });
 }
 
+export function useDeleteHelpTicketMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (ticketId: string) => deleteHelpTicket(ticketId),
+    onMutate: async (ticketId) => {
+      await queryClient.cancelQueries({ queryKey: helpTicketKeys.detail(ticketId) });
+      await queryClient.cancelQueries({ queryKey: helpTicketKeys.lists() });
+      const previousDetail = queryClient.getQueryData<HelpTicketDetail>(
+        helpTicketKeys.detail(ticketId),
+      );
+      const previousHistoryLists = queryClient.getQueriesData<HelpTicketListResponse>({
+        queryKey: helpTicketKeys.lists(),
+      });
+
+      queryClient.removeQueries({ queryKey: helpTicketKeys.detail(ticketId) });
+      queryClient.setQueriesData<HelpTicketListResponse>(
+        { queryKey: helpTicketKeys.lists() },
+        (current) => applyHelpTicketDeleteToList(current, ticketId),
+      );
+
+      return { previousDetail, previousHistoryLists };
+    },
+    onError: (_error, ticketId, context) => {
+      if (context?.previousDetail) {
+        queryClient.setQueryData(helpTicketKeys.detail(ticketId), context.previousDetail);
+      }
+
+      if (context?.previousHistoryLists) {
+        for (const [queryKey, previousHistoryList] of context.previousHistoryLists) {
+          queryClient.setQueryData(queryKey, previousHistoryList);
+        }
+      }
+    },
+    onSuccess: (response) => {
+      queryClient.removeQueries({ queryKey: helpTicketKeys.detail(response.deletedId) });
+      queryClient.invalidateQueries({ queryKey: helpTicketKeys.lists() });
+    },
+  });
+}
+
 export function applyHelpTicketStatusToList(
   list: HelpTicketListResponse | undefined,
   ticketId: string,
@@ -127,6 +169,28 @@ export function applyHelpTicketStatusToList(
   return {
     ...list,
     items: list.items.map((ticket) => (ticket.id === ticketId ? { ...ticket, status } : ticket)),
+  };
+}
+
+export function applyHelpTicketDeleteToList(
+  list: HelpTicketListResponse | undefined,
+  ticketId: string,
+): HelpTicketListResponse | undefined {
+  if (!list) {
+    return list;
+  }
+
+  const items = list.items.filter((ticket) => ticket.id !== ticketId);
+  const total = Math.max(0, list.pagination.total - (items.length === list.items.length ? 0 : 1));
+
+  return {
+    ...list,
+    items,
+    pagination: {
+      ...list.pagination,
+      total,
+      totalPages: total === 0 ? 0 : Math.ceil(total / list.pagination.pageSize),
+    },
   };
 }
 

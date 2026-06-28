@@ -3,8 +3,8 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createApiRequestHeaders,
-  normalizeHelpTicketDetailResponse,
   normalizeApiKeyListResponse,
+  normalizeHelpTicketDetailResponse,
   normalizeNotificationHistoryListResponse,
 } from "../../../../../apps/web/src/lib/api";
 import {
@@ -299,6 +299,7 @@ describe("help ticket api client", () => {
     expect(helpSource).toContain('resolveApiRequestUrl("/api/help/tickets")');
     expect(helpSource).toContain("export async function getHelpTicket");
     expect(helpSource).toContain("export async function updateHelpTicketStatus");
+    expect(helpSource).toContain("export async function deleteHelpTicket");
     expect(helpSource).toContain("getHelpTicketAttachmentUrl");
     expect(normalizersSource).toContain("normalizeHelpTicketListResponse");
     expect(normalizersSource).toContain("normalizeHelpTicketDetailResponse");

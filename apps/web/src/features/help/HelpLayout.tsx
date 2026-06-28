@@ -1,12 +1,12 @@
-import { BookOpenIcon, InfoIcon, ScrollIcon } from "@phosphor-icons/react";
+import { InfoIcon, ScrollIcon } from "@phosphor-icons/react";
 import { useNavigate } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { type SettingsEntry, SettingsNav } from "../settings/SettingsNav";
 import { SettingsPanel } from "../settings/SettingsPrimitives";
 
-export type HelpPage = "home" | "tickets" | "faq";
+export type HelpPage = "tickets" | "faq";
 
-type HelpRouteTarget = "/help" | "/help/tickets" | "/help/faq";
+type HelpRouteTarget = "/help/tickets" | "/help/faq";
 
 type HelpEntry = SettingsEntry<HelpPage> & {
   to: HelpRouteTarget;
@@ -14,22 +14,16 @@ type HelpEntry = SettingsEntry<HelpPage> & {
 
 const helpEntries: readonly [HelpEntry, ...HelpEntry[]] = [
   {
-    id: "home",
-    label: "Help",
-    icon: <BookOpenIcon aria-hidden="true" className="size-5" />,
-    to: "/help",
+    id: "faq",
+    label: "FAQ",
+    icon: <InfoIcon aria-hidden="true" className="size-5" />,
+    to: "/help/faq",
   },
   {
     id: "tickets",
     label: "Tickets",
     icon: <ScrollIcon aria-hidden="true" className="size-5" />,
     to: "/help/tickets",
-  },
-  {
-    id: "faq",
-    label: "FAQ",
-    icon: <InfoIcon aria-hidden="true" className="size-5" />,
-    to: "/help/faq",
   },
 ];
 

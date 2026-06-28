@@ -2,6 +2,9 @@ import {
   APP_LOG_CATEGORY,
   type ApiErrorResponse,
   type CreateHelpTicketResponse,
+  type DeleteHelpTicketResponse,
+  HELP_TICKET_ID_PREFIX,
+  HELP_TICKET_LIMITS,
   type HelpTicketDetail,
   type HelpTicketDetailResponse,
   type HelpTicketListParams,
@@ -9,20 +12,18 @@ import {
   type HelpTicketReporter,
   type HelpTicketStatus,
   type HelpTicketSummary,
-  HELP_TICKET_ID_PREFIX,
-  HELP_TICKET_LIMITS,
   hasPermissionGrant,
   type PublicUser,
   type UpdateHelpTicketStatusRequest,
 } from "@arrtemplar/shared";
 import { getLogger } from "@logtape/logtape";
-import { asc, and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import type { AuthRequestContext } from "../auth/auth.service";
 import type { DatabaseClient } from "../db/client";
-import { helpTicketAttachments, helpTickets, users, type User } from "../db/schema";
-import {
+import { helpTicketAttachments, helpTickets, type User, users } from "../db/schema";
+import type {
   HelpTicketAttachmentService,
-  type PreparedHelpTicketAttachment,
+  PreparedHelpTicketAttachment,
 } from "./attachment.service";
 
 const logger = getLogger([APP_LOG_CATEGORY, "help", "tickets"]);
@@ -52,7 +53,9 @@ export class HelpTicketService {
     private readonly idGenerator: HelpTicketIdGenerator = createHelpTicketId,
   ) {}
 
-  async createTicket(input: CreateHelpTicketInput): Promise<HelpTicketServiceResult<CreateHelpTicketResponse>> {
+  async createTicket(
+    input: CreateHelpTicketInput,
+  ): Promise<HelpTicketServiceResult<CreateHelpTicketResponse>> {
     const createInputResult = this.validateCreateTicketInput(input);
 
     if (!createInputResult.ok) {
@@ -97,10 +100,11 @@ export class HelpTicketService {
     }
 
     const whereClause = buildTicketWhereClause({
-      actorUserId: scope === "mine" ? actorUser?.id ?? null : null,
+      actorUserId: scope === "mine" ? (actorUser?.id ?? null) : null,
       status,
     });
-    const orderBy = input.query.sortOrder === "asc" ? asc(helpTickets.createdAt) : desc(helpTickets.createdAt);
+    const orderBy =
+      input.query.sortOrder === "asc" ? asc(helpTickets.createdAt) : desc(helpTickets.createdAt);
     const rows = this.database.db
       .select()
       .from(helpTickets)
@@ -145,7 +149,10 @@ export class HelpTicketService {
     principalKind: "apiKey" | "session";
     ticketId: string;
   }): HelpTicketServiceResult<HelpTicketDetailResponse> {
-    const detailResult = this.readAuthorizedTicketDetail(input);
+    const detailResult = this.readTicketDetailForPermission({
+      ...input,
+      requiredPermission: "help:read",
+    });
 
     if (!detailResult.ok) {
       return detailResult;
@@ -160,18 +167,17 @@ export class HelpTicketService {
     request: UpdateHelpTicketStatusRequest;
     ticketId: string;
   }): HelpTicketServiceResult<HelpTicketDetailResponse> {
-    const detail = this.readTicketDetail(input.ticketId);
+    const detailResult = this.readTicketDetailForPermission({
+      ...input,
+      requiredPermission: "help:manage",
+    });
 
-    if (!detail) {
-      return { ok: false, status: 404, body: ticketNotFoundError() };
-    }
-
-    if (input.principalKind === "session" && !canManageAllTickets(input.actor)) {
-      return { ok: false, status: 403, body: forbiddenError("help:manage") };
+    if (!detailResult.ok) {
+      return detailResult;
     }
 
     const actorUser = input.actor ? this.readActorUser(input.actor) : null;
-    const previousStatus = detail.status;
+    const previousStatus = detailResult.detail.status;
     const nextStatus = input.request.status;
     const now = new Date().toISOString();
 
@@ -204,16 +210,47 @@ export class HelpTicketService {
       : { ok: false, status: 500, body: internalHelpTicketError() };
   }
 
+  async deleteTicket(input: {
+    actor: PublicUser | null;
+    principalKind: "apiKey" | "session";
+    ticketId: string;
+  }): Promise<HelpTicketServiceResult<DeleteHelpTicketResponse>> {
+    const detailResult = this.readTicketDetailForPermission({
+      ...input,
+      requiredPermission: "help:manage",
+    });
+
+    if (!detailResult.ok) {
+      return detailResult;
+    }
+
+    this.database.db.delete(helpTickets).where(eq(helpTickets.id, input.ticketId)).run();
+    await this.attachmentService.deleteTicketStorage(input.ticketId);
+
+    logger.info("Deleted help ticket {ticketId} by {actorId}", {
+      ticketId: input.ticketId,
+      actorId: input.actor?.id ?? "api-key",
+      principalKind: input.principalKind,
+    });
+
+    return { ok: true, body: { deletedId: input.ticketId } };
+  }
+
   async getAttachmentDownload(input: {
     actor: PublicUser | null;
     attachmentId: string;
     principalKind: "apiKey" | "session";
     ticketId: string;
-  }): Promise<HelpTicketServiceResult<{
-    attachment: TicketAttachmentRow;
-    file: Bun.BunFile;
-  }>> {
-    const detailResult = this.readAuthorizedTicketDetail(input);
+  }): Promise<
+    HelpTicketServiceResult<{
+      attachment: TicketAttachmentRow;
+      file: Bun.BunFile;
+    }>
+  > {
+    const detailResult = this.readTicketDetailForPermission({
+      ...input,
+      requiredPermission: "help:read",
+    });
 
     if (!detailResult.ok) {
       return detailResult;
@@ -247,13 +284,15 @@ export class HelpTicketService {
   }
 
   private readActorUser(actor: PublicUser): User | null {
-    return (
-      this.database.db.select().from(users).where(eq(users.publicId, actor.id)).get() ?? null
-    );
+    return this.database.db.select().from(users).where(eq(users.publicId, actor.id)).get() ?? null;
   }
 
   private readTicketDetail(ticketId: string): HelpTicketDetail | null {
-    const ticket = this.database.db.select().from(helpTickets).where(eq(helpTickets.id, ticketId)).get();
+    const ticket = this.database.db
+      .select()
+      .from(helpTickets)
+      .where(eq(helpTickets.id, ticketId))
+      .get();
 
     if (!ticket) {
       return null;
@@ -299,7 +338,11 @@ export class HelpTicketService {
 
   private ticketExists(ticketId: string): boolean {
     return Boolean(
-      this.database.db.select({ id: helpTickets.id }).from(helpTickets).where(eq(helpTickets.id, ticketId)).get(),
+      this.database.db
+        .select({ id: helpTickets.id })
+        .from(helpTickets)
+        .where(eq(helpTickets.id, ticketId))
+        .get(),
     );
   }
 
@@ -348,9 +391,10 @@ export class HelpTicketService {
     );
   }
 
-  private readAuthorizedTicketDetail(input: {
+  private readTicketDetailForPermission(input: {
     actor: PublicUser | null;
     principalKind: "apiKey" | "session";
+    requiredPermission: "help:manage" | "help:read";
     ticketId: string;
   }):
     | { ok: true; detail: HelpTicketDetail }
@@ -361,8 +405,11 @@ export class HelpTicketService {
       return { ok: false, status: 404, body: ticketNotFoundError() };
     }
 
-    if (input.principalKind === "session" && !canReadTicket(input.actor, detail.createdBy.id)) {
-      return { ok: false, status: 403, body: forbiddenError("help:read") };
+    if (
+      input.principalKind === "session" &&
+      !canAccessTicketForPermission(input.actor, detail, input.requiredPermission)
+    ) {
+      return { ok: false, status: 403, body: forbiddenError(input.requiredPermission) };
     }
 
     return { ok: true, detail };
@@ -492,7 +539,9 @@ export class HelpTicketService {
       : { ok: false, status: 500, body: internalHelpTicketError() };
   }
 
-  private validateCreateTicketInput(input: CreateHelpTicketInput):
+  private validateCreateTicketInput(
+    input: CreateHelpTicketInput,
+  ):
     | { ok: true; actorUser: User; description: string; title: string }
     | { ok: false; status: 403 | 422; body: ApiErrorResponse } {
     const actorUser = this.readActorUser(input.actor);
@@ -585,6 +634,16 @@ function canReadTicket(actor: PublicUser | null, ticketOwnerPublicUserId: string
       (ticketOwnerPublicUserId === actor.id ||
         hasPermissionGrant(actor.permissions, "help:manage")),
   );
+}
+
+function canAccessTicketForPermission(
+  actor: PublicUser | null,
+  detail: HelpTicketDetail,
+  permission: "help:manage" | "help:read",
+): boolean {
+  return permission === "help:manage"
+    ? canManageAllTickets(actor)
+    : canReadTicket(actor, detail.createdBy.id);
 }
 
 function createHelpTicketId(): string {
@@ -682,4 +741,3 @@ function internalHelpTicketError(): ApiErrorResponse {
     },
   };
 }
-

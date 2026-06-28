@@ -1,4 +1,8 @@
-import type { HelpTicketListParams, PublicUser, UpdateHelpTicketStatusRequest } from "@arrtemplar/shared";
+import type {
+  HelpTicketListParams,
+  PublicUser,
+  UpdateHelpTicketStatusRequest,
+} from "@arrtemplar/shared";
 import { Elysia } from "elysia";
 import { ApiKeyService } from "../auth/api-key.service";
 import { AuthService } from "../auth/auth.service";
@@ -12,6 +16,7 @@ import {
   createHelpTicketBodySchema,
   helpTicketAttachmentParamsSchema,
   helpTicketCookieSchema,
+  helpTicketDeleteResponseSchema,
   helpTicketDetailResponseSchema,
   helpTicketListQuerySchema,
   helpTicketListResponseSchema,
@@ -86,7 +91,8 @@ export function createHelpRoutes(options: CreateHelpRoutesOptions) {
         },
         detail: {
           summary: "List help tickets",
-          description: "Lists help tickets for the signed-in user or for full-authority API clients.",
+          description:
+            "Lists help tickets for the signed-in user or for full-authority API clients.",
           tags: ["Help"],
         },
       },
@@ -212,6 +218,44 @@ export function createHelpRoutes(options: CreateHelpRoutesOptions) {
         },
       },
     )
+    .delete(
+      "/tickets/:ticketId",
+      async ({ cookie, params, request, server, status }) => {
+        return (await handleHelpRouteAsync(
+          {
+            apiKeyService,
+            authService,
+            cookieValue: cookie[SESSION_COOKIE_NAME]?.value,
+            request,
+            requiredPermission: "help:manage",
+            server,
+          },
+          status as StatusHandler,
+          async (access) =>
+            responseOrStatus(
+              await ticketService.deleteTicket({
+                actor: access.actor,
+                principalKind: access.principalKind,
+                ticketId: params.ticketId,
+              }),
+              status as StatusHandler,
+            ),
+        )) as never;
+      },
+      {
+        params: helpTicketParamsSchema,
+        cookie: helpTicketCookieSchema,
+        response: {
+          200: helpTicketDeleteResponseSchema,
+          ...helpTicketRouteErrorResponses,
+        },
+        detail: {
+          summary: "Delete help ticket",
+          description: "Deletes one help ticket for admins or full-authority API clients.",
+          tags: ["Help"],
+        },
+      },
+    )
     .get(
       "/tickets/:ticketId/attachments/:attachmentId",
       async ({ cookie, params, request, server, status }) => {
@@ -319,7 +363,10 @@ function handleHelpRoute<T>(
 async function handleHelpRouteAsync<T>(
   input: Parameters<typeof readHelpRoutePrincipal>[0],
   status: StatusHandler,
-  onAllowed: (access: { actor: PublicUser | null; principalKind: "apiKey" | "session" }) => Promise<T>,
+  onAllowed: (access: {
+    actor: PublicUser | null;
+    principalKind: "apiKey" | "session";
+  }) => Promise<T>,
 ): Promise<T | unknown> {
   const access = resolveHelpAccess(input, status);
 

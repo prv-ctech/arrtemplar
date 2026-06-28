@@ -49,16 +49,17 @@ describe("router route taxonomy", () => {
     expect(source).not.toContain("AccountThemeRoute");
   });
 
-  it("defines help routes and sidebar entry", async () => {
+  it("defines help routes with FAQ redirect and sidebar entry", async () => {
     const source = await Bun.file(routerSourcePath).text();
     const appShellSource = await Bun.file(appShellSourcePath).text();
 
-    expect(source).toContain("HelpHomeRoute");
+    expect(source).toContain('to="/help/faq"');
     expect(source).toContain("HelpTicketsRoute");
     expect(source).toContain("HelpFaqRoute");
     expect(source).toContain('path: "help"');
     expect(source).toContain('path: "tickets"');
     expect(source).toContain('path: "faq"');
+    expect(source).not.toContain("HelpHomeRoute");
     expect(appShellSource).toContain('label: "Help"');
     expect(appShellSource).toContain('to: "/help"');
     expect(appShellSource).toContain("activeExact: false");

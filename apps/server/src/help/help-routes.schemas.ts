@@ -136,6 +136,9 @@ export const helpTicketDetailResponseSchema = t.Object({
   ticket: helpTicketDetailSchema,
 });
 export const helpTicketStatusResponseSchema = helpTicketDetailResponseSchema;
+export const helpTicketDeleteResponseSchema = t.Object({
+  deletedId: helpTicketIdSchema,
+});
 export const helpTicketRouteErrorResponses = {
   401: apiErrorResponseSchema,
   403: apiErrorResponseSchema,

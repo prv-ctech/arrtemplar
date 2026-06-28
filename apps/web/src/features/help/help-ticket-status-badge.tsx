@@ -2,9 +2,22 @@ import type { HelpTicketStatus } from "@arrtemplar/shared";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-export function HelpTicketStatusBadge({ status }: { status: HelpTicketStatus }) {
+export function HelpTicketStatusBadge({
+  className,
+  status,
+}: {
+  className?: string;
+  status: HelpTicketStatus;
+}) {
   return (
-    <Badge className={cn("capitalize", readHelpTicketStatusClassName(status))} variant="outline">
+    <Badge
+      className={cn(
+        "rounded-md px-1.5 py-0.5 capitalize",
+        readHelpTicketStatusClassName(status),
+        className,
+      )}
+      variant="outline"
+    >
       {status.replaceAll("_", " ")}
     </Badge>
   );

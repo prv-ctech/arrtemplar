@@ -184,6 +184,15 @@ describe("help routes", () => {
       }),
     );
     const viewerDetailBody = await viewerDetailResponse.json();
+    const adminDeleteResponse = await app.handle(
+      createDeleteRequest(`/api/help/tickets/${createBody.ticket.id}`, { cookie: adminCookie }),
+    );
+    const adminDeleteBody = await adminDeleteResponse.json();
+    const deletedDetailResponse = await app.handle(
+      new Request(`http://localhost/api/help/tickets/${createBody.ticket.id}`, {
+        headers: { cookie: viewerCookie },
+      }),
+    );
 
     expect(adminListResponse.status).toBe(200);
     expect(adminListBody.items.map((item: { id: string }) => item.id)).toContain(
@@ -196,13 +205,16 @@ describe("help routes", () => {
     expect(apiKeyPatchBody.ticket.status).toBe("completed");
     expect(viewerDetailResponse.status).toBe(200);
     expect(viewerDetailBody.ticket.status).toBe("completed");
+    expect(adminDeleteResponse.status).toBe(200);
+    expect(adminDeleteBody).toEqual({ deletedId: createBody.ticket.id });
+    expect(deletedDetailResponse.status).toBe(404);
     expect(
       database.db
         .select()
         .from(helpTickets)
         .all()
         .some((row) => row.id === createBody.ticket.id),
-    ).toBe(true);
+    ).toBe(false);
   });
 });
 
@@ -401,6 +413,30 @@ function createJsonRequest(
     method: options.method,
     headers,
     body: JSON.stringify(body),
+  });
+}
+
+function createDeleteRequest(
+  path: string,
+  options: { authorization?: string; cookie?: string; includeCsrf?: boolean },
+): Request {
+  const headers = new Headers({ origin: TEST_WEB_ORIGIN });
+
+  if (options.includeCsrf !== false) {
+    headers.set(CSRF_HEADER_NAME, CSRF_HEADER_VALUE);
+  }
+
+  if (options.cookie) {
+    headers.set("cookie", options.cookie);
+  }
+
+  if (options.authorization) {
+    headers.set("authorization", options.authorization);
+  }
+
+  return new Request(`http://localhost${path}`, {
+    method: "DELETE",
+    headers,
   });
 }
 

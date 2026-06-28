@@ -47,36 +47,45 @@ export function HelpTicketCreateDialog({
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent aria-describedby={undefined} className="max-w-xl">
-        <DialogHeader>
-          <DialogTitle>New ticket</DialogTitle>
+      <DialogContent aria-describedby={undefined} className="max-w-xl gap-3 rounded-xl p-4">
+        <DialogHeader className="gap-1">
+          <DialogTitle className="text-base">New ticket</DialogTitle>
           <DialogDescription className="sr-only">
             Create a help ticket with a short summary, details, and optional attachments.
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-3">
-          <Label className="sr-only" htmlFor="help-ticket-title">
-            Title
-          </Label>
-          <Input
-            id="help-ticket-title"
-            onChange={(event) => onTitleChange(event.target.value)}
-            placeholder="Title"
-            value={draftTitle}
-          />
-          <Label className="sr-only" htmlFor="help-ticket-description">
-            Description
-          </Label>
-          <Textarea
-            id="help-ticket-description"
-            onChange={(event) => onDescriptionChange(event.target.value)}
-            placeholder="Describe issue"
-            value={draftDescription}
-          />
-          <div className="grid gap-3">
+        <div className="grid gap-2.5">
+          <div className="grid gap-1.5">
+            <Label className="text-xs" htmlFor="help-ticket-title">
+              Title
+            </Label>
+            <Input
+              className="h-8 rounded-md px-2.5 text-sm"
+              id="help-ticket-title"
+              onChange={(event) => onTitleChange(event.target.value)}
+              placeholder="Short summary"
+              value={draftTitle}
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label className="text-xs" htmlFor="help-ticket-description">
+              Description
+            </Label>
+            <Textarea
+              className="min-h-28 rounded-md px-2.5 py-2"
+              id="help-ticket-description"
+              onChange={(event) => onDescriptionChange(event.target.value)}
+              placeholder="What happened?"
+              value={draftDescription}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label className="text-xs" htmlFor="help-ticket-files">
+              Attachments
+            </Label>
             <button
               aria-label="Ticket attachment drop area"
-              className="rounded-2xl border border-dashed border-border bg-card/70 p-4 text-left"
+              className="rounded-lg border border-dashed border-border bg-muted/20 p-3 text-left transition-colors hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onClick={() => inputRef.current?.click()}
               onDragOver={(event) => event.preventDefault()}
               onDrop={(event) => {
@@ -85,48 +94,78 @@ export function HelpTicketCreateDialog({
               }}
               type="button"
             >
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-foreground">Attachments</p>
-                  <p className="text-xs text-muted-foreground">JPG, PNG, WebP, MP4, WebM, MOV.</p>
-                </div>
-                <span className="inline-flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground">
+              <span className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-foreground">
+                    Drop files or browse
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    JPG, PNG, WebP, MP4, WebM, MOV.
+                  </span>
+                </span>
+                <span className="inline-flex h-7 items-center rounded-md border border-border bg-background px-2 text-xs text-foreground">
                   Add files
                 </span>
-              </div>
+              </span>
             </button>
             <input
-                  accept=".jpg,.jpeg,.png,.webp,.mp4,.webm,.mov"
+              accept=".jpg,.jpeg,.png,.webp,.mp4,.webm,.mov"
+              aria-label="Ticket attachments"
               className="sr-only"
-                  id="help-ticket-files"
+              id="help-ticket-files"
               multiple
-              onChange={(event: ChangeEvent<HTMLInputElement>) => onAttachmentsChange(event.target.files)}
+              onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                onAttachmentsChange(event.target.files)
+              }
               ref={inputRef}
               type="file"
             />
             {attachments.length ? (
-              <div className="mt-3 grid gap-2">
+              <div className="grid gap-1.5">
                 {attachments.map((attachment, index) => (
-                  <div className="flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-background/80 px-3 py-2" key={`${attachment.name}-${attachment.size}-${attachment.lastModified}`}>
+                  <div
+                    className="flex items-center justify-between gap-3 rounded-md border border-border/70 bg-background/80 px-2 py-1.5"
+                    key={`${attachment.name}-${attachment.size}-${attachment.lastModified}`}
+                  >
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-foreground">{attachment.name}</p>
-                      <p className="text-xs text-muted-foreground">{formatHelpTicketFileSize(attachment.size)}</p>
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {attachment.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatHelpTicketFileSize(attachment.size)}
+                      </p>
                     </div>
-                    <Button onClick={() => onRemoveAttachment(index)} size="sm" type="button" variant="ghost">
+                    <Button
+                      className="h-7 rounded-md px-2 text-xs"
+                      onClick={() => onRemoveAttachment(index)}
+                      size="sm"
+                      type="button"
+                      variant="ghost"
+                    >
                       Remove
                     </Button>
                   </div>
                 ))}
               </div>
             ) : null}
-            {draftError ? <p className="mt-3 text-sm text-destructive">{draftError}</p> : null}
+            {draftError ? <p className="text-xs text-destructive">{draftError}</p> : null}
           </div>
         </div>
-        <DialogFooter>
-          <Button onClick={() => onOpenChange(false)} type="button" variant="ghost">
+        <DialogFooter className="gap-2 pt-1">
+          <Button
+            className="h-8 rounded-md px-2.5 text-sm"
+            onClick={() => onOpenChange(false)}
+            type="button"
+            variant="ghost"
+          >
             Cancel
           </Button>
-          <Button disabled={createDisabled} onClick={onSubmit} type="button">
+          <Button
+            className="h-8 rounded-md px-2.5 text-sm"
+            disabled={createDisabled}
+            onClick={onSubmit}
+            type="button"
+          >
             {isSubmitting ? "Submitting" : "Submit"}
           </Button>
         </DialogFooter>

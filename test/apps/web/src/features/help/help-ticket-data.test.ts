@@ -1,8 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import {
+  applyHelpTicketDeleteToList,
   applyHelpTicketStatusToList,
   helpTicketListQueryOptions,
   useCreateHelpTicketMutation,
+  useDeleteHelpTicketMutation,
   useHelpTicketDetailQuery,
   useHelpTicketListQuery,
   useUpdateHelpTicketStatusMutation,
@@ -46,6 +48,7 @@ describe("help ticket query hooks", () => {
     expect(typeof useHelpTicketDetailQuery).toBe("function");
     expect(typeof useCreateHelpTicketMutation).toBe("function");
     expect(typeof useUpdateHelpTicketStatusMutation).toBe("function");
+    expect(typeof useDeleteHelpTicketMutation).toBe("function");
   });
 
   it("uses TanStack Query optimistic status updates for ticket mutations", async () => {
@@ -64,6 +67,15 @@ describe("help ticket query hooks", () => {
     expect(updated?.items[0]?.status).toBe("completed");
     expect(updated?.pagination).toEqual(helpTicketList.pagination);
     expect(applyHelpTicketStatusToList(undefined, "arr1241415", "completed")).toBeUndefined();
+  });
+
+  it("removes deleted tickets from cached lists", () => {
+    const updated = applyHelpTicketDeleteToList(helpTicketList, "arr1241415");
+
+    expect(updated?.items).toEqual([]);
+    expect(updated?.pagination.total).toBe(0);
+    expect(updated?.pagination.totalPages).toBe(0);
+    expect(applyHelpTicketDeleteToList(undefined, "arr1241415")).toBeUndefined();
   });
 
   it("validates ticket draft files on the client before upload", () => {

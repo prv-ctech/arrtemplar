@@ -153,6 +153,8 @@ export const TOAST_NOTIFICATION_EVENTS = {
   "auth.signed_out": { severity: "success", importance: "standard" },
   "help.ticket.create.failed": { severity: "error", importance: "important" },
   "help.ticket.created": { severity: "success", importance: "important" },
+  "help.ticket.delete.failed": { severity: "error", importance: "important" },
+  "help.ticket.deleted": { severity: "success", importance: "important" },
   "help.ticket.status.failed": { severity: "error", importance: "important" },
   "help.ticket.status.updated": { severity: "success", importance: "standard" },
   "api_keys.create.failed": { severity: "error", importance: "important" },

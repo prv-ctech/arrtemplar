@@ -1,6 +1,5 @@
-import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
+import { createRootRoute, createRoute, createRouter, Navigate } from "@tanstack/react-router";
 import { HelpFaqRoute } from "../features/help/FaqPage";
-import { HelpHomeRoute } from "../features/help/HelpHome";
 import { HelpTicketsRoute } from "../features/help/TicketsPage";
 import { PersonalProfileRoute, UserProfilePage } from "../features/user/UserProfilePage";
 import { UserSettings } from "../features/user/UserSettings";
@@ -61,7 +60,7 @@ const helpRoute = createRoute({
 const helpIndexRoute = createRoute({
   getParentRoute: () => helpRoute,
   path: "/",
-  component: HelpHomeRoute,
+  component: () => <Navigate replace to="/help/faq" />,
 });
 
 const helpTicketsRoute = createRoute({
@@ -212,7 +211,7 @@ const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
   authenticatedRoute.addChildren([dashboardRoute]),
-  helpRoute.addChildren([helpIndexRoute, helpTicketsRoute, helpFaqRoute]),
+  helpRoute.addChildren([helpIndexRoute, helpFaqRoute, helpTicketsRoute]),
   profileRoute.addChildren([
     profileIndexRoute,
     profileSettingsIndexRoute,

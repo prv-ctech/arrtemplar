@@ -1,6 +1,5 @@
 import type { HelpTicketDetail } from "@arrtemplar/shared";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { getHelpTicketAttachmentUrl } from "@/lib/api/help";
 import { formatHelpTicketFileSize } from "./help-ticket-data";
 
@@ -12,41 +11,47 @@ export function HelpTicketAttachmentGrid({
   ticketId: string;
 }) {
   return attachments.length ? (
-    <div className="grid gap-3 sm:grid-cols-2">
+    <div className="grid gap-1.5">
       {attachments.map((attachment) => {
         const attachmentUrl = getHelpTicketAttachmentUrl(ticketId, attachment.id);
+        const mediaLabel = attachment.mediaKind === "image" ? "Image" : "Video";
 
         return (
-          <Card className="rounded-2xl border-border/80 bg-card/80" key={attachment.id}>
-            <CardContent className="grid gap-3 p-4">
-              {attachment.mediaKind === "image" ? (
-                <img
-                  alt={attachment.originalFileName}
-                  className="aspect-video w-full rounded-xl border border-border object-cover"
-                  src={attachmentUrl}
-                />
-              ) : (
-                <div className="flex aspect-video items-center justify-center rounded-xl border border-dashed border-border bg-background text-sm text-muted-foreground">
-                  Video
-                </div>
-              )}
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-foreground">{attachment.originalFileName}</p>
-                <p className="text-xs text-muted-foreground">{formatHelpTicketFileSize(attachment.storedSizeBytes)}</p>
+          <div
+            className="flex items-center gap-3 rounded-lg border border-border/80 bg-card/45 p-2"
+            key={attachment.id}
+          >
+            <div className="size-14 shrink-0 overflow-hidden rounded-md border border-border bg-background">
+              <div className="flex size-full items-center justify-center text-xs text-muted-foreground">
+                {mediaLabel}
               </div>
-              <Button asChild size="sm" type="button" variant="secondary">
-                <a href={attachmentUrl} rel="noreferrer" target="_blank">
-                  Open
-                </a>
-              </Button>
-            </CardContent>
-          </Card>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-foreground">
+                {attachment.originalFileName}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {formatHelpTicketFileSize(attachment.storedSizeBytes)}
+              </p>
+            </div>
+            <Button
+              asChild
+              className="h-7 rounded-md px-2 text-xs"
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
+              <a href={attachmentUrl} rel="noreferrer" target="_blank">
+                Open
+              </a>
+            </Button>
+          </div>
         );
       })}
     </div>
   ) : (
-    <Card className="rounded-2xl border-dashed bg-card/70">
-      <CardContent className="p-4 text-sm text-muted-foreground">No attachments.</CardContent>
-    </Card>
+    <div className="rounded-lg border border-dashed border-border bg-card/45 p-3 text-sm text-muted-foreground">
+      No attachments.
+    </div>
   );
 }

@@ -131,6 +131,10 @@ export type UpdateHelpTicketStatusRequest = {
   status: HelpTicketStatus;
 };
 
+export type DeleteHelpTicketResponse = {
+  deletedId: string;
+};
+
 export function isHelpTicketId(value: unknown): value is string {
   return typeof value === "string" && HELP_TICKET_ID_PATTERN.test(value);
 }

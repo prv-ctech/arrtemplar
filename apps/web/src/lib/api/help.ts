@@ -1,9 +1,11 @@
-import type {
-  CreateHelpTicketInput,
-  HelpTicketDetail,
-  HelpTicketListParams,
-  HelpTicketListResponse,
-  UpdateHelpTicketStatusRequest,
+import {
+  type CreateHelpTicketInput,
+  type DeleteHelpTicketResponse,
+  type HelpTicketDetail,
+  type HelpTicketListParams,
+  type HelpTicketListResponse,
+  isHelpTicketId,
+  type UpdateHelpTicketStatusRequest,
 } from "@arrtemplar/shared";
 import {
   createApiClientErrorFromResponse,
@@ -85,10 +87,34 @@ export async function updateHelpTicketStatus(
   return normalizeHelpTicketDetailResponse(response).ticket;
 }
 
+export async function deleteHelpTicket(ticketId: string): Promise<DeleteHelpTicketResponse> {
+  const response = await requestApiJson({
+    fallback: "Help ticket delete failed.",
+    method: "DELETE",
+    path: `/api/help/tickets/${encodeURIComponent(ticketId)}`,
+  });
+
+  return normalizeDeleteHelpTicketResponse(response);
+}
+
 export function getHelpTicketAttachmentUrl(ticketId: string, attachmentId: string): string {
   return resolveApiRequestUrl(
     `/api/help/tickets/${encodeURIComponent(ticketId)}/attachments/${encodeURIComponent(attachmentId)}`,
   );
+}
+
+function normalizeDeleteHelpTicketResponse(value: unknown): DeleteHelpTicketResponse {
+  if (!value || typeof value !== "object") {
+    throw new Error("Help ticket delete response was invalid.");
+  }
+
+  const deletedId = (value as { deletedId?: unknown }).deletedId;
+
+  if (!isHelpTicketId(deletedId)) {
+    throw new Error("Help ticket delete response was invalid.");
+  }
+
+  return { deletedId };
 }
 
 function createHelpTicketSearchParams(params: NormalizedHelpTicketListParams): URLSearchParams {
