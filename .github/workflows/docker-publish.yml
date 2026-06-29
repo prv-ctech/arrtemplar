@@ -119,17 +119,34 @@ jobs:
           ignore-unfixed: true
           exit-code: "1"
 
+      - name: Detect Trivy SARIF outputs
+        id: trivy_outputs
+        run: |
+          set -euo pipefail
+
+          if [[ -f trivy-results-amd64.sarif ]]; then
+            echo "amd64_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "amd64_exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [[ -f trivy-results-arm64.sarif ]]; then
+            echo "arm64_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "arm64_exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Upload amd64 Trivy results
-        if: always()
+        if: always() && steps.trivy_outputs.outputs.amd64_exists == 'true'
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-results-amd64.sarif
 
       - name: Upload arm64 Trivy results
-        if: always()
+        if: always() && steps.trivy_outputs.outputs.arm64_exists == 'true'
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-results-arm64.sarif
 
