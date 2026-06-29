@@ -112,7 +112,10 @@ jobs:
           context: .
           file: ./Dockerfile
           platforms: linux/arm64
-          outputs: type=oci,dest=/tmp/arrtemplar-scan-arm64.tar
+          # Trivy supports Docker/kaniko tar archives via --input and OCI layouts
+          # as directories. Buildx's `type=oci,dest=...tar` emits an OCI layout
+          # tarball, which makes the arm64 scan fail before SARIF generation.
+          outputs: type=docker,dest=/tmp/arrtemplar-scan-arm64.tar
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
