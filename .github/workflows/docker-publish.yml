@@ -92,8 +92,13 @@ jobs:
       - name: Scan amd64 runtime image with Trivy
         id: trivy_amd64
         continue-on-error: ${{ github.ref_type == 'branch' && github.ref_name != 'main' }}
-        uses: aquasecurity/trivy-action@v0.33.1
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
+          # Pin the Trivy binary explicitly. trivy-action's default version has
+          # been yanked before (aquasecurity/trivy#10265 supply-chain response),
+          # which made setup-trivy fail with exit code 1 during install. Pinning
+          # guards against a future yank of the default.
+          version: "v0.71.2"
           image-ref: arrtemplar:scan-amd64
           format: sarif
           output: trivy-results-amd64.sarif
@@ -114,8 +119,9 @@ jobs:
       - name: Scan arm64 runtime image with Trivy
         id: trivy_arm64
         continue-on-error: ${{ github.ref_type == 'branch' && github.ref_name != 'main' }}
-        uses: aquasecurity/trivy-action@v0.33.1
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
+          version: "v0.71.2"
           input: /tmp/arrtemplar-scan-arm64.tar
           format: sarif
           output: trivy-results-arm64.sarif
