@@ -1,3 +1,4 @@
+import { extname, join } from "node:path";
 import { APP_LOG_CATEGORY, APP_NAME, APP_VERSION, type HealthResponse } from "@arrtemplar/shared";
 import { cors } from "@elysia/cors";
 import { openapi } from "@elysia/openapi";
@@ -63,6 +64,7 @@ type RequestLogContext = {
 
 export type CreateAppOptions = {
   database?: DatabaseClient;
+  frontendDistRoot?: string | null;
   loginRateLimiter?: LoginRateLimiter;
   oauthClientSecretEncryptionKey?: string | null;
   sessionCookieSecure?: boolean;
@@ -70,6 +72,9 @@ export type CreateAppOptions = {
 
 export function createApp(options: CreateAppOptions = {}) {
   const database = options.database ?? createDatabase();
+  const frontendBuildConfig = resolveFrontendBuildConfig(
+    "frontendDistRoot" in options ? options.frontendDistRoot : env.frontendDistRoot,
+  );
   const authRoutesOptions = {
     database,
     oauthClientSecretEncryptionKey:
@@ -80,7 +85,7 @@ export function createApp(options: CreateAppOptions = {}) {
     ...(options.loginRateLimiter ? { rateLimiter: options.loginRateLimiter } : {}),
   };
 
-  return new Elysia()
+  const app = new Elysia()
     .use(
       elysiaLogger({
         category: [APP_LOG_CATEGORY, "http"],
@@ -154,29 +159,6 @@ export function createApp(options: CreateAppOptions = {}) {
       }),
     )
     .get(
-      "/",
-      ({ request }): BackendRootResponse => ({
-        name: APP_NAME,
-        version: APP_VERSION,
-        service: "backend",
-        frontendUrl: env.webOrigin,
-        links: {
-          frontend: env.webOrigin,
-          health: resolveRequestUrl("/health", request),
-          openapi: resolveRequestUrl("/openapi", request),
-        },
-      }),
-      {
-        response: backendRootResponseSchema,
-        detail: {
-          summary: "Show backend service links",
-          description:
-            "Confirms the Elysia API is running and points developers to the Vite frontend, health endpoint, and OpenAPI UI.",
-          tags: ["System"],
-        },
-      },
-    )
-    .get(
       "/health",
       (): HealthResponse => ({
         name: APP_NAME,
@@ -193,6 +175,36 @@ export function createApp(options: CreateAppOptions = {}) {
         },
       },
     );
+
+  if (frontendBuildConfig) {
+    return app.get("/*", ({ request }) =>
+      serveFrontendRequest(new URL(request.url).pathname, frontendBuildConfig),
+    );
+  }
+
+  return app.get(
+    "/",
+    ({ request }): BackendRootResponse => ({
+      name: APP_NAME,
+      version: APP_VERSION,
+      service: "backend",
+      frontendUrl: env.webOrigin,
+      links: {
+        frontend: env.webOrigin,
+        health: resolveRequestUrl("/health", request),
+        openapi: resolveRequestUrl("/openapi", request),
+      },
+    }),
+    {
+      response: backendRootResponseSchema,
+      detail: {
+        summary: "Show backend service links",
+        description:
+          "Confirms the Elysia API is running and points developers to the Vite frontend, health endpoint, and OpenAPI UI.",
+        tags: ["System"],
+      },
+    },
+  );
 }
 
 export type App = ReturnType<typeof createApp>;
@@ -235,4 +247,76 @@ function normalizeRequestId(value: string): string | null {
   const requestId = value.trim();
 
   return requestIdPattern.test(requestId) ? requestId : null;
+}
+
+type FrontendBuildConfig = {
+  distRoot: string;
+  indexPath: string;
+};
+
+function resolveFrontendBuildConfig(
+  frontendDistRoot: string | null | undefined,
+): FrontendBuildConfig | null {
+  const distRoot = frontendDistRoot?.trim();
+
+  if (!distRoot) {
+    return null;
+  }
+
+  return {
+    distRoot,
+    indexPath: join(distRoot, "index.html"),
+  };
+}
+
+async function serveFrontendRequest(
+  pathname: string,
+  frontendBuildConfig: FrontendBuildConfig,
+): Promise<ReturnType<typeof Bun.file> | Response> {
+  if (isReservedBackendPath(pathname)) {
+    return new Response("Not Found", { status: 404 });
+  }
+
+  const assetPath = resolveFrontendAssetPath(pathname, frontendBuildConfig.distRoot);
+
+  if (assetPath) {
+    const assetFile = Bun.file(assetPath);
+
+    if (await assetFile.exists()) {
+      return assetFile;
+    }
+
+    if (extname(assetPath)) {
+      return new Response("Not Found", { status: 404 });
+    }
+  }
+
+  const indexFile = Bun.file(frontendBuildConfig.indexPath);
+
+  if (await indexFile.exists()) {
+    return indexFile;
+  }
+
+  return new Response("Frontend build is missing index.html.", { status: 500 });
+}
+
+function isReservedBackendPath(pathname: string): boolean {
+  return ["/api", "/health", "/openapi"].some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
+
+function resolveFrontendAssetPath(pathname: string, distRoot: string): string | null {
+  const decodedPath = decodeURIComponent(pathname).replaceAll("\\", "/");
+  const pathSegments = decodedPath.split("/").filter(Boolean);
+
+  if (pathSegments.length === 0) {
+    return null;
+  }
+
+  if (pathSegments.some((segment) => segment === "..")) {
+    return null;
+  }
+
+  return join(distRoot, ...pathSegments);
 }

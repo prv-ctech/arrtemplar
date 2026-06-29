@@ -1,0 +1,85 @@
+name: Publish Docker image
+
+"on":
+  push:
+    branches:
+      - main
+    tags:
+      - "v*.*.*"
+      - "*.*.*"
+  workflow_dispatch:
+
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      IMAGE_REPOSITORY: prvctech/arrtemplar
+    steps:
+      - name: Checkout repository
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin "${GITHUB_SHA}"
+          git checkout --detach FETCH_HEAD
+
+      - name: Configure Docker buildx
+        run: |
+          set -euo pipefail
+          docker run --privileged --rm tonistiigi/binfmt --install all
+          docker buildx create --name arrtemplar-builder --driver docker-container --use
+          docker buildx inspect --bootstrap
+
+      - name: Log in to Docker Hub
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "${DOCKERHUB_TOKEN}" | docker login --username prvctech --password-stdin
+
+      - name: Build and push Docker image
+        run: |
+          set -euo pipefail
+          short_sha="$(printf '%s' "${GITHUB_SHA}" | cut -c1-12)"
+          image_tags=(
+            "${IMAGE_REPOSITORY}:sha-${short_sha}"
+          )
+
+          if [[ "${GITHUB_REF}" == 'refs/heads/main' ]]; then
+            image_tags+=("${IMAGE_REPOSITORY}:latest")
+          fi
+
+          if [[ "${GITHUB_REF_TYPE}" == 'tag' ]]; then
+            semver_tag="${GITHUB_REF_NAME#v}"
+
+            if [[ "${semver_tag}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              image_tags+=(
+                "${IMAGE_REPOSITORY}:${semver_tag}"
+                "${IMAGE_REPOSITORY}:${semver_tag%.*}"
+              )
+            fi
+          fi
+
+          tag_args=()
+          for image_tag in "${image_tags[@]}"; do
+            tag_args+=(--tag "${image_tag}")
+          done
+
+          docker buildx build \
+            --file ./Dockerfile \
+            --platform linux/amd64,linux/arm64 \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --cache-from type=gha \
+            --cache-to type=gha,mode=max \
+            --push \
+            "${tag_args[@]}" \
+            .

@@ -16,6 +16,7 @@ describe("server environment database paths", () => {
     expect(env.serverPort).toBe(DEV_SERVER_PORT);
     expect(env.helpTicketStorageRoot).toBe("data/media/ticket");
     expect(env.helpTicketScanMode).toBe("none");
+    expect(env.frontendDistRoot).toBeNull();
     expect(env.logLevel).toBe("debug");
     expect(env.logFilePath).toBe(`data/logs/${APP_IDENTIFIER}.jsonl`);
     expect(env.logFileMaxSizeBytes).toBe(10 * 1024 * 1024);
@@ -56,6 +57,7 @@ describe("server environment database paths", () => {
   it("keeps logging settings overridable", () => {
     expect(
       readRuntimeEnv({
+        FRONTEND_DIST_ROOT: "apps/web/dist",
         HELP_TICKET_STORAGE_ROOT: "tmp/ticket-media",
         HELP_TICKET_SCAN_MODE: "clamd",
         LOG_LEVEL: "trace",
@@ -65,6 +67,7 @@ describe("server environment database paths", () => {
         LOG_CONSOLE: "false",
       }),
     ).toMatchObject({
+      frontendDistRoot: "apps/web/dist",
       helpTicketStorageRoot: "tmp/ticket-media",
       helpTicketScanMode: "clamd",
       logLevel: "trace",

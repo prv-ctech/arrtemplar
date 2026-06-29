@@ -56,10 +56,10 @@ bun run dev
 
 This uses a small Bun-native dev runner instead of Bun workspace `--parallel` mode, so the terminal is not prefixed with package runner labels. Routine Vite output is silenced; backend operational output in the shared dev terminal should come from LogTape. Fatal Vite startup diagnostics are still allowed through stderr so broken frontend startup is not hidden.
 
-| App      | URL                              | Runtime                | Hot reload            |
-| -------- | -------------------------------- | ---------------------- | --------------------- |
-| Backend  | `http://localhost:3000`          | `bun --hot apps/server` | Bun `--hot` (file watcher) |
-| Frontend | `http://localhost:5173`          | `bunx --bun vite --logLevel error` | Vite HMR / React Fast Refresh |
+| App | URL | Runtime | Hot reload |
+| --- | --- | --- | --- |
+| Backend | `http://localhost:3000` | `bun --hot apps/server` | Bun `--hot` (file watcher) |
+| Frontend | `http://localhost:5173` | `bunx --bun vite --logLevel error` | Vite HMR / React Fast Refresh |
 | Typecheck | `bun run dev:typecheck` (manual) | `tsc --noEmit --watch` | TypeScript watch mode |
 
 - **Backend changes** — Bun's `--hot` reloads Elysia automatically. No app restart needed.
@@ -87,6 +87,7 @@ complexity, boundaries). React Doctor owns React-specific diagnostics only and h
 overlap with Fallow. Biome runs last for formatting and linting. See
 `docs/architecture/code-quality-suite.md` for the detailed tool split, ignore policy, and
 official source links.
+
 - **Frontend changes** — Vite HMR updates the browser instantly. No page reload needed.
 - **TypeScript contract changes** — Run `bun run dev:typecheck` in a separate terminal for live type-checking across the workspace.
 - **API calls** — The frontend client uses the browser's current origin. Vite proxies `/health` and `/api` to the backend via `http://localhost:3000`.
@@ -187,3 +188,22 @@ Copy `.env.example` to `.env` for local development.
 - `LOG_FILE_MAX_SIZE_BYTES` defaults to `10485760` bytes before rotation.
 - `LOG_FILE_MAX_FILES` defaults to `5` retained log files.
 - `LOG_CONSOLE` mirrors backend app logs to the terminal. It defaults to `true` in local development and `false` in tests and production.
+
+## Docker image
+
+Pushes to `main` now publish `prvctech/arrtemplar:latest` from `.github/workflows/docker-publish.yml`. Semver tag pushes such as `v1.2.3` also publish matching version tags.
+
+Add this GitHub repository secret before enabling the workflow:
+
+- `DOCKERHUB_TOKEN` — a Docker Hub access token that can push to the `prvctech` namespace.
+
+The published image serves the built frontend and the Bun API together on port `3000`, so the container behaves like one packaged app instead of separate dev services.
+
+Docker defaults:
+
+- `WEB_ORIGIN=http://localhost:3000`
+- `FRONTEND_DIST_ROOT=apps/web/dist`
+- `DATABASE_URL=data/db/arrtemplar-dev.sqlite`
+- `SESSION_COOKIE_SECURE=false`
+
+For real HTTPS deployments, override `WEB_ORIGIN` with your public URL and set `SESSION_COOKIE_SECURE=true`. SQLite and log data live under `/app/data` inside the container.
