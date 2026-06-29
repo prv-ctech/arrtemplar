@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 FROM oven/bun:1.3.14-slim AS build
 
 WORKDIR /app
@@ -8,7 +9,11 @@ COPY apps/server/package.json ./apps/server/package.json
 COPY apps/web/package.json ./apps/web/package.json
 COPY packages/shared/package.json ./packages/shared/package.json
 
-RUN bun install --frozen-lockfile
+# Cache Bun's download cache across local builds. The install cache stores
+# package tarballs (integrity-keyed, architecture-independent); per-platform
+# extraction still happens in the node_modules layer, so this is multi-arch safe.
+RUN --mount=type=cache,target=/root/.bun/install/cache,id=arrtemplar-bun-install \
+    bun install --frozen-lockfile
 
 COPY apps ./apps
 COPY packages ./packages

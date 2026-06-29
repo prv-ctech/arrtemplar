@@ -9,6 +9,7 @@ const serverLogger = getLogger([APP_LOG_CATEGORY, "server"]);
 
 type RuntimeApp = {
   listen: (port: number) => unknown;
+  stop?: (closeActiveConnections?: boolean) => unknown | Promise<unknown>;
 };
 
 type StartServerOptions = {
@@ -21,7 +22,7 @@ type StartServerOptions = {
 
 type RunServerProcessOptions = StartServerOptions & {
   disposeLogging?: () => Promise<void>;
-  registerShutdown?: () => void;
+  registerShutdown?: (options: RegisterShutdownHandlersOptions) => void;
 };
 
 type ShutdownSignal = "SIGINT" | "SIGTERM";
@@ -30,6 +31,7 @@ type RegisterShutdownHandlersOptions = {
   disposeLogging?: () => Promise<void>;
   exitProcess?: (code: number) => void;
   onSignal?: (signal: ShutdownSignal, listener: () => void | Promise<void>) => void;
+  stopServer?: () => unknown | Promise<unknown>;
 };
 
 export async function startServer(options: StartServerOptions = {}): Promise<RuntimeApp> {
@@ -60,8 +62,8 @@ export async function runServerProcess(options: RunServerProcessOptions = {}): P
   } = options;
 
   try {
-    await startServer(startOptions);
-    registerShutdown();
+    const app = await startServer(startOptions);
+    registerShutdown({ stopServer: () => app.stop?.() });
   } catch (error) {
     await disposeLogging();
     throw error;
@@ -72,6 +74,7 @@ export function registerShutdownHandlers(options: RegisterShutdownHandlersOption
   const disposeLogging = options.disposeLogging ?? dispose;
   const exitProcess = options.exitProcess ?? ((code) => process.exit(code));
   const onSignal = options.onSignal ?? ((signal, listener) => process.once(signal, listener));
+  const stopServer = options.stopServer;
   let isShuttingDown = false;
 
   const handleShutdown = async (): Promise<void> => {
@@ -82,6 +85,9 @@ export function registerShutdownHandlers(options: RegisterShutdownHandlersOption
     isShuttingDown = true;
 
     try {
+      // Stop accepting new connections and let in-flight requests drain before
+      // logging is torn down, so final request/error logs still reach the sinks.
+      await stopServer?.();
       await disposeLogging();
     } finally {
       exitProcess(0);

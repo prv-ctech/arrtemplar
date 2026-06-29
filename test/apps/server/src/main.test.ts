@@ -41,6 +41,9 @@ describe("server startup", () => {
     const events: string[] = [];
 
     registerShutdownHandlers({
+      stopServer: async () => {
+        events.push("stop-server");
+      },
       disposeLogging: async () => {
         events.push("dispose");
       },
@@ -56,7 +59,7 @@ describe("server startup", () => {
     await listeners.get("SIGTERM")?.();
 
     expect(Array.from(listeners.keys())).toEqual(["SIGINT", "SIGTERM"]);
-    expect(events).toEqual(["dispose", "exit:0"]);
+    expect(events).toEqual(["stop-server", "dispose", "exit:0"]);
   });
 
   it("flushes logging when startup fails after logging is configured", async () => {
@@ -86,5 +89,32 @@ describe("server startup", () => {
     ).rejects.toThrow(startupError);
 
     expect(events).toEqual(["configure-logging", "migrate", "dispose"]);
+  });
+
+  it("wires the runtime app's stop into the shutdown drain", async () => {
+    let registeredStopServer: (() => unknown | Promise<unknown>) | undefined;
+    const stopped: boolean[] = [];
+    const app = {
+      listen: () => undefined,
+      stop: (closeActiveConnections?: boolean) => {
+        stopped.push(closeActiveConnections ?? false);
+      },
+    };
+
+    await runServerProcess({
+      configureLogging: () => undefined,
+      migrateDatabase: () => undefined,
+      createRuntimeApp: () => app,
+      logServerStarted: () => undefined,
+      registerShutdown: (options: { stopServer?: () => unknown | Promise<unknown> }) => {
+        registeredStopServer = options.stopServer;
+      },
+    });
+
+    expect(typeof registeredStopServer).toBe("function");
+    await registeredStopServer?.();
+    // Graceful drain: stop() is called with no argument (defaults to false --
+    // let in-flight requests finish rather than killing them abruptly).
+    expect(stopped).toEqual([false]);
   });
 });

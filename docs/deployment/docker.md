@@ -84,8 +84,7 @@ docker run -d \
 - Runtime user: the bundled non-root `bun` user (`uid=1000`, `gid=1000` in the upstream `oven/bun:1.3.14-slim` image)
 - Privileged mode: not required
 - Root override: do not add `--user 0:0`
-
-Read-only rootfs is not enabled yet. Keep `/app/data` as the only intended persistent write target, then validate any temporary-path needs before turning on a read-only root filesystem.
+- Read-only root filesystem: supported. The server only writes under `/app/data` (SQLite DB, logs, ticket media), so the root filesystem can be made read-only with `/tmp` mounted as a tmpfs. See the hardening flags below.
 
 If `/app/data` came from an older root-run container, fix the host-side ownership before redeploying. Example one-time fix for a host path such as `/srv/arrtemplar`:
 
@@ -95,11 +94,46 @@ chown -R 1000:1000 /srv/arrtemplar
 
 Do not keep a root override as the long-term fix.
 
+## Security hardening
+
+The image is built to run locked down. The repository ships a ready-to-use reference in `docker-compose.example.yml` (copy it to `docker-compose.yml` and run `docker compose up -d`). The hardening it applies:
+
+- `read_only: true` root filesystem, with `/tmp` on a tmpfs
+- `cap_drop: [ALL]` (the app binds port 3000, so it needs no capabilities)
+- `no-new-privileges:true`
+- `restart: unless-stopped`
+- resource limits (`cpus`, `memory`) and reservations
+- JSON-file log rotation so container stdout/stderr cannot fill the host disk
+- `stop_grace_period: 30s` so `SIGTERM` drains logs and the SQLite WAL checkpoint before `SIGKILL`
+
+Equivalent hardened `docker run` for setups that do not use Compose:
+
+```sh
+docker run -d \
+  --name arrtemplar \
+  -p 7123:3000 \
+  -v /srv/arrtemplar:/app/data \
+  --read-only --tmpfs /tmp \
+  --security-opt no-new-privileges:true \
+  --cap-drop ALL \
+  --restart unless-stopped \
+  --stop-timeout 30 \
+  --memory 1g --cpus 1.0 \
+  --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 \
+  -e WEB_ORIGIN=http://192.168.1.50:7123 \
+  -e SESSION_COOKIE_SECURE=false \
+  prvctech/arrtemplar:latest
+```
+
+If a startup permission or "read-only file system" error appears, it means a path outside `/app/data` was being written. Confirm all of `DATABASE_URL`, `LOG_FILE_PATH`, and `HELP_TICKET_STORAGE_ROOT` resolve under `/app/data`; if you must debug a write, temporarily drop `--read-only` to locate the offender rather than widening the volume.
+
 ## Logs
 
 Application logs go to `/app/data/logs/arrtemplar.jsonl` with rotation controlled by `LOG_FILE_MAX_SIZE_BYTES` and `LOG_FILE_MAX_FILES`.
 
 `LOG_CONSOLE=false` in the image keeps routine app logs out of the container console. Set `LOG_CONSOLE=true` only when you want terminal mirroring for troubleshooting.
+
+With log mirroring off, also cap the container's stdout/stderr so an unexpected flood cannot fill the host disk. The `docker-compose.example.yml` reference does this via the `json-file` driver with `max-size`/`max-file`; the equivalent `docker run` flags are `--log-driver json-file --log-opt max-size=10m --log-opt max-file=3`.
 
 ## Upgrade flow
 
@@ -118,9 +152,21 @@ docker run -d \
   --name arrtemplar \
   -p 7123:3000 \
   -v /srv/arrtemplar:/app/data \
+  --read-only --tmpfs /tmp \
+  --security-opt no-new-privileges:true \
+  --cap-drop ALL \
+  --restart unless-stopped \
+  --stop-timeout 30 \
+  --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 \
   -e WEB_ORIGIN=http://192.168.1.50:7123 \
   -e SESSION_COOKIE_SECURE=false \
   prvctech/arrtemplar:latest
 ```
 
 If you want a safer rollback path, deploy a pinned `sha-*` or semver tag instead of `latest`.
+
+## Base image note
+
+The runtime stage uses `oven/bun:1.3.14-slim`. The `slim` variant ships the bundled non-root `bun` user at `uid=1000, gid=1000`, which the ownership guidance in this doc and the Unraid template depend on.
+
+`oven/bun` also publishes `1.3.14-distroless` (~40 MB vs ~63 MB for `slim`, roughly a 35% smaller runtime layer). It is **not** a drop-in here: the upstream distroless Dockerfile sets no `USER` directive and builds on a `gcr.io/distroless` base that defaults to root (UID 0), so adopting it would either reintroduce a root runtime (a security regression) or require running as a different UID (e.g. 65532) and re-chowning every existing `/app/data` volume. Because of that ownership/UID migration, the distroless variant is tracked as a deliberate follow-up rather than switched blindly. If adopted later, the change must be coordinated with a UID update to this doc and the Unraid template.

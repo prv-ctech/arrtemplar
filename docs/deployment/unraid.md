@@ -13,11 +13,35 @@ Arrtemplar listens on container port `3000`. The built frontend and the API come
 - Network type: bridge or a custom network
 - Privileged: off
 - Tailscale: off unless you are deliberately layering it in yourself
-- Extra Parameters: remove `--user 0:0`
+- Extra Parameters: remove `--user 0:0` and see the hardening block below
 
 If you need a pinned image for rollback, use a `sha-*` or semver tag instead of `latest`.
 
 If you need VPN-routed egress for a different service, keep Arrtemplar out of that path by default and use a separate VPN container pattern. See `docs/deployment/vpn-hotio.md`.
+
+## Hardening (Extra Parameters)
+
+The image is built to run locked down (see `docs/deployment/docker.md` for the full rationale). On Unraid, paste these into the template's **Extra Parameters** field:
+
+```text
+--read-only --tmpfs /tmp --security-opt no-new-privileges:true --cap-drop ALL --restart unless-stopped --stop-timeout 30
+```
+
+What each does:
+
+- `--read-only` makes the root filesystem read-only. The app only writes under `/app/data`, so this is safe.
+- `--tmpfs /tmp` gives Bun the writable transient space a read-only root requires.
+- `--security-opt no-new-privileges:true` and `--cap-drop ALL` drop the default privilege surface.
+- `--restart unless-stopped` keeps the container up across reboots and crashes.
+- `--stop-timeout 30` lets `SIGTERM` drain logs and the SQLite WAL checkpoint before `SIGKILL`.
+
+Optionally add resource limits to the same field:
+
+```text
+--memory 1g --cpus 1.0 --log-driver json-file --log-opt max-size=10m --log-opt max-file=3
+```
+
+Leave the template's **Privileged** toggle off. Do not add `--user 0:0` back.
 
 ## Common env values
 
@@ -76,6 +100,7 @@ If permissions still fail after that, treat it as a data-path ownership issue an
 5. Set `SESSION_COOKIE_SECURE=false` for LAN HTTP or `true` for HTTPS.
 6. Leave privileged mode off.
 7. Remove `--user 0:0` from Extra Parameters.
+8. Paste the hardening flags from the [Hardening](#hardening-extra-parameters) section into Extra Parameters.
 
 ## After deploy
 

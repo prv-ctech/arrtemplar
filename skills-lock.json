@@ -7,6 +7,18 @@
       "skillPath": "skills/caveman/SKILL.md",
       "computedHash": "1902fa0b569912d0c05736d8d98a72097d9b82719aac88c0c1d03bb546f9176d"
     },
+    "docker-expert": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "skillPath": "skills/docker-expert/SKILL.md",
+      "computedHash": "0974b5f64fcd284c1bd662810e2388f7beb9be6784c597de4d0ad4213ccbd6af"
+    },
+    "docker-patterns": {
+      "source": "affaan-m/everything-claude-code",
+      "sourceType": "github",
+      "skillPath": "skills/docker-patterns/SKILL.md",
+      "computedHash": "b9b2764274bb4e4d1c398bf0214b528b547edc4847690b861b0b1ef5d8900934"
+    },
     "fuck-slop": {
       "source": "JuliusBrussee/skills",
       "sourceType": "github",

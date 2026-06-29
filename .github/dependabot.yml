@@ -1,0 +1,27 @@
+version: 2
+
+updates:
+  # Keep the oven/bun base image (Dockerfile) fresh. Dependabot opens PRs that
+  # bump the tag so the build stays on a maintained, patched Bun release without
+  # manual tracking.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: deps
+    labels:
+      - dependencies
+      - docker
+
+  # Keep GitHub Actions in .github/workflows current.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: deps
+    labels:
+      - dependencies
+      - ci

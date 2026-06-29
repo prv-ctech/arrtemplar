@@ -1,0 +1,71 @@
+# Example hardened Docker Compose deployment for Arrtemplar.
+#
+# 1. Copy this file to docker-compose.yml.
+# 2. Set WEB_ORIGIN (and SESSION_COOKIE_SECURE) in a .env file next to it,
+#    or edit the values below.
+# 3. docker compose up -d
+#
+# The image already bakes in sensible runtime defaults (see
+# docs/deployment/docker.md). This file layers hardening on top: non-root
+# runtime, read-only root filesystem, dropped capabilities, restart policy,
+# resource limits, and log rotation.
+
+services:
+  arrtemplar:
+    # Pin to a semver tag (e.g. prvctech/arrtemplar:0.1.0) or a sha-* tag for
+    # a reproducible production deploy. `latest` is fine for local/LAN testing.
+    image: prvctech/arrtemplar:latest
+    container_name: arrtemplar
+    restart: unless-stopped
+
+    ports:
+      # host:container -- change the left side for a different host port.
+      - "3000:3000"
+
+    volumes:
+      # Persistent SQLite DB, rotating JSONL logs, and uploaded ticket media.
+      # Everything that must survive a container recreate lives under /app/data.
+      - ./appdata:/app/data
+
+    environment:
+      # Required: the URL users actually open in the browser.
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
+      # true behind an HTTPS reverse proxy, false for plain HTTP on a trusted LAN.
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      TZ: ${TZ:-UTC}
+
+    # --- Security hardening --------------------------------------------------
+    # The app only writes under /app/data (DB, logs, ticket media) -- verified
+    # against apps/server/src. Make the root filesystem read-only and give Bun a
+    # writable tmpfs at /tmp for transient files (transpile cache, temp stores).
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+    # --- Resilience ----------------------------------------------------------
+    # The image drains on STOPSIGNAL SIGTERM (see apps/server/src/main.ts). Give
+    # Docker extra headroom before SIGKILL so log flush + SQLite WAL checkpoint
+    # finish cleanly during a restart.
+    stop_grace_period: 30s
+
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1g
+        reservations:
+          cpus: "0.25"
+          memory: 256m
+
+    # --- Log hygiene ---------------------------------------------------------
+    # LOG_CONSOLE=false keeps routine logs in /app/data/logs. This caps the
+    # container's own stdout/stderr so it cannot fill the host disk.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
