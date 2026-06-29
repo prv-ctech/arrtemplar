@@ -4,6 +4,12 @@ description: "Use when writing, reviewing, or refactoring any code. Enforces no 
 applyTo: "**"
 ---
 
+## No Secrets hardcoded
+
+No secrets, credentials, or sensitive information should be hardcoded in the codebase. Use environment variables or secure vaults for sensitive data.
+
+- the only exception is .secrets/credentials.txt which is ignored by git and used for local development only.
+
 ## No God Files
 
 Files should have a single responsibility. If a file is too large, split it into smaller files.

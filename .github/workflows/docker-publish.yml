@@ -22,11 +22,32 @@ jobs:
       attestations: write
       security-events: write
     env:
-      DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME || 'prvctech' }}
-      IMAGE_REPOSITORY: ${{ vars.DOCKERHUB_REPOSITORY || 'prvctech/arrtemplar' }}
+      DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+      IMAGE_REPOSITORY: ${{ vars.DOCKERHUB_REPOSITORY }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Validate registry configuration
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${DOCKERHUB_USERNAME:-}" ]]; then
+            echo "Missing repository variable DOCKERHUB_USERNAME" >&2
+            exit 1
+          fi
+
+          if [[ -z "${IMAGE_REPOSITORY:-}" ]]; then
+            echo "Missing repository variable DOCKERHUB_REPOSITORY" >&2
+            exit 1
+          fi
+
+          if [[ -z "${DOCKERHUB_TOKEN:-}" ]]; then
+            echo "Missing repository secret DOCKERHUB_TOKEN" >&2
+            exit 1
+          fi
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -69,7 +90,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Scan amd64 runtime image with Trivy
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@v0.33.1
         with:
           image-ref: arrtemplar:scan-amd64
           format: sarif
@@ -89,7 +110,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Scan arm64 runtime image with Trivy
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@v0.33.1
         with:
           input: /tmp/arrtemplar-scan-arm64.tar
           format: sarif
