@@ -1,10 +1,15 @@
 import type { ApiKeyReveal, ApiKeySummary, NotificationPreferences } from "@arrtemplar/shared";
-import { CaretDownIcon, KeyIcon, PlusIcon } from "@phosphor-icons/react";
-import type { FormEvent, ReactNode } from "react";
-import { useState } from "react";
+import {
+  ArrowsClockwiseIcon,
+  CaretRightIcon,
+  DotsThreeVerticalIcon,
+  KeyIcon,
+  PlusIcon,
+  TrashIcon,
+} from "@phosphor-icons/react";
+import { type FormEvent, Fragment, type ReactNode, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -17,13 +22,11 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -37,11 +40,6 @@ import { notify } from "@/features/notifications/notification-gateway";
 import { SettingsStatus } from "@/features/settings/SettingsPrimitives";
 import { cn } from "@/lib/utils";
 import { useAuthenticatedRouteUser } from "@/routes/authenticated-route-user";
-import { SettingsMobileDefinition } from "../settings-mobile-definition";
-import {
-  settingsTableActionCellClassName,
-  settingsTableActionHeaderClassName,
-} from "../settings-table-action-column";
 import {
   useApiKeysQuery,
   useCreateApiKeyMutation,
@@ -66,7 +64,7 @@ function useApiKeysSettingsState() {
   const rotateMutation = useRotateApiKeyMutation();
   const deleteMutation = useDeleteApiKeyMutation();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [expandedKeyId, setExpandedKeyId] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingApiKeyAction>({ kind: "closed" });
   const [revealedKey, setRevealedKey] = useState<ApiKeyReveal | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -109,6 +107,7 @@ function useApiKeysSettingsState() {
     if (currentAction.kind === "rotate") {
       rotateMutation.mutate(currentAction.apiKey.id, {
         onSuccess: (result) => {
+          setExpandedKeyId(result.apiKey.id);
           setRevealedKey(result);
           setStatusMessage("API key rotated.");
           notify(
@@ -140,6 +139,7 @@ function useApiKeysSettingsState() {
 
     deleteMutation.mutate(currentAction.apiKey.id, {
       onSuccess: (result) => {
+        setExpandedKeyId(null);
         setStatusMessage("API key deleted.");
         notify(
           {
@@ -171,15 +171,15 @@ function useApiKeysSettingsState() {
     createMutation,
     deleteMutation,
     errorMessage,
+    expandedKeyId,
     isCreateOpen,
-    isExpanded,
     notificationPreferences: actor.notificationPreferences,
     pendingAction,
     revealedKey,
     rotateMutation,
     setErrorMessage,
+    setExpandedKeyId,
     setIsCreateOpen,
-    setIsExpanded,
     setPendingAction,
     setRevealedKey,
     setStatusMessage,
@@ -196,20 +196,33 @@ function ApiKeysSettingsView({ state }: { state: ApiKeysSettingsState }) {
     state.deleteMutation.isPending;
 
   return (
-    <div className="space-y-3">
-      <ApiKeyServiceCard
-        isExpanded={state.isExpanded}
-        onToggle={() => state.setIsExpanded((current) => !current)}
-      >
-        <div className="space-y-3">
-          <SettingsStatus
-            errorMessage={state.errorMessage}
-            statusId="api-keys-status"
-            statusMessage={state.statusMessage}
-          />
-          <ApiKeysQueryContent state={state} />
+    <section className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="grid size-7 shrink-0 place-items-center rounded-md border border-border bg-secondary text-secondary-foreground">
+            <KeyIcon aria-hidden="true" className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold leading-5 tracking-tight">API Keys</h2>
+          </div>
         </div>
-      </ApiKeyServiceCard>
+        <Button
+          className="h-8 gap-1.5 rounded-md px-2.5 text-sm"
+          onClick={() => state.setIsCreateOpen(true)}
+          type="button"
+        >
+          <PlusIcon aria-hidden="true" className="size-4" />
+          New key
+        </Button>
+      </div>
+
+      <SettingsStatus
+        errorMessage={state.errorMessage}
+        statusId="api-keys-status"
+        statusMessage={state.statusMessage}
+      />
+
+      <ApiKeysQueryContent state={state} />
 
       <CreateApiKeyDialog
         isOpen={state.isCreateOpen}
@@ -228,62 +241,7 @@ function ApiKeysSettingsView({ state }: { state: ApiKeysSettingsState }) {
         onClose={() => state.setPendingAction({ kind: "closed" })}
         onConfirm={state.confirmPendingAction}
       />
-    </div>
-  );
-}
-
-function ApiKeyServiceCard({
-  children,
-  isExpanded,
-  onToggle,
-}: {
-  children: ReactNode;
-  isExpanded: boolean;
-  onToggle: () => void;
-}) {
-  const contentId = "api-keys-settings-content";
-
-  return (
-    <Card className="w-full overflow-hidden rounded-2xl bg-card/50 shadow-none">
-      <CardHeader className="p-0">
-        <button
-          aria-controls={contentId}
-          aria-expanded={isExpanded}
-          aria-label={`${isExpanded ? "Collapse" : "Expand"} API key settings`}
-          className={cn(
-            "flex w-full min-w-0 cursor-pointer items-start gap-3 p-3 text-left transition-colors duration-200",
-            "hover:bg-accent/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          )}
-          onClick={onToggle}
-          type="button"
-        >
-          <div
-            aria-hidden="true"
-            className="grid size-10 shrink-0 place-items-center rounded-xl border border-border bg-secondary text-secondary-foreground"
-          >
-            <KeyIcon className="size-5" />
-          </div>
-          <div className="min-w-0 flex-1 py-2.5">
-            <CardTitle className="text-sm leading-5 sm:text-base">API Keys</CardTitle>
-          </div>
-          <CaretDownIcon
-            aria-hidden="true"
-            className={cn(
-              "mt-3 size-4 shrink-0 text-muted-foreground transition-transform duration-200",
-              isExpanded && "rotate-180",
-            )}
-          />
-        </button>
-      </CardHeader>
-      {isExpanded ? (
-        <>
-          <Separator />
-          <CardContent className="p-2.5" id={contentId}>
-            {children}
-          </CardContent>
-        </>
-      ) : null}
-    </Card>
+    </section>
   );
 }
 
@@ -298,10 +256,11 @@ function ApiKeysQueryContent({ state }: { state: ApiKeysSettingsState }) {
 
   return (
     <ApiKeysTable
+      expandedKeyId={state.expandedKeyId}
       isMutating={state.rotateMutation.isPending || state.deleteMutation.isPending}
-      onCreate={() => state.setIsCreateOpen(true)}
       onDelete={(apiKey) => state.setPendingAction({ apiKey, kind: "delete" })}
       onRotate={(apiKey) => state.setPendingAction({ apiKey, kind: "rotate" })}
+      onToggleExpand={state.setExpandedKeyId}
       rows={state.apiKeysQuery.data ?? []}
     />
   );
@@ -310,73 +269,103 @@ function ApiKeysQueryContent({ state }: { state: ApiKeysSettingsState }) {
 function ApiKeysSkeleton() {
   return (
     <div className="space-y-2">
-      <Skeleton className="h-12" />
-      <Skeleton className="h-12" />
-      <Skeleton className="h-12" />
+      <Skeleton className="h-10 rounded-lg" />
+      <Skeleton className="h-10 rounded-lg" />
+      <Skeleton className="h-10 rounded-lg" />
     </div>
   );
 }
 
 function ApiKeysError() {
   return (
-    <Card className="border-destructive/35 bg-destructive/5 shadow-none">
-      <CardHeader>
-        <CardTitle className="text-sm text-destructive">API keys failed to load.</CardTitle>
-      </CardHeader>
-    </Card>
+    <div className="rounded-lg border border-destructive/35 bg-destructive/5 p-3 text-sm font-medium text-destructive">
+      API keys failed to load.
+    </div>
   );
 }
 
+const API_KEY_DESKTOP_COLUMN_COUNT = 5;
+
 function ApiKeysTable({
+  expandedKeyId,
   isMutating,
-  onCreate,
   onDelete,
   onRotate,
+  onToggleExpand,
   rows,
 }: {
+  expandedKeyId: string | null;
   isMutating: boolean;
-  onCreate: () => void;
   onDelete: (apiKey: ApiKeySummary) => void;
   onRotate: (apiKey: ApiKeySummary) => void;
+  onToggleExpand: (apiKeyId: string | null) => void;
   rows: readonly ApiKeySummary[];
 }) {
   return (
     <>
-      <ApiKeysMobileList
-        isMutating={isMutating}
-        onCreate={onCreate}
-        onDelete={onDelete}
-        onRotate={onRotate}
-        rows={rows}
-      />
-      <div className="hidden lg:block">
-        <Table className="border-separate border-spacing-0" containerClassName="max-w-full bg-card">
+      <div className="hidden md:block">
+        <Table containerClassName="rounded-lg border-border/80 bg-card/50 pb-0">
           <TableHeader>
-            <TableRow>
-              <TableHead>Key</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Last used</TableHead>
-              <TableHead>Rotated</TableHead>
-              <TableHead>Created</TableHead>
-              <TableHead className={settingsTableActionHeaderClassName}>
-                <CreateApiKeyTableAction onCreate={onCreate} />
-              </TableHead>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="h-8 px-3 text-xs">Key</TableHead>
+              <TableHead className="h-8 px-3 text-xs">Status</TableHead>
+              <TableHead className="h-8 px-3 text-xs">Last used</TableHead>
+              <TableHead className="h-8 px-3 text-xs">Created</TableHead>
+              <TableHead className="h-8 px-3 text-right text-xs">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.length > 0 ? (
-              rows.map((apiKey) => (
-                <ApiKeyRow
-                  apiKey={apiKey}
-                  isMutating={isMutating}
-                  key={apiKey.id}
-                  onDelete={onDelete}
-                  onRotate={onRotate}
-                />
-              ))
+              rows.map((apiKey) => {
+                const isExpanded = expandedKeyId === apiKey.id;
+
+                return (
+                  <Fragment key={apiKey.id}>
+                    <TableRow data-state={isExpanded ? "selected" : undefined}>
+                      <TableCell className="max-w-136 px-3 py-2">
+                        <ApiKeyTitleButton
+                          apiKey={apiKey}
+                          expanded={isExpanded}
+                          onToggle={() => onToggleExpand(isExpanded ? null : apiKey.id)}
+                        />
+                      </TableCell>
+                      <TableCell className="px-3 py-2">
+                        <ApiKeyStatusBadge status={apiKey.status} />
+                      </TableCell>
+                      <TableCell className="px-3 py-2 text-sm text-muted-foreground">
+                        {formatDate(apiKey.lastUsedAt)}
+                      </TableCell>
+                      <TableCell className="px-3 py-2 text-sm text-muted-foreground">
+                        {formatDate(apiKey.createdAt)}
+                      </TableCell>
+                      <TableCell className="px-3 py-2 text-right">
+                        <ApiKeyActionMenu
+                          apiKey={apiKey}
+                          disabled={isMutating}
+                          onDelete={() => onDelete(apiKey)}
+                          onRotate={() => onRotate(apiKey)}
+                        />
+                      </TableCell>
+                    </TableRow>
+                    {isExpanded ? (
+                      <TableRow className="hover:bg-transparent">
+                        <TableCell
+                          className="bg-background/35 px-3 py-3"
+                          colSpan={API_KEY_DESKTOP_COLUMN_COUNT}
+                        >
+                          <ApiKeyInlineDetail apiKey={apiKey} />
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </Fragment>
+                );
+              })
             ) : (
-              <TableRow>
-                <TableCell className="text-center text-muted-foreground" colSpan={6}>
+              <TableRow className="hover:bg-transparent">
+                <TableCell
+                  className="px-3 py-8 text-center text-sm text-muted-foreground"
+                  colSpan={API_KEY_DESKTOP_COLUMN_COUNT}
+                >
                   No API keys yet.
                 </TableCell>
               </TableRow>
@@ -384,191 +373,197 @@ function ApiKeysTable({
           </TableBody>
         </Table>
       </div>
+      <ApiKeysMobileList
+        expandedKeyId={expandedKeyId}
+        isMutating={isMutating}
+        onDelete={onDelete}
+        onRotate={onRotate}
+        onToggleExpand={onToggleExpand}
+        rows={rows}
+      />
     </>
   );
 }
 
 function ApiKeysMobileList({
+  expandedKeyId,
   isMutating,
-  onCreate,
   onDelete,
   onRotate,
+  onToggleExpand,
   rows,
 }: {
+  expandedKeyId: string | null;
   isMutating: boolean;
-  onCreate: () => void;
   onDelete: (apiKey: ApiKeySummary) => void;
   onRotate: (apiKey: ApiKeySummary) => void;
+  onToggleExpand: (apiKeyId: string | null) => void;
   rows: readonly ApiKeySummary[];
 }) {
   return (
-    <div className="rounded-2xl border border-border bg-card lg:hidden">
-      <div className="flex items-center justify-between gap-3 border-border border-b px-3 py-2.5">
-        <span className="text-sm font-medium text-foreground">API keys</span>
-        <CreateApiKeyTableAction onCreate={onCreate} />
-      </div>
+    <div className="grid gap-2 md:hidden">
       {rows.length > 0 ? (
-        <div className="divide-y divide-border">
-          {rows.map((apiKey) => (
-            <ApiKeyMobileCard
-              apiKey={apiKey}
-              isMutating={isMutating}
-              key={apiKey.id}
-              onDelete={onDelete}
-              onRotate={onRotate}
-            />
-          ))}
-        </div>
+        rows.map((apiKey) => (
+          <ApiKeyMobileCard
+            apiKey={apiKey}
+            expanded={expandedKeyId === apiKey.id}
+            isMutating={isMutating}
+            key={apiKey.id}
+            onDelete={() => onDelete(apiKey)}
+            onRotate={() => onRotate(apiKey)}
+            onToggleExpand={() => onToggleExpand(expandedKeyId === apiKey.id ? null : apiKey.id)}
+          />
+        ))
       ) : (
-        <p className="px-3 py-6 text-center text-muted-foreground text-sm">No API keys yet.</p>
+        <div className="rounded-lg border border-border/80 bg-card/50 px-3 py-8 text-center text-sm text-muted-foreground">
+          No API keys yet.
+        </div>
       )}
     </div>
   );
 }
 
-function CreateApiKeyTableAction({ onCreate }: { onCreate: () => void }) {
-  return (
-    <Button
-      aria-label="Create API key"
-      className="size-8 rounded-xl border border-primary/35 bg-primary text-primary-foreground shadow-(--shadow-button) hover:translate-y-0 hover:bg-primary/90 hover:text-primary-foreground active:translate-y-0"
-      onClick={onCreate}
-      size="icon"
-      type="button"
-      variant="ghost"
-    >
-      <span aria-hidden="true" className="relative grid size-5 place-items-center">
-        <KeyIcon className="size-4" />
-        <PlusIcon className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-primary text-primary-foreground" />
-      </span>
-    </Button>
-  );
-}
-
-function ApiKeyRow({
-  apiKey,
-  isMutating,
-  onDelete,
-  onRotate,
-}: {
-  apiKey: ApiKeySummary;
-  isMutating: boolean;
-  onDelete: (apiKey: ApiKeySummary) => void;
-  onRotate: (apiKey: ApiKeySummary) => void;
-}) {
-  return (
-    <TableRow>
-      <TableCell className="min-w-56">
-        <ApiKeyIdentity apiKey={apiKey} />
-      </TableCell>
-      <TableCell>
-        <ApiKeyStatusBadge status={apiKey.status} />
-      </TableCell>
-      <TableCell>{formatDate(apiKey.lastUsedAt)}</TableCell>
-      <TableCell>{formatDate(apiKey.rotatedAt)}</TableCell>
-      <TableCell>{formatDate(apiKey.createdAt)}</TableCell>
-      <TableCell className={settingsTableActionCellClassName}>
-        <ApiKeyRowActions
-          apiKey={apiKey}
-          isMutating={isMutating}
-          onDelete={onDelete}
-          onRotate={onRotate}
-        />
-      </TableCell>
-    </TableRow>
-  );
-}
-
 function ApiKeyMobileCard({
   apiKey,
+  expanded,
   isMutating,
   onDelete,
   onRotate,
+  onToggleExpand,
 }: {
   apiKey: ApiKeySummary;
+  expanded: boolean;
   isMutating: boolean;
-  onDelete: (apiKey: ApiKeySummary) => void;
-  onRotate: (apiKey: ApiKeySummary) => void;
+  onDelete: () => void;
+  onRotate: () => void;
+  onToggleExpand: () => void;
 }) {
   return (
-    <article className="p-3">
-      <div className="flex items-start gap-3">
-        <div className="min-w-0 flex-1">
-          <ApiKeyIdentity apiKey={apiKey} />
-        </div>
-        <ApiKeyRowActions
+    <article className="rounded-lg border border-border/80 bg-card/50 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <ApiKeyTitleButton apiKey={apiKey} expanded={expanded} onToggle={onToggleExpand} />
+        <ApiKeyActionMenu
           apiKey={apiKey}
-          isMutating={isMutating}
+          disabled={isMutating}
           onDelete={onDelete}
           onRotate={onRotate}
         />
       </div>
-      <dl className="mt-3 grid gap-2 text-sm">
-        <SettingsMobileDefinition label="Status">
-          <ApiKeyStatusBadge status={apiKey.status} />
-        </SettingsMobileDefinition>
-        <SettingsMobileDefinition label="Last used">
-          {formatDate(apiKey.lastUsedAt)}
-        </SettingsMobileDefinition>
-        <SettingsMobileDefinition label="Rotated">
-          {formatDate(apiKey.rotatedAt)}
-        </SettingsMobileDefinition>
-        <SettingsMobileDefinition label="Created">
-          {formatDate(apiKey.createdAt)}
-        </SettingsMobileDefinition>
-      </dl>
+      <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+        <ApiKeyStatusBadge status={apiKey.status} />
+        <span>{formatDate(apiKey.updatedAt)}</span>
+      </div>
+      {expanded ? (
+        <div className="mt-3 border-t border-border pt-3">
+          <ApiKeyInlineDetail apiKey={apiKey} />
+        </div>
+      ) : null}
     </article>
   );
 }
 
-function ApiKeyIdentity({ apiKey }: { apiKey: ApiKeySummary }) {
+function ApiKeyTitleButton({
+  apiKey,
+  expanded,
+  onToggle,
+}: {
+  apiKey: ApiKeySummary;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
   return (
-    <div className="min-w-0">
-      <div className="flex items-center gap-2 font-medium text-foreground">
-        <KeyIcon aria-hidden="true" className="size-4 text-primary" />
-        <span className="truncate">{apiKey.name}</span>
-      </div>
-      <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-muted-foreground text-xs">
-        <span className="truncate font-mono">{apiKey.maskedKey}</span>
-        <span className="font-mono">#{apiKey.fingerprint}</span>
-      </div>
+    <button
+      aria-expanded={expanded}
+      className="group flex min-w-0 items-center gap-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      onClick={onToggle}
+      type="button"
+    >
+      <CaretRightIcon
+        aria-hidden="true"
+        className={cn(
+          "size-3.5 shrink-0 text-muted-foreground transition-transform",
+          expanded && "rotate-90",
+        )}
+      />
+      <span className="grid min-w-0">
+        <span className="block truncate text-sm font-medium text-foreground group-hover:text-primary">
+          {apiKey.name}
+        </span>
+        <span className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
+          {apiKey.maskedKey}
+          <span className="ml-1">#{apiKey.fingerprint}</span>
+        </span>
+      </span>
+    </button>
+  );
+}
+
+function ApiKeyInlineDetail({ apiKey }: { apiKey: ApiKeySummary }) {
+  return (
+    <div className="grid gap-3">
+      {apiKey.description ? (
+        <div className="rounded-lg border border-border/80 bg-background/60 p-3 text-sm leading-6 text-foreground">
+          {apiKey.description}
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground">No description.</p>
+      )}
+      <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+        <ApiKeyDetail label="Fingerprint">
+          <span className="font-mono">{apiKey.fingerprint}</span>
+        </ApiKeyDetail>
+        <ApiKeyDetail label="Created by">{apiKey.createdBy?.username ?? "—"}</ApiKeyDetail>
+        <ApiKeyDetail label="Rotated">{formatDate(apiKey.rotatedAt)}</ApiKeyDetail>
+        <ApiKeyDetail label="Created">{formatDate(apiKey.createdAt)}</ApiKeyDetail>
+        <ApiKeyDetail label="Last used IP">{apiKey.lastUsedIpAddress ?? "—"}</ApiKeyDetail>
+        <ApiKeyDetail label="User agent">{apiKey.lastUsedUserAgent ?? "—"}</ApiKeyDetail>
+      </dl>
     </div>
   );
 }
 
-function ApiKeyRowActions({
+function ApiKeyDetail({ children, label }: { children: ReactNode; label: string }) {
+  return (
+    <div className="flex min-w-0 items-center justify-between gap-3 border-b border-border/60 pb-1.5 text-sm sm:border-0 sm:pb-0">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 truncate text-right text-foreground">{children}</dd>
+    </div>
+  );
+}
+
+function ApiKeyActionMenu({
   apiKey,
-  isMutating,
+  disabled,
   onDelete,
   onRotate,
 }: {
   apiKey: ApiKeySummary;
-  isMutating: boolean;
-  onDelete: (apiKey: ApiKeySummary) => void;
-  onRotate: (apiKey: ApiKeySummary) => void;
+  disabled: boolean;
+  onDelete: () => void;
+  onRotate: () => void;
 }) {
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger
-        aria-label={`Open API key actions for ${apiKey.name}`}
-        className="grid size-9 cursor-pointer place-items-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        type="button"
-      >
-        <span className="sr-only">Open API key actions</span>
-        <span aria-hidden="true" className="text-xl leading-none">
-          …
-        </span>
+      <DropdownMenuTrigger asChild>
+        <Button
+          aria-label={`Open API key actions for ${apiKey.name}`}
+          className="size-7 rounded-md p-0"
+          disabled={disabled}
+          size="icon"
+          type="button"
+          variant="ghost"
+        >
+          <DotsThreeVerticalIcon aria-hidden="true" className="size-4" weight="bold" />
+        </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-        <DropdownMenuItem disabled={isMutating} onSelect={() => onRotate(apiKey)}>
+      <DropdownMenuContent align="end" className="w-44 rounded-xl">
+        <DropdownMenuItem disabled={disabled} onSelect={onRotate}>
+          <ArrowsClockwiseIcon aria-hidden="true" className="size-4" />
           Rotate key
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem
-          disabled={isMutating}
-          onSelect={() => onDelete(apiKey)}
-          variant="destructive"
-        >
+        <DropdownMenuItem disabled={disabled} onSelect={onDelete} variant="destructive">
+          <TrashIcon aria-hidden="true" className="size-4" />
           Delete key
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -577,7 +572,25 @@ function ApiKeyRowActions({
 }
 
 function ApiKeyStatusBadge({ status }: { status: ApiKeySummary["status"] }) {
-  return status === "active" ? <Badge>Active</Badge> : <Badge variant="secondary">Deleted</Badge>;
+  if (status === "active") {
+    return (
+      <Badge
+        variant="outline"
+        className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+      >
+        Active
+      </Badge>
+    );
+  }
+
+  return (
+    <Badge
+      variant="outline"
+      className="border-muted-foreground/25 bg-muted/40 text-muted-foreground"
+    >
+      Deleted
+    </Badge>
+  );
 }
 
 function CreateApiKeyDialog({

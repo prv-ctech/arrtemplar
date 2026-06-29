@@ -9,13 +9,30 @@ import {
   OIDC_SIGNING_ALGORITHM_VALUES,
   TOKEN_ENDPOINT_AUTH_METHOD_VALUES,
 } from "@arrtemplar/shared";
-import { type FormEvent, type ReactNode, useId, useState } from "react";
+import { FingerprintIcon } from "@phosphor-icons/react";
+import { type FormEvent, useId, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { notify } from "@/features/notifications/notification-gateway";
-import { SettingsAccordionCard } from "@/features/settings/SettingsAccordionCard";
 import { SettingsRow, SettingsStatus } from "@/features/settings/SettingsPrimitives";
 import { cn } from "@/lib/utils";
 import { useAuthenticatedRouteUser } from "@/routes/authenticated-route-user";
@@ -103,7 +120,25 @@ function AuthSettingsFormController({
 }) {
   const controls = useAuthSettingsController({ identities, provider, providerError });
 
-  return <AuthMethodGrid controls={controls} />;
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="grid size-7 shrink-0 place-items-center rounded-md border border-border bg-secondary text-secondary-foreground">
+            <FingerprintIcon aria-hidden="true" className="size-4" />
+          </span>
+          <h2 className="text-base font-semibold leading-5 tracking-tight">OAuth/OIDC</h2>
+        </div>
+        <ProviderEnabledSwitch
+          disabled={controls.isSaving}
+          enabled={controls.form.enabled}
+          onChange={(enabled) => controls.updateForm({ enabled })}
+          statusId={controls.statusId}
+        />
+      </div>
+      <AuthMethodGrid controls={controls} />
+    </section>
+  );
 }
 
 function useAuthSettingsController({
@@ -226,32 +261,18 @@ function AuthMethodGrid({ controls }: { controls: AuthSettingsController }) {
 }
 
 function OidcMethodCard({ controls }: { controls: AuthSettingsController }) {
-  const [isExpanded, setIsExpanded] = useState(true);
-  const providerContentId = useId();
-
   return (
-    <AuthServiceCard
-      action={
-        <ProviderEnabledSwitch
-          disabled={controls.isSaving}
-          enabled={controls.form.enabled}
-          onChange={(enabled) => controls.updateForm({ enabled })}
-          statusId={controls.statusId}
+    <Card className="w-full min-w-0 overflow-hidden rounded-2xl bg-card/50 shadow-none">
+      <CardContent className="p-3 sm:p-4">
+        <OidcAccountLinking
+          identities={controls.identities}
+          isProviderEnabled={Boolean(controls.provider?.enabled)}
+          onUnlinkAll={controls.handleUnlinkAll}
         />
-      }
-      contentId={providerContentId}
-      isExpanded={isExpanded}
-      onToggle={() => setIsExpanded((current) => !current)}
-      title="OAuth/OIDC"
-    >
-      <OidcAccountLinking
-        identities={controls.identities}
-        isProviderEnabled={Boolean(controls.provider?.enabled)}
-        onUnlinkAll={controls.handleUnlinkAll}
-      />
-      <Separator className="my-3" />
-      <AuthProviderForm controls={controls} />
-    </AuthServiceCard>
+        <Separator className="my-3" />
+        <AuthProviderForm controls={controls} />
+      </CardContent>
+    </Card>
   );
 }
 
@@ -287,6 +308,46 @@ function AuthProviderFields({ controls }: { controls: AuthSettingsController }) 
   );
 }
 
+type OidcSelectItem = { label: string; value: string };
+
+function OidcSelectField({
+  ariaLabel,
+  disabled,
+  id,
+  items,
+  onValueChange,
+  triggerClassName,
+  value,
+}: {
+  ariaLabel: string;
+  disabled: boolean;
+  id: string;
+  items: readonly OidcSelectItem[];
+  onValueChange: (value: string) => void;
+  triggerClassName: string;
+  value: string;
+}) {
+  return (
+    <Select disabled={disabled} onValueChange={onValueChange} value={value}>
+      <SelectTrigger
+        aria-label={ariaLabel}
+        className={cn("h-9 rounded-xl", triggerClassName)}
+        id={id}
+        size="sm"
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {items.map((item) => (
+          <SelectItem key={item.value} value={item.value}>
+            {item.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 function AuthProviderSaveButton({ controls }: { controls: AuthSettingsController }) {
   if (!controls.form.enabled && !controls.provider) {
     return null;
@@ -318,20 +379,15 @@ function ProviderEnabledSwitch({
         "inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-border bg-card/65 px-2.5 py-1.5 text-xs font-medium",
         disabled && "cursor-not-allowed opacity-60",
       )}
+      htmlFor="auth-provider-enabled"
     >
-      <input
+      <Switch
         aria-describedby={statusId}
         aria-label="Enable OIDC provider"
         checked={enabled}
-        className="peer sr-only"
         disabled={disabled}
         id="auth-provider-enabled"
-        onChange={(event) => onChange(event.currentTarget.checked)}
-        type="checkbox"
-      />
-      <span
-        aria-hidden="true"
-        className="relative h-5 w-9 rounded-full border border-border bg-muted transition-colors after:absolute after:top-0.5 after:left-0.5 after:size-4 after:rounded-full after:bg-background after:shadow-sm after:transition-transform peer-checked:border-primary/60 peer-checked:bg-primary peer-checked:after:translate-x-4"
+        onCheckedChange={onChange}
       />
       <span className="text-foreground">{enabled ? "On" : "Off"}</span>
     </label>
@@ -348,31 +404,28 @@ function ProviderConfigRows({
   onChange: (next: Partial<AuthProviderFormState>) => void;
 }) {
   const fieldClassName = "h-9 rounded-xl px-3 text-sm";
-  const selectClassName =
-    "h-9 rounded-xl border border-input bg-background/50 px-3 text-sm text-foreground outline-none transition-[border-color,box-shadow] focus-visible:border-primary/70 focus-visible:ring-2 focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50";
 
   return (
     <>
       <SettingsRow controlId="auth-provider-kind" density="compact" label="Provider">
-        <select
-          className={selectClassName}
+        <OidcSelectField
+          ariaLabel="OIDC provider kind"
           disabled={disabled}
           id="auth-provider-kind"
-          onChange={(event) => {
-            const providerKind = readAuthProviderKind(event.currentTarget.value);
+          items={AUTH_PROVIDER_KIND_VALUES.map((value) => ({
+            label: providerKindLabels[value],
+            value,
+          }))}
+          onValueChange={(value) => {
+            const providerKind = readAuthProviderKind(value);
 
             if (providerKind) {
               onChange({ providerKind });
             }
           }}
+          triggerClassName="w-full sm:w-56"
           value={form.providerKind}
-        >
-          {AUTH_PROVIDER_KIND_VALUES.map((providerKind) => (
-            <option key={providerKind} value={providerKind}>
-              {providerKindLabels[providerKind]}
-            </option>
-          ))}
-        </select>
+        />
       </SettingsRow>
       <SettingsRow controlId="auth-provider-button-text" density="compact" label="Button text">
         <Input
@@ -420,25 +473,21 @@ function ProviderConfigRows({
         density="compact"
         label="Token auth method"
       >
-        <select
-          className={selectClassName}
+        <OidcSelectField
+          ariaLabel="OIDC token auth method"
           disabled={disabled}
           id="auth-provider-token-auth-method"
-          onChange={(event) => {
-            const tokenEndpointAuthMethod = readTokenEndpointAuthMethod(event.currentTarget.value);
+          items={TOKEN_ENDPOINT_AUTH_METHOD_VALUES.map((value) => ({ label: value, value }))}
+          onValueChange={(value) => {
+            const tokenEndpointAuthMethod = readTokenEndpointAuthMethod(value);
 
             if (tokenEndpointAuthMethod) {
               onChange({ tokenEndpointAuthMethod });
             }
           }}
+          triggerClassName="w-full sm:w-56"
           value={form.tokenEndpointAuthMethod}
-        >
-          {TOKEN_ENDPOINT_AUTH_METHOD_VALUES.map((method) => (
-            <option key={method} value={method}>
-              {method}
-            </option>
-          ))}
-        </select>
+        />
       </SettingsRow>
       <SettingsRow controlId="auth-provider-scopes" density="compact" label="Scopes">
         <Input
@@ -486,52 +535,42 @@ function ProviderConfigRows({
         density="compact"
         label="ID token algorithm"
       >
-        <select
-          className={selectClassName}
+        <OidcSelectField
+          ariaLabel="OIDC ID token signing algorithm"
           disabled={disabled}
           id="auth-provider-id-token-algorithm"
-          onChange={(event) => {
-            const idTokenSigningAlgorithm = readOidcSigningAlgorithm(event.currentTarget.value);
+          items={OIDC_SIGNING_ALGORITHM_VALUES.map((value) => ({ label: value, value }))}
+          onValueChange={(value) => {
+            const idTokenSigningAlgorithm = readOidcSigningAlgorithm(value);
 
             if (idTokenSigningAlgorithm) {
               onChange({ idTokenSigningAlgorithm });
             }
           }}
+          triggerClassName="w-full sm:w-44"
           value={form.idTokenSigningAlgorithm}
-        >
-          {OIDC_SIGNING_ALGORITHM_VALUES.map((algorithm) => (
-            <option key={algorithm} value={algorithm}>
-              {algorithm}
-            </option>
-          ))}
-        </select>
+        />
       </SettingsRow>
       <SettingsRow
         controlId="auth-provider-profile-algorithm"
         density="compact"
         label="Profile algorithm"
       >
-        <select
-          className={selectClassName}
+        <OidcSelectField
+          ariaLabel="OIDC profile signing algorithm"
           disabled={disabled}
           id="auth-provider-profile-algorithm"
-          onChange={(event) => {
-            const profileSigningAlgorithm = readOidcProfileSigningAlgorithm(
-              event.currentTarget.value,
-            );
+          items={OIDC_PROFILE_SIGNING_ALGORITHM_VALUES.map((value) => ({ label: value, value }))}
+          onValueChange={(value) => {
+            const profileSigningAlgorithm = readOidcProfileSigningAlgorithm(value);
 
             if (profileSigningAlgorithm) {
               onChange({ profileSigningAlgorithm });
             }
           }}
+          triggerClassName="w-full sm:w-44"
           value={form.profileSigningAlgorithm}
-        >
-          {OIDC_PROFILE_SIGNING_ALGORITHM_VALUES.map((algorithm) => (
-            <option key={algorithm} value={algorithm}>
-              {algorithm}
-            </option>
-          ))}
-        </select>
+        />
       </SettingsRow>
       <SettingsRow controlId="auth-provider-end-session" density="compact" label="End session URL">
         <Input
@@ -589,23 +628,57 @@ function ProviderConfigRows({
   );
 }
 
-function LinkedIdentityList({ identities }: { identities: readonly AuthIdentity[] }) {
+function LinkedIdentityList({
+  identities,
+  onUnlinkAll,
+}: {
+  identities: readonly AuthIdentity[];
+  onUnlinkAll: () => void;
+}) {
   if (identities.length === 0) {
     return null;
   }
 
   return (
-    <ul className="mt-3 space-y-1.5 text-sm text-muted-foreground">
-      {identities.map((identity) => (
-        <li
-          className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-border bg-background/45 px-3 py-2"
-          key={identity.id}
-        >
-          <span className="min-w-0 truncate text-foreground">{identity.displayName}</span>
-          <span className="shrink-0 text-xs">{providerKindLabels[identity.providerKind]}</span>
-        </li>
-      ))}
-    </ul>
+    <Table
+      className="mt-3"
+      containerClassName="rounded-lg border border-border/80 bg-background/40"
+    >
+      <TableHeader>
+        <TableRow className="hover:bg-transparent">
+          <TableHead className="h-8 px-3 text-xs">Identity</TableHead>
+          <TableHead className="h-8 px-3 text-xs">Provider</TableHead>
+          <TableHead className="h-8 px-3 text-right text-xs">Actions</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {identities.map((identity) => (
+          <TableRow key={identity.id}>
+            <TableCell className="px-3 py-2 text-sm text-foreground">
+              <span className="block truncate">{identity.displayName}</span>
+              <span className="mt-0.5 block truncate font-mono text-[11px] text-muted-foreground">
+                {identity.subjectPreview}
+              </span>
+            </TableCell>
+            <TableCell className="px-3 py-2 text-sm text-muted-foreground">
+              {providerKindLabels[identity.providerKind]}
+            </TableCell>
+            <TableCell className="px-3 py-2 text-right">
+              <Button
+                className="h-7 rounded-md px-2 text-xs"
+                disabled={identities.length === 0}
+                onClick={onUnlinkAll}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                Unlink all
+              </Button>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
 }
 
@@ -619,32 +692,27 @@ function OidcAccountLinking({
   onUnlinkAll: () => void;
 }) {
   const isConnected = identities.length > 0;
-  const compactButtonClassName = "h-8 rounded-lg px-2.5 text-xs";
-  const unlinkAllButtonClassName = cn(
-    compactButtonClassName,
-    "border border-[#a83a45] bg-[#8f2d38] text-white hover:bg-[#7c2630]",
-  );
 
   return (
     <section
       aria-label="OAuth account linking"
-      className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-6"
+      className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-6"
     >
-      <div className="min-w-0 space-y-1">
+      <div className="min-w-0">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <h4 className="text-sm font-medium text-foreground">Account linking</h4>
           <LinkedIdentityBadge count={identities.length} />
         </div>
-        <p className="text-sm text-muted-foreground">
+        <p className="mt-0.5 text-xs text-muted-foreground">
           {isConnected
             ? "This admin account has linked OAuth accounts."
             : "Link this admin account to an OAuth identity."}
         </p>
-        <LinkedIdentityList identities={identities} />
+        <LinkedIdentityList identities={identities} onUnlinkAll={onUnlinkAll} />
       </div>
       <div className="flex flex-wrap items-center gap-2 sm:justify-end">
         <Button
-          className={cn(compactButtonClassName, "w-fit")}
+          className="h-8 rounded-lg px-2.5 text-xs"
           disabled={!isProviderEnabled}
           onClick={startOidcLinkFlow}
           size="sm"
@@ -653,64 +721,13 @@ function OidcAccountLinking({
         >
           Link Accounts
         </Button>
-        <Button
-          className={unlinkAllButtonClassName}
-          disabled={!isConnected}
-          onClick={onUnlinkAll}
-          size="sm"
-          type="button"
-          variant="secondary"
-        >
-          Unlink all
-        </Button>
       </div>
     </section>
   );
 }
 
-function AuthServiceCard({
-  action,
-  children,
-  contentId,
-  isExpanded,
-  onToggle,
-  title,
-}: {
-  action?: ReactNode;
-  children: ReactNode;
-  contentId: string;
-  isExpanded: boolean;
-  onToggle: () => void;
-  title: string;
-}) {
-  return (
-    <SettingsAccordionCard
-      action={action}
-      contentId={contentId}
-      icon={<OidcServiceLogo />}
-      isExpanded={isExpanded}
-      onToggle={onToggle}
-      title={title}
-      toggleLabel={`${isExpanded ? "Collapse" : "Expand"} ${title} auth settings`}
-    >
-      {children}
-    </SettingsAccordionCard>
-  );
-}
-
 function startOidcLinkFlow() {
   window.location.assign("/api/auth/oauth/oidc/start?mode=link&returnTo=/settings/auth");
-}
-
-function OidcServiceLogo() {
-  return (
-    <div
-      aria-hidden="true"
-      className="grid size-10 shrink-0 place-items-center rounded-xl border border-border bg-secondary text-xs font-black tracking-[-0.08em] text-secondary-foreground"
-    >
-      ID
-    </div>
-  );
 }
 
 function LinkedIdentityBadge({ count }: { count: number }) {

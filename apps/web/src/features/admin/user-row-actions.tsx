@@ -1,15 +1,21 @@
 import type { AdminUserSummary, PublicUser } from "@arrtemplar/shared";
-import { ShieldCheckIcon } from "@phosphor-icons/react";
+import {
+  DotsThreeVerticalIcon,
+  LockSimpleIcon,
+  PowerIcon,
+  ShieldCheckIcon,
+  TrashIcon,
+  UserCircleIcon,
+} from "@phosphor-icons/react";
 import { Link } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
 
 export type UserRowActionCapabilities = {
   canChangePasswords: boolean;
@@ -56,8 +62,7 @@ export function UserRowActions({
   return (
     <DropdownMenu>
       <UserActionsTrigger username={user.username} />
-      <DropdownMenuContent align="end">
-        <DropdownMenuLabel>User actions</DropdownMenuLabel>
+      <DropdownMenuContent align="end" className="w-44 rounded-xl">
         <ProfileMenuItem isActorRow={isActorRow} userId={user.id} />
         {managedActions.showManagedActions ? <DropdownMenuSeparator /> : null}
         <ManagedUserActionItems
@@ -103,17 +108,16 @@ function getManagedActionState({
 
 function UserActionsTrigger({ username }: { username: string }) {
   return (
-    <DropdownMenuTrigger
-      aria-label={`Open user actions for ${username}`}
-      className={cn(
-        "grid size-9 cursor-pointer place-items-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-      )}
-      type="button"
-    >
-      <span className="sr-only">Open user actions</span>
-      <span aria-hidden="true" className="text-xl leading-none">
-        …
-      </span>
+    <DropdownMenuTrigger asChild>
+      <Button
+        aria-label={`Open user actions for ${username}`}
+        className="size-7 rounded-md p-0"
+        size="icon"
+        type="button"
+        variant="ghost"
+      >
+        <DotsThreeVerticalIcon aria-hidden="true" className="size-4" weight="bold" />
+      </Button>
     </DropdownMenuTrigger>
   );
 }
@@ -122,7 +126,10 @@ function ProfileMenuItem({ isActorRow, userId }: { isActorRow: boolean; userId: 
   if (isActorRow) {
     return (
       <DropdownMenuItem asChild>
-        <Link to="/profile">View profile</Link>
+        <Link to="/profile">
+          <UserCircleIcon aria-hidden="true" className="size-4" />
+          View profile
+        </Link>
       </DropdownMenuItem>
     );
   }
@@ -130,6 +137,7 @@ function ProfileMenuItem({ isActorRow, userId }: { isActorRow: boolean; userId: 
   return (
     <DropdownMenuItem asChild>
       <Link params={{ publicUserId: userId }} to="/profile/$publicUserId">
+        <UserCircleIcon aria-hidden="true" className="size-4" />
         View profile
       </Link>
     </DropdownMenuItem>
@@ -158,7 +166,10 @@ function ManagedUserActionItems({
   return (
     <>
       {actions.canChangePassword ? (
-        <DropdownMenuItem onSelect={() => onChangePassword(user)}>Change password</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onChangePassword(user)}>
+          <LockSimpleIcon aria-hidden="true" className="size-4" />
+          Change password
+        </DropdownMenuItem>
       ) : null}
       {actions.canEditPermissions ? (
         <DropdownMenuItem onSelect={() => onEditPermissions(user)}>
@@ -171,12 +182,14 @@ function ManagedUserActionItems({
           onSelect={() => onToggleStatus(user)}
           variant={user.disabledAt ? "default" : "destructive"}
         >
+          <PowerIcon aria-hidden="true" className="size-4" />
           {user.disabledAt ? "Restore user" : "Disable user"}
         </DropdownMenuItem>
       ) : null}
       {showDeleteSeparator ? <DropdownMenuSeparator /> : null}
       {actions.canDeleteUser ? (
         <DropdownMenuItem onSelect={() => onDeleteUser(user)} variant="destructive">
+          <TrashIcon aria-hidden="true" className="size-4" />
           Delete user
         </DropdownMenuItem>
       ) : null}

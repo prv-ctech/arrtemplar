@@ -6,10 +6,6 @@ const apiKeysSettingsSourcePath = "apps/web/src/features/admin/api-keys/ApiKeysS
 const authSettingsSourcePath = "apps/web/src/features/auth-settings/AuthSettings.tsx";
 const servicesSettingsSourcePath = "apps/web/src/features/services-settings/ServicesSettings.tsx";
 const settingsPrimitivesSourcePath = "apps/web/src/features/settings/SettingsPrimitives.tsx";
-const settingsTableActionColumnSourcePath =
-  "apps/web/src/features/admin/settings-table-action-column.tsx";
-const settingsMobileDefinitionSourcePath =
-  "apps/web/src/features/admin/settings-mobile-definition.tsx";
 const tableSourcePath = "apps/web/src/components/ui/table.tsx";
 const usersSourcePaths = [
   "apps/web/src/features/admin/AdminUsersSettings.tsx",
@@ -99,12 +95,6 @@ describe("app settings layout", () => {
     const usersTableSource = await readWorkspaceSource(
       "apps/web/src/features/admin/admin-users-table.tsx",
     );
-    const settingsMobileDefinitionSource = await readWorkspaceSource(
-      settingsMobileDefinitionSourcePath,
-    );
-    const settingsTableActionColumnSource = await readWorkspaceSource(
-      settingsTableActionColumnSourcePath,
-    );
     const hooksSource = await readWorkspaceSource(usersHooksSourcePath);
 
     expect(settingsSource).toContain("AdminUsersSettings");
@@ -136,45 +126,27 @@ describe("app settings layout", () => {
     expect(usersSource).toContain("Delete user");
     expect(usersSource).toContain("DeleteUserDialog");
     expect(usersSource).toContain("Delete this user?");
-    expect(usersTableSource.match(/onDeleteUser=\{onDeleteUser\}/g)).toHaveLength(6);
     expect(usersSource).toContain("Default: admin");
     expect(usersSource).toContain("canToggleUserStatus");
     expect(usersSource).toContain("canDeleteUser");
     expect(usersSource).toContain("UserCirclePlusIcon");
-    expect(usersSource).toContain('aria-label="Create user"');
-    expect(usersSource).toContain('containerClassName="max-w-full bg-card"');
-    expect(usersSource).toContain('className="border-separate border-spacing-0"');
-    expect(usersSource).toContain("settingsTableActionHeaderClassName");
-    expect(usersSource).toContain("settingsTableActionCellClassName");
+    expect(usersSource).toContain("New user");
+    expect(usersSource).toContain(
+      'containerClassName="rounded-lg border-border/80 bg-card/50 pb-0"',
+    );
     expect(usersSource).toContain("AdminUsersMobileList");
     expect(usersSource).toContain("AdminUserMobileCard");
-    expect(usersTableSource).toContain("AdminUserMobileIdentity");
-    expect(usersTableSource).toContain('className="shrink-0 text-muted-foreground text-xs"');
     expect(usersTableSource).not.toContain("({userId})");
-    expect(usersSource).toContain('className="hidden lg:block"');
-    expect(usersTableSource).toContain("SettingsMobileDefinition");
-    expect(settingsMobileDefinitionSource).toContain(
-      "grid-cols-[minmax(0,0.75fr)_minmax(0,1fr)] items-start gap-3",
-    );
-    expect(settingsMobileDefinitionSource).toContain(
-      "justify-self-end text-right text-foreground wrap-break-word",
-    );
-    expect(settingsTableActionColumnSource).toContain('"w-12 text-right"');
-    expect(settingsTableActionColumnSource).not.toContain("sticky");
-    expect(settingsTableActionColumnSource).not.toContain("shadow-[");
-    expect(settingsTableActionColumnSource).not.toContain("absolute -inset-y-px");
+    expect(usersSource).toContain('className="hidden md:block"');
+    expect(usersSource).toContain("DotsThreeVerticalIcon");
     expect(usersSource).not.toContain("bg-card/95");
     expect(usersSource).not.toContain("backdrop-blur-sm");
-    expect(usersSource).toContain("bg-primary text-primary-foreground");
-    expect(usersSource).toContain("shadow-(--shadow-button)");
-    expect(usersSource).toContain("pointer-events-none size-4");
     expect(usersSource).toContain('to="/profile/$publicUserId"');
     expect(usersSource).toContain("publicUserId: userId");
     expect(usersSource).toContain("View profile");
     expect(usersSource).toContain('to="/profile"');
     expect(usersSource).toContain("function UserActionsTrigger");
     expect(usersSource).toContain("<DropdownMenuTrigger");
-    expect(usersSource).toContain("cursor-pointer place-items-center");
     expect(usersSource).not.toContain('to="/profile/settings/main"');
     expect(usersSource).not.toContain('to="/profile/$publicUserId/settings/main"');
     expect(usersSource).not.toContain("Edit settings");
@@ -185,8 +157,6 @@ describe("app settings layout", () => {
     expect(usersSource).not.toContain("lucide-react");
     expect(usersSource).not.toContain("UserRoundPlus");
     expect(usersSource).toContain("focus-visible:ring-2");
-    expect(usersSource).toContain("hover:translate-y-0");
-    expect(usersSource).toContain("active:translate-y-0");
     expect(usersSource).not.toContain(
       "Manage local users by public ID, permissions, and account status.",
     );
@@ -219,9 +189,6 @@ describe("app settings layout", () => {
   it("uses API Keys as the real General settings surface", async () => {
     const settingsSource = await readWorkspaceSource(settingsSourcePath);
     const apiKeysSource = await readWorkspaceSource(apiKeysSettingsSourcePath);
-    const settingsTableActionColumnSource = await readWorkspaceSource(
-      settingsTableActionColumnSourcePath,
-    );
     const tableSource = await readWorkspaceSource(tableSourcePath);
 
     expect(settingsSource).toContain("ApiKeysSettings");
@@ -229,11 +196,10 @@ describe("app settings layout", () => {
     expect(settingsSource).not.toContain('title="General"');
     expect(settingsSource).not.toContain("Application settings and display preferences.");
     expect(apiKeysSource).toContain("API Keys");
-    expect(apiKeysSource).toContain("ApiKeyServiceCard");
-    expect(apiKeysSource).toContain("aria-expanded={isExpanded}");
-    expect(apiKeysSource).toContain('aria-label="Create API key"');
+    expect(apiKeysSource).toContain("New key");
     expect(apiKeysSource).toContain("KeyIcon");
     expect(apiKeysSource).toContain("PlusIcon");
+    expect(apiKeysSource).toContain("DotsThreeVerticalIcon");
     expect(apiKeysSource).toContain("Open API key actions");
     expect(apiKeysSource).toContain("DropdownMenuItem");
     expect(apiKeysSource).toContain("Copy API key");
@@ -247,15 +213,9 @@ describe("app settings layout", () => {
     expect(apiKeysSource).toContain("api_keys.updated");
     expect(apiKeysSource).toContain("api_keys.deleted");
     expect(apiKeysSource).toContain("api_keys.secret.copied");
-    expect(apiKeysSource).toContain("settingsTableActionHeaderClassName");
-    expect(apiKeysSource).toContain("settingsTableActionCellClassName");
     expect(apiKeysSource).toContain("ApiKeysMobileList");
     expect(apiKeysSource).toContain("ApiKeyMobileCard");
-    expect(apiKeysSource).toContain('className="hidden lg:block"');
-    expect(settingsTableActionColumnSource).toContain('"w-12 text-right"');
-    expect(settingsTableActionColumnSource).not.toContain("sticky");
-    expect(settingsTableActionColumnSource).not.toContain("shadow-[");
-    expect(settingsTableActionColumnSource).not.toContain("absolute -inset-y-px");
+    expect(apiKeysSource).toContain('className="hidden md:block"');
     expect(tableSource).toContain("pb-4 sm:pb-0");
     expect(apiKeysSource).not.toContain("Refresh key");
     expect(apiKeysSource).not.toContain("useRefreshApiKeyMutation");
@@ -295,8 +255,6 @@ describe("app settings layout", () => {
 
     expect(source).toContain("AuthMethodGrid");
     expect(source).toContain("OidcMethodCard");
-    expect(source).toContain("AuthServiceCard");
-    expect(source).toContain('title="OAuth/OIDC"');
     expect(source).toContain("ProviderEnabledSwitch");
     expect(source).toContain("OidcAccountLinking");
     expect(source).toContain("Account linking");
@@ -307,6 +265,8 @@ describe("app settings layout", () => {
     expect(source).toContain("LinkedIdentityList");
     expect(source).toContain("Connected");
     expect(source).toContain("providerKindLabels");
+    expect(source).toContain("SelectItem");
+    expect(source).toContain("Switch");
     expect(source).toContain("auth.provider.saved");
     expect(source).toContain("auth.provider.save.failed");
     expect(source).toContain("OAuth settings saved.");
@@ -326,7 +286,7 @@ describe("app settings layout", () => {
     expect(source).not.toContain("rounded-full border border-border bg-card/70 p-1.5");
     expect(source).not.toContain("LinkedIdentitiesPanel");
     expect(source).not.toContain("LinkedIdentityItem");
-    expect(source).not.toContain("identity.subject");
+    expect(source).not.toContain("identity.subject}");
     expect(source).not.toContain("identity.issuer");
     expect(source).not.toContain("AuthentikHelpCard");
     expect(source).not.toContain("LinkedIdentitiesCard");

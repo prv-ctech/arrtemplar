@@ -1,7 +1,7 @@
 import type { AdminUserSummary, PublicUser } from "@arrtemplar/shared";
-import { UserCircleIcon, UserCirclePlusIcon } from "@phosphor-icons/react";
+import { CaretRightIcon } from "@phosphor-icons/react";
+import { Fragment, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -10,67 +10,122 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { SettingsMobileDefinition } from "./settings-mobile-definition";
-import {
-  settingsTableActionCellClassName,
-  settingsTableActionHeaderClassName,
-} from "./settings-table-action-column";
+import { cn } from "@/lib/utils";
 import { UserPermissionSummary } from "./user-permission-summary";
 import { type UserRowActionCapabilities, UserRowActions } from "./user-row-actions";
 
-type AdminUsersTableCapabilities = UserRowActionCapabilities & {
-  canCreateUsers: boolean;
-};
+type AdminUsersTableCapabilities = UserRowActionCapabilities;
 type AdminUsersTableProps = {
   actor: PublicUser;
   capabilities: AdminUsersTableCapabilities;
+  expandedUserId: string | null;
   onChangePassword: (user: AdminUserSummary) => void;
-  onCreateUser: () => void;
   onDeleteUser: (user: AdminUserSummary) => void;
   onEditPermissions: (user: AdminUserSummary) => void;
+  onToggleExpand: (userId: string | null) => void;
   onToggleStatus: (user: AdminUserSummary) => void;
   rows: readonly AdminUserSummary[];
 };
 
+const ADMIN_USERS_DESKTOP_COLUMN_COUNT = 5;
+
 export function AdminUsersTable({
   actor,
   capabilities,
+  expandedUserId,
   onChangePassword,
-  onCreateUser,
   onDeleteUser,
   onEditPermissions,
+  onToggleExpand,
   onToggleStatus,
   rows,
 }: AdminUsersTableProps) {
   return (
     <>
+      <div className="hidden md:block">
+        <Table containerClassName="rounded-lg border-border/80 bg-card/50 pb-0">
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="h-8 px-3 text-xs">User</TableHead>
+              <TableHead className="h-8 px-3 text-xs">Auth</TableHead>
+              <TableHead className="h-8 px-3 text-xs">Status</TableHead>
+              <TableHead className="h-8 px-3 text-xs">Updated</TableHead>
+              <TableHead className="h-8 px-3 text-right text-xs">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.length > 0 ? (
+              rows.map((user) => {
+                const isExpanded = expandedUserId === user.id;
+
+                return (
+                  <Fragment key={user.id}>
+                    <TableRow data-state={isExpanded ? "selected" : undefined}>
+                      <TableCell className="max-w-136 px-3 py-2">
+                        <UserTitleButton
+                          expanded={isExpanded}
+                          onToggle={() => onToggleExpand(isExpanded ? null : user.id)}
+                          user={user}
+                        />
+                      </TableCell>
+                      <TableCell className="px-3 py-2">
+                        <AuthMethodBadge method={user.authMethod ?? "local"} />
+                      </TableCell>
+                      <TableCell className="px-3 py-2">
+                        <UserStatusBadge disabledAt={user.disabledAt} />
+                      </TableCell>
+                      <TableCell className="px-3 py-2 text-sm text-muted-foreground">
+                        {formatUserDate(user.updatedAt)}
+                      </TableCell>
+                      <TableCell className="px-3 py-2 text-right">
+                        <UserRowActions
+                          actor={actor}
+                          capabilities={capabilities}
+                          onChangePassword={onChangePassword}
+                          onDeleteUser={onDeleteUser}
+                          onEditPermissions={onEditPermissions}
+                          onToggleStatus={onToggleStatus}
+                          user={user}
+                        />
+                      </TableCell>
+                    </TableRow>
+                    {isExpanded ? (
+                      <TableRow className="hover:bg-transparent">
+                        <TableCell
+                          className="bg-background/35 px-3 py-3"
+                          colSpan={ADMIN_USERS_DESKTOP_COLUMN_COUNT}
+                        >
+                          <UserInlineDetail user={user} />
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </Fragment>
+                );
+              })
+            ) : (
+              <TableRow className="hover:bg-transparent">
+                <TableCell
+                  className="px-3 py-8 text-center text-sm text-muted-foreground"
+                  colSpan={ADMIN_USERS_DESKTOP_COLUMN_COUNT}
+                >
+                  No managed local accounts yet.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
       <AdminUsersMobileList
         actor={actor}
         capabilities={capabilities}
+        expandedUserId={expandedUserId}
         onChangePassword={onChangePassword}
-        onCreateUser={onCreateUser}
         onDeleteUser={onDeleteUser}
         onEditPermissions={onEditPermissions}
+        onToggleExpand={onToggleExpand}
         onToggleStatus={onToggleStatus}
         rows={rows}
       />
-      <div className="hidden lg:block">
-        <Table className="border-separate border-spacing-0" containerClassName="max-w-full bg-card">
-          <AdminUsersTableHeader
-            canCreateUsers={capabilities.canCreateUsers}
-            onCreateUser={onCreateUser}
-          />
-          <AdminUsersTableBody
-            actor={actor}
-            capabilities={capabilities}
-            onChangePassword={onChangePassword}
-            onDeleteUser={onDeleteUser}
-            onEditPermissions={onEditPermissions}
-            onToggleStatus={onToggleStatus}
-            rows={rows}
-          />
-        </Table>
-      </div>
     </>
   );
 }
@@ -78,181 +133,130 @@ export function AdminUsersTable({
 function AdminUsersMobileList({
   actor,
   capabilities,
+  expandedUserId,
   onChangePassword,
-  onCreateUser,
   onDeleteUser,
   onEditPermissions,
+  onToggleExpand,
   onToggleStatus,
   rows,
 }: AdminUsersTableProps) {
   return (
-    <div className="rounded-2xl border border-border bg-card lg:hidden">
-      <div className="flex items-center justify-between gap-3 border-border border-b px-3 py-2.5">
-        <span className="text-sm font-medium text-foreground">Users</span>
-        {capabilities.canCreateUsers ? <CreateUserButton onCreateUser={onCreateUser} /> : null}
-      </div>
-      {rows.length > 0 ? (
-        <div className="divide-y divide-border">
-          {rows.map((user) => (
-            <AdminUserMobileCard
-              actor={actor}
-              capabilities={capabilities}
-              key={user.id}
-              onChangePassword={onChangePassword}
-              onDeleteUser={onDeleteUser}
-              onEditPermissions={onEditPermissions}
-              onToggleStatus={onToggleStatus}
-              user={user}
-            />
-          ))}
-        </div>
-      ) : (
-        <p className="px-3 py-6 text-center text-muted-foreground text-sm">
-          No managed local accounts yet.
-        </p>
-      )}
-    </div>
-  );
-}
-
-function AdminUsersTableHeader({
-  canCreateUsers,
-  onCreateUser,
-}: {
-  canCreateUsers: boolean;
-  onCreateUser: () => void;
-}) {
-  return (
-    <TableHeader>
-      <TableRow>
-        <TableHead>User</TableHead>
-        <TableHead>Public ID</TableHead>
-        <TableHead>Auth</TableHead>
-        <TableHead>Permissions</TableHead>
-        <TableHead>Status</TableHead>
-        <TableHead>Created</TableHead>
-        <TableHead>Updated</TableHead>
-        <CreateUserHeaderAction canCreateUsers={canCreateUsers} onCreateUser={onCreateUser} />
-      </TableRow>
-    </TableHeader>
-  );
-}
-
-function AdminUsersTableBody({
-  actor,
-  capabilities,
-  onChangePassword,
-  onDeleteUser,
-  onEditPermissions,
-  onToggleStatus,
-  rows,
-}: Omit<AdminUsersTableProps, "onCreateUser">) {
-  return (
-    <TableBody>
+    <div className="grid gap-2 md:hidden">
       {rows.length > 0 ? (
         rows.map((user) => (
-          <AdminUserTableRow
+          <AdminUserMobileCard
             actor={actor}
             capabilities={capabilities}
+            expanded={expandedUserId === user.id}
             key={user.id}
             onChangePassword={onChangePassword}
             onDeleteUser={onDeleteUser}
             onEditPermissions={onEditPermissions}
+            onToggleExpand={() => onToggleExpand(expandedUserId === user.id ? null : user.id)}
             onToggleStatus={onToggleStatus}
             user={user}
           />
         ))
       ) : (
-        <EmptyUsersRow />
+        <div className="rounded-lg border border-border/80 bg-card/50 px-3 py-8 text-center text-sm text-muted-foreground">
+          No managed local accounts yet.
+        </div>
       )}
-    </TableBody>
+    </div>
   );
 }
 
-function CreateUserHeaderAction({
-  canCreateUsers,
-  onCreateUser,
+function UserTitleButton({
+  expanded,
+  onToggle,
+  user,
 }: {
-  canCreateUsers: boolean;
-  onCreateUser: () => void;
+  expanded: boolean;
+  onToggle: () => void;
+  user: AdminUserSummary;
 }) {
   return (
-    <TableHead className={settingsTableActionHeaderClassName}>
-      {canCreateUsers ? <CreateUserButton onCreateUser={onCreateUser} /> : null}
-      <span className="sr-only">User actions</span>
-    </TableHead>
-  );
-}
-
-function CreateUserButton({ onCreateUser }: { onCreateUser: () => void }) {
-  return (
-    <Button
-      aria-label="Create user"
-      className="size-8 rounded-xl border border-primary/35 bg-primary text-primary-foreground shadow-(--shadow-button) hover:translate-y-0 hover:bg-primary/90 hover:text-primary-foreground active:translate-y-0"
-      onClick={onCreateUser}
-      size="icon"
+    <button
+      aria-expanded={expanded}
+      className="group flex min-w-0 items-center gap-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      onClick={onToggle}
       type="button"
-      variant="ghost"
     >
-      <UserCirclePlusIcon aria-hidden="true" className="pointer-events-none size-4" />
-    </Button>
+      <CaretRightIcon
+        aria-hidden="true"
+        className={cn(
+          "size-3.5 shrink-0 text-muted-foreground transition-transform",
+          expanded && "rotate-90",
+        )}
+      />
+      <span className="grid min-w-0">
+        <span className="block truncate text-sm font-medium text-foreground group-hover:text-primary">
+          {user.username}
+        </span>
+        <span className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
+          {user.id}
+        </span>
+      </span>
+    </button>
   );
 }
 
-function AdminUserTableRow({
-  actor,
-  capabilities,
-  onChangePassword,
-  onDeleteUser,
-  onEditPermissions,
-  onToggleStatus,
-  user,
-}: Omit<AdminUsersTableProps, "onCreateUser" | "rows"> & { user: AdminUserSummary }) {
+function UserInlineDetail({ user }: { user: AdminUserSummary }) {
   return (
-    <TableRow>
-      <TableCell>
-        <UserIdentityCell username={user.username} />
-      </TableCell>
-      <TableCell className="font-mono text-xs text-muted-foreground">{user.id}</TableCell>
-      <TableCell>
-        <AuthMethodBadge method={user.authMethod ?? "local"} />
-      </TableCell>
-      <TableCell className="min-w-44 max-w-72 text-sm text-muted-foreground">
+    <div className="grid gap-3">
+      <div className="grid gap-1.5">
+        <p className="text-xs font-medium text-muted-foreground">Permissions</p>
         <UserPermissionSummary permissions={user.permissions} />
-      </TableCell>
-      <TableCell>{user.disabledAt ? "Disabled" : "Active"}</TableCell>
-      <TableCell>{new Date(user.createdAt).toLocaleDateString()}</TableCell>
-      <TableCell>{new Date(user.updatedAt).toLocaleDateString()}</TableCell>
-      <TableCell className={settingsTableActionCellClassName}>
-        <UserRowActions
-          actor={actor}
-          capabilities={capabilities}
-          onChangePassword={onChangePassword}
-          onDeleteUser={onDeleteUser}
-          onEditPermissions={onEditPermissions}
-          onToggleStatus={onToggleStatus}
-          user={user}
-        />
-      </TableCell>
-    </TableRow>
+      </div>
+      <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+        <UserDetail label="Public ID">
+          <span className="font-mono">{user.id}</span>
+        </UserDetail>
+        <UserDetail label="Auth">
+          <AuthMethodBadge method={user.authMethod ?? "local"} />
+        </UserDetail>
+        <UserDetail label="Created">{formatUserDate(user.createdAt)}</UserDetail>
+        <UserDetail label="Updated">{formatUserDate(user.updatedAt)}</UserDetail>
+      </dl>
+    </div>
+  );
+}
+
+function UserDetail({ children, label }: { children: ReactNode; label: string }) {
+  return (
+    <div className="flex min-w-0 items-center justify-between gap-3 border-b border-border/60 pb-1.5 text-sm sm:border-0 sm:pb-0">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 truncate text-right text-foreground">{children}</dd>
+    </div>
   );
 }
 
 function AdminUserMobileCard({
   actor,
   capabilities,
+  expanded,
   onChangePassword,
   onDeleteUser,
   onEditPermissions,
+  onToggleExpand,
   onToggleStatus,
   user,
-}: Omit<AdminUsersTableProps, "onCreateUser" | "rows"> & { user: AdminUserSummary }) {
+}: {
+  actor: PublicUser;
+  capabilities: AdminUsersTableCapabilities;
+  expanded: boolean;
+  onChangePassword: (user: AdminUserSummary) => void;
+  onDeleteUser: (user: AdminUserSummary) => void;
+  onEditPermissions: (user: AdminUserSummary) => void;
+  onToggleExpand: () => void;
+  onToggleStatus: (user: AdminUserSummary) => void;
+  user: AdminUserSummary;
+}) {
   return (
-    <article className="p-3">
-      <div className="flex items-start gap-3">
-        <div className="min-w-0 flex-1">
-          <AdminUserMobileIdentity userId={user.id} username={user.username} />
-        </div>
+    <article className="rounded-lg border border-border/80 bg-card/50 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <UserTitleButton expanded={expanded} onToggle={onToggleExpand} user={user} />
         <UserRowActions
           actor={actor}
           capabilities={capabilities}
@@ -263,65 +267,62 @@ function AdminUserMobileCard({
           user={user}
         />
       </div>
-      <dl className="mt-3 grid gap-2 text-sm">
-        <SettingsMobileDefinition label="Auth">
+      <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+        <div className="flex items-center gap-2">
           <AuthMethodBadge method={user.authMethod ?? "local"} />
-        </SettingsMobileDefinition>
-        <SettingsMobileDefinition label="Permissions">
-          <UserPermissionSummary permissions={user.permissions} />
-        </SettingsMobileDefinition>
-        <SettingsMobileDefinition label="Status">
-          {user.disabledAt ? "Disabled" : "Active"}
-        </SettingsMobileDefinition>
-        <SettingsMobileDefinition label="Created">
-          {new Date(user.createdAt).toLocaleDateString()}
-        </SettingsMobileDefinition>
-        <SettingsMobileDefinition label="Updated">
-          {new Date(user.updatedAt).toLocaleDateString()}
-        </SettingsMobileDefinition>
-      </dl>
+          <UserStatusBadge disabledAt={user.disabledAt} />
+        </div>
+        <span>{formatUserDate(user.updatedAt)}</span>
+      </div>
+      {expanded ? (
+        <div className="mt-3 border-t border-border pt-3">
+          <UserInlineDetail user={user} />
+        </div>
+      ) : null}
     </article>
   );
 }
 
-function AdminUserMobileIdentity({ userId, username }: { userId: string; username: string }) {
-  return (
-    <div className="flex min-w-0 items-center gap-2">
-      <UserCircleIcon aria-hidden="true" className="size-4 shrink-0 text-primary" />
-      <span className="truncate font-medium text-foreground">{username}</span>
-      <span aria-hidden="true" className="shrink-0 text-muted-foreground text-xs">
-        |
-      </span>
-      <span className="truncate font-mono text-muted-foreground text-xs">{userId}</span>
-    </div>
-  );
-}
+function UserStatusBadge({ disabledAt }: { disabledAt: string | null }) {
+  if (disabledAt) {
+    return (
+      <Badge
+        variant="outline"
+        className="border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+      >
+        Disabled
+      </Badge>
+    );
+  }
 
-function UserIdentityCell({ username }: { username: string }) {
   return (
-    <div className="min-w-0">
-      <div className="flex items-center gap-2 font-medium text-foreground">
-        <UserCircleIcon aria-hidden="true" className="size-4 text-primary" />
-        <span className="truncate">{username}</span>
-      </div>
-    </div>
-  );
-}
-
-function EmptyUsersRow() {
-  return (
-    <TableRow>
-      <TableCell className="text-center text-muted-foreground" colSpan={8}>
-        No managed local accounts yet.
-      </TableCell>
-    </TableRow>
+    <Badge
+      variant="outline"
+      className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+    >
+      Active
+    </Badge>
   );
 }
 
 function AuthMethodBadge({ method }: { method: "local" | "oauth" }) {
+  const isOauth = method === "oauth";
+
   return (
-    <Badge variant={method === "oauth" ? "default" : "secondary"}>
-      {method === "oauth" ? "OAuth" : "Local"}
+    <Badge
+      variant="outline"
+      className={cn(
+        "capitalize",
+        isOauth
+          ? "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300"
+          : "border-muted-foreground/25 bg-muted/40 text-muted-foreground",
+      )}
+    >
+      {isOauth ? "OAuth" : "Local"}
     </Badge>
   );
+}
+
+function formatUserDate(value: string): string {
+  return new Date(value).toLocaleDateString();
 }

@@ -1,5 +1,7 @@
 import type { AdminUserSummary } from "@arrtemplar/shared";
+import { UserCircleIcon, UserCirclePlusIcon } from "@phosphor-icons/react";
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import { canManageUsers, hasRequiredPermission } from "@/features/auth/auth-state";
 import { notify } from "@/features/notifications/notification-gateway";
 import { useAuthenticatedRouteUser } from "@/routes/authenticated-route-user";
@@ -21,6 +23,7 @@ export function AdminUsersSettings() {
   const updateStatusMutation = useUpdateManagedUserStatusMutation();
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
   const [passwordDialogUser, setPasswordDialogUser] = useState<AdminUserSummary | null>(null);
   const [permissionsDialogUser, setPermissionsDialogUser] = useState<AdminUserSummary | null>(null);
   const [deleteDialogUser, setDeleteDialogUser] = useState<AdminUserSummary | null>(null);
@@ -69,14 +72,34 @@ export function AdminUsersSettings() {
   }
 
   return (
-    <div className="space-y-6">
+    <section className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="grid size-7 shrink-0 place-items-center rounded-md border border-border bg-secondary text-secondary-foreground">
+            <UserCircleIcon aria-hidden="true" className="size-4" />
+          </span>
+          <h2 className="text-base font-semibold leading-5 tracking-tight">Users</h2>
+        </div>
+        {capabilities.canCreateUsers ? (
+          <Button
+            className="h-8 gap-1.5 rounded-md px-2.5 text-sm"
+            onClick={() => setIsCreateOpen(true)}
+            type="button"
+          >
+            <UserCirclePlusIcon aria-hidden="true" className="size-4" />
+            New user
+          </Button>
+        ) : null}
+      </div>
+
       <AdminUsersTable
         actor={actor}
         capabilities={capabilities}
+        expandedUserId={expandedUserId}
         onChangePassword={setPasswordDialogUser}
-        onCreateUser={() => setIsCreateOpen(true)}
         onDeleteUser={setDeleteDialogUser}
         onEditPermissions={setPermissionsDialogUser}
+        onToggleExpand={setExpandedUserId}
         onToggleStatus={toggleUserStatus}
         rows={rows}
       />
@@ -101,6 +124,6 @@ export function AdminUsersSettings() {
         onClose={() => setDeleteDialogUser(null)}
         user={deleteDialogUser}
       />
-    </div>
+    </section>
   );
 }
