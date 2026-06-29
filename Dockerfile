@@ -22,6 +22,7 @@ WORKDIR /app
 COPY package.json bun.lock bunfig.toml ./
 COPY patches ./patches
 COPY apps/server/package.json ./apps/server/package.json
+COPY apps/web/package.json ./apps/web/package.json
 COPY packages/shared/package.json ./packages/shared/package.json
 
 RUN bun install --frozen-lockfile --production
