@@ -46,7 +46,8 @@
         "github.vscode-github-actions",
         "vscjava.vscode-java-pack",
         "bierner.markdown-mermaid",
-        "DavidAnson.vscode-markdownlint"
+        "DavidAnson.vscode-markdownlint",
+        "ms-azuretools.vscode-docker"
       ],
       "settings": {
         "workbench.browser.openLocalhostLinks": true,

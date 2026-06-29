@@ -2,15 +2,9 @@ import type { AdminUserSummary, PublicUser } from "@arrtemplar/shared";
 import { CaretRightIcon } from "@phosphor-icons/react";
 import { Fragment, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { TableCell, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { AdminDesktopTable } from "./admin-table-primitives";
 import { UserPermissionSummary } from "./user-permission-summary";
 import { type UserRowActionCapabilities, UserRowActions } from "./user-row-actions";
 
@@ -28,6 +22,13 @@ type AdminUsersTableProps = {
 };
 
 const ADMIN_USERS_DESKTOP_COLUMN_COUNT = 5;
+const ADMIN_USERS_TABLE_COLUMNS = [
+  { label: "User" },
+  { label: "Auth" },
+  { label: "Status" },
+  { label: "Updated" },
+  { align: "right", label: "Actions" },
+] as const;
 
 export function AdminUsersTable({
   actor,
@@ -42,79 +43,66 @@ export function AdminUsersTable({
 }: AdminUsersTableProps) {
   return (
     <>
-      <div className="hidden md:block">
-        <Table containerClassName="rounded-lg border-border/80 bg-card/50 pb-0">
-          <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              <TableHead className="h-8 px-3 text-xs">User</TableHead>
-              <TableHead className="h-8 px-3 text-xs">Auth</TableHead>
-              <TableHead className="h-8 px-3 text-xs">Status</TableHead>
-              <TableHead className="h-8 px-3 text-xs">Updated</TableHead>
-              <TableHead className="h-8 px-3 text-right text-xs">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.length > 0 ? (
-              rows.map((user) => {
-                const isExpanded = expandedUserId === user.id;
+      <AdminDesktopTable columns={ADMIN_USERS_TABLE_COLUMNS}>
+        {rows.length > 0 ? (
+          rows.map((user) => {
+            const isExpanded = expandedUserId === user.id;
 
-                return (
-                  <Fragment key={user.id}>
-                    <TableRow data-state={isExpanded ? "selected" : undefined}>
-                      <TableCell className="max-w-136 px-3 py-2">
-                        <UserTitleButton
-                          expanded={isExpanded}
-                          onToggle={() => onToggleExpand(isExpanded ? null : user.id)}
-                          user={user}
-                        />
-                      </TableCell>
-                      <TableCell className="px-3 py-2">
-                        <AuthMethodBadge method={user.authMethod ?? "local"} />
-                      </TableCell>
-                      <TableCell className="px-3 py-2">
-                        <UserStatusBadge disabledAt={user.disabledAt} />
-                      </TableCell>
-                      <TableCell className="px-3 py-2 text-sm text-muted-foreground">
-                        {formatUserDate(user.updatedAt)}
-                      </TableCell>
-                      <TableCell className="px-3 py-2 text-right">
-                        <UserRowActions
-                          actor={actor}
-                          capabilities={capabilities}
-                          onChangePassword={onChangePassword}
-                          onDeleteUser={onDeleteUser}
-                          onEditPermissions={onEditPermissions}
-                          onToggleStatus={onToggleStatus}
-                          user={user}
-                        />
-                      </TableCell>
-                    </TableRow>
-                    {isExpanded ? (
-                      <TableRow className="hover:bg-transparent">
-                        <TableCell
-                          className="bg-background/35 px-3 py-3"
-                          colSpan={ADMIN_USERS_DESKTOP_COLUMN_COUNT}
-                        >
-                          <UserInlineDetail user={user} />
-                        </TableCell>
-                      </TableRow>
-                    ) : null}
-                  </Fragment>
-                );
-              })
-            ) : (
-              <TableRow className="hover:bg-transparent">
-                <TableCell
-                  className="px-3 py-8 text-center text-sm text-muted-foreground"
-                  colSpan={ADMIN_USERS_DESKTOP_COLUMN_COUNT}
-                >
-                  No managed local accounts yet.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+            return (
+              <Fragment key={user.id}>
+                <TableRow data-state={isExpanded ? "selected" : undefined}>
+                  <TableCell className="max-w-136 px-3 py-2">
+                    <UserTitleButton
+                      expanded={isExpanded}
+                      onToggle={() => onToggleExpand(isExpanded ? null : user.id)}
+                      user={user}
+                    />
+                  </TableCell>
+                  <TableCell className="px-3 py-2">
+                    <AuthMethodBadge method={user.authMethod ?? "local"} />
+                  </TableCell>
+                  <TableCell className="px-3 py-2">
+                    <UserStatusBadge disabledAt={user.disabledAt} />
+                  </TableCell>
+                  <TableCell className="px-3 py-2 text-sm text-muted-foreground">
+                    {formatUserDate(user.updatedAt)}
+                  </TableCell>
+                  <TableCell className="px-3 py-2 text-right">
+                    <UserRowActions
+                      actor={actor}
+                      capabilities={capabilities}
+                      onChangePassword={onChangePassword}
+                      onDeleteUser={onDeleteUser}
+                      onEditPermissions={onEditPermissions}
+                      onToggleStatus={onToggleStatus}
+                      user={user}
+                    />
+                  </TableCell>
+                </TableRow>
+                {isExpanded ? (
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell
+                      className="bg-background/35 px-3 py-3"
+                      colSpan={ADMIN_USERS_DESKTOP_COLUMN_COUNT}
+                    >
+                      <UserInlineDetail user={user} />
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </Fragment>
+            );
+          })
+        ) : (
+          <TableRow className="hover:bg-transparent">
+            <TableCell
+              className="px-3 py-8 text-center text-sm text-muted-foreground"
+              colSpan={ADMIN_USERS_DESKTOP_COLUMN_COUNT}
+            >
+              No managed local accounts yet.
+            </TableCell>
+          </TableRow>
+        )}
+      </AdminDesktopTable>
       <AdminUsersMobileList
         actor={actor}
         capabilities={capabilities}

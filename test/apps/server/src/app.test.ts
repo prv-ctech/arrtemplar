@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { AsyncLocalStorage } from "node:async_hooks";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { join } from "node:path";
 import { configure, getLogger } from "@logtape/logtape";
 import { createApp } from "../../../../apps/server/src/app";
 import { APP_LOG_CATEGORY, APP_NAME, APP_VERSION } from "../../../../packages/shared/src";
@@ -10,6 +12,33 @@ import {
   resetLogTape,
 } from "../../../helpers/logging";
 import { csrfJsonRequest } from "../../../helpers/server";
+
+type FrontendFixture = {
+  distRoot: string;
+  cleanup: () => Promise<void>;
+};
+
+async function createFrontendFixture(
+  options: { withIndex?: boolean } = {},
+): Promise<FrontendFixture> {
+  const distRoot = await mkdtemp("/tmp/arrtemplar-frontend-");
+  const withIndex = options.withIndex ?? true;
+
+  await mkdir(join(distRoot, "assets"), { recursive: true });
+  await Bun.write(join(distRoot, "assets", "main.js"), "console.log('frontend-asset');");
+
+  if (withIndex) {
+    await Bun.write(
+      join(distRoot, "index.html"),
+      "<!doctype html><html><head><title>Frontend Shell</title></head><body>frontend-shell</body></html>",
+    );
+  }
+
+  return {
+    distRoot,
+    cleanup: () => rm(distRoot, { recursive: true, force: true }),
+  };
+}
 
 describe("GET /", () => {
   it("returns a backend landing response instead of an Elysia not-found error", async () => {
@@ -245,6 +274,147 @@ describe("GET /health", () => {
       expect(formattedRecords).not.toContain("referrer-secret");
     } finally {
       await resetLogTape();
+      database.close();
+    }
+  });
+});
+
+describe("frontend static serving", () => {
+  it("serves built assets with immutable caching and SPA fallbacks with no-cache", async () => {
+    const database = await resetAndOpenTestDatabase();
+    const frontend = await createFrontendFixture();
+    const app = createApp({ database, frontendDistRoot: frontend.distRoot });
+
+    const assetResponse = await app.handle(new Request("http://localhost/assets/main.js"));
+    const assetBody = await assetResponse.text();
+    const fallbackResponse = await app.handle(new Request("http://localhost/settings/profile"));
+    const fallbackBody = await fallbackResponse.text();
+
+    try {
+      expect(assetResponse.status).toBe(200);
+      expect(assetResponse.headers.get("cache-control")).toBe(
+        "public, max-age=31536000, immutable",
+      );
+      expect(assetBody).toContain("frontend-asset");
+
+      expect(fallbackResponse.status).toBe(200);
+      expect(fallbackResponse.headers.get("cache-control")).toBe("no-cache");
+      expect(fallbackBody).toContain("frontend-shell");
+    } finally {
+      await frontend.cleanup();
+      database.close();
+    }
+  });
+
+  it("keeps reserved backend paths and unsafe traversal requests out of the SPA fallback", async () => {
+    const database = await resetAndOpenTestDatabase();
+    const frontend = await createFrontendFixture();
+    const app = createApp({ database, frontendDistRoot: frontend.distRoot });
+
+    const reservedPathResponse = await app.handle(new Request("http://localhost/api/unknown"));
+    const traversalResponse = await app.handle(
+      new Request("http://localhost/assets/%2e%2e/secret.txt"),
+    );
+    const missingAssetResponse = await app.handle(
+      new Request("http://localhost/assets/missing.js"),
+    );
+
+    try {
+      expect(reservedPathResponse.status).toBe(404);
+      expect(traversalResponse.status).toBe(404);
+      expect(await traversalResponse.text()).toBe("Not Found");
+      expect(missingAssetResponse.status).toBe(404);
+    } finally {
+      await frontend.cleanup();
+      database.close();
+    }
+  });
+
+  it("logs frontend static enablement and served cache policies", async () => {
+    const { recorder, sink } = createLogBuffer();
+    const database = await resetAndOpenTestDatabase();
+    const frontend = await createFrontendFixture();
+
+    await configure({
+      contextLocalStorage: new AsyncLocalStorage(),
+      sinks: { buffer: sink, meta: () => undefined },
+      loggers: [
+        { category: ["logtape", "meta"], sinks: ["meta"] },
+        { category: [APP_LOG_CATEGORY, "server"], lowestLevel: "debug", sinks: ["buffer"] },
+      ],
+    });
+
+    const app = createApp({ database, frontendDistRoot: frontend.distRoot });
+
+    try {
+      const response = await app.handle(new Request("http://localhost/assets/main.js"));
+
+      expect(response.status).toBe(200);
+      recorder.assertLogged({
+        category: [APP_LOG_CATEGORY, "server"],
+        level: "info",
+        message: /Frontend static serving enabled from/,
+        properties: {
+          event: "frontend.static.enabled",
+          distRoot: frontend.distRoot,
+        },
+      });
+      recorder.assertLogged({
+        category: [APP_LOG_CATEGORY, "server"],
+        level: "debug",
+        properties: {
+          event: "frontend.static.served",
+          assetKind: "asset",
+          cachePolicy: "public, max-age=31536000, immutable",
+        },
+      });
+    } finally {
+      await resetLogTape();
+      await frontend.cleanup();
+      database.close();
+    }
+  });
+
+  it("warns once when the frontend build is missing index.html", async () => {
+    const { records, recorder, sink } = createLogBuffer();
+    const database = await resetAndOpenTestDatabase();
+    const frontend = await createFrontendFixture({ withIndex: false });
+
+    await configure({
+      contextLocalStorage: new AsyncLocalStorage(),
+      sinks: { buffer: sink, meta: () => undefined },
+      loggers: [
+        { category: ["logtape", "meta"], sinks: ["meta"] },
+        { category: [APP_LOG_CATEGORY, "server"], lowestLevel: "debug", sinks: ["buffer"] },
+      ],
+    });
+
+    const app = createApp({ database, frontendDistRoot: frontend.distRoot });
+
+    try {
+      const firstResponse = await app.handle(new Request("http://localhost/"));
+      const secondResponse = await app.handle(new Request("http://localhost/settings"));
+      const missingIndexWarnings = records.filter(
+        (record) =>
+          record.category.join(".") === `${APP_LOG_CATEGORY}.server` &&
+          record.properties.event === "frontend.static.index_missing",
+      );
+
+      expect(firstResponse.status).toBe(500);
+      expect(secondResponse.status).toBe(500);
+      expect(missingIndexWarnings).toHaveLength(1);
+      recorder.assertLogged({
+        category: [APP_LOG_CATEGORY, "server"],
+        level: "warning",
+        message: /Frontend build index is missing from/,
+        properties: {
+          event: "frontend.static.index_missing",
+          distRoot: frontend.distRoot,
+        },
+      });
+    } finally {
+      await resetLogTape();
+      await frontend.cleanup();
       database.close();
     }
   });

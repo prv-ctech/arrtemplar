@@ -1,11 +1,9 @@
 import {
-  AUTH_PROVIDER_KIND_VALUES,
   AUTH_PROVIDER_SLUGS,
   type AuthIdentity,
   type AuthProviderKind,
   type AuthProviderSummary,
   type AuthUpsertProviderRequest,
-  OIDC_PROFILE_SIGNING_ALGORITHM_VALUES,
   OIDC_SIGNING_ALGORITHM_VALUES,
   TOKEN_ENDPOINT_AUTH_METHOD_VALUES,
 } from "@arrtemplar/shared";
@@ -65,6 +63,10 @@ type AuthProviderFormState = {
 };
 
 const authProviderSlug = AUTH_PROVIDER_SLUGS[0];
+const AUTH_PROVIDER_EDITABLE_KIND_VALUES = [
+  "authentik",
+  "authelia",
+] as const satisfies readonly AuthProviderKind[];
 const providerKindLabels: Record<AuthProviderKind, string> = {
   authentik: "Authentik",
   authelia: "Authelia",
@@ -74,7 +76,7 @@ const providerKindLabels: Record<AuthProviderKind, string> = {
   custom: "Custom / generic",
 };
 const defaultProviderFormState: AuthProviderFormState = {
-  providerKind: "custom",
+  providerKind: AUTH_PROVIDER_EDITABLE_KIND_VALUES[0],
   label: "OIDC",
   issuer: "",
   clientId: "",
@@ -293,17 +295,11 @@ function AuthProviderForm({ controls }: { controls: AuthSettingsController }) {
 function AuthProviderFields({ controls }: { controls: AuthSettingsController }) {
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card/50">
-      {controls.form.enabled ? (
-        <ProviderConfigRows
-          disabled={controls.isSaving}
-          form={controls.form}
-          onChange={controls.updateForm}
-        />
-      ) : (
-        <p className="px-3 py-2.5 text-sm text-muted-foreground sm:px-4">
-          Turn on the provider to edit OAuth/OIDC settings.
-        </p>
-      )}
+      <ProviderConfigRows
+        disabled={controls.isSaving}
+        form={controls.form}
+        onChange={controls.updateForm}
+      />
     </div>
   );
 }
@@ -349,10 +345,6 @@ function OidcSelectField({
 }
 
 function AuthProviderSaveButton({ controls }: { controls: AuthSettingsController }) {
-  if (!controls.form.enabled && !controls.provider) {
-    return null;
-  }
-
   return (
     <div className="flex justify-end">
       <Button className="rounded-xl" disabled={controls.isSaving} size="sm" type="submit">
@@ -403,7 +395,9 @@ function ProviderConfigRows({
   form: AuthProviderFormState;
   onChange: (next: Partial<AuthProviderFormState>) => void;
 }) {
-  const fieldClassName = "h-9 rounded-xl px-3 text-sm";
+  const wideFieldClassName = "w-full sm:w-52";
+  const compactFieldClassName = "w-full sm:w-44";
+  const fieldClassName = cn("h-9 rounded-xl px-3 text-sm", wideFieldClassName);
 
   return (
     <>
@@ -412,18 +406,18 @@ function ProviderConfigRows({
           ariaLabel="OIDC provider kind"
           disabled={disabled}
           id="auth-provider-kind"
-          items={AUTH_PROVIDER_KIND_VALUES.map((value) => ({
+          items={AUTH_PROVIDER_EDITABLE_KIND_VALUES.map((value) => ({
             label: providerKindLabels[value],
             value,
           }))}
           onValueChange={(value) => {
-            const providerKind = readAuthProviderKind(value);
+            const providerKind = readEditableAuthProviderKind(value);
 
             if (providerKind) {
               onChange({ providerKind });
             }
           }}
-          triggerClassName="w-full sm:w-56"
+          triggerClassName={wideFieldClassName}
           value={form.providerKind}
         />
       </SettingsRow>
@@ -485,7 +479,7 @@ function ProviderConfigRows({
               onChange({ tokenEndpointAuthMethod });
             }
           }}
-          triggerClassName="w-full sm:w-56"
+          triggerClassName={wideFieldClassName}
           value={form.tokenEndpointAuthMethod}
         />
       </SettingsRow>
@@ -547,29 +541,8 @@ function ProviderConfigRows({
               onChange({ idTokenSigningAlgorithm });
             }
           }}
-          triggerClassName="w-full sm:w-44"
+          triggerClassName={compactFieldClassName}
           value={form.idTokenSigningAlgorithm}
-        />
-      </SettingsRow>
-      <SettingsRow
-        controlId="auth-provider-profile-algorithm"
-        density="compact"
-        label="Profile algorithm"
-      >
-        <OidcSelectField
-          ariaLabel="OIDC profile signing algorithm"
-          disabled={disabled}
-          id="auth-provider-profile-algorithm"
-          items={OIDC_PROFILE_SIGNING_ALGORITHM_VALUES.map((value) => ({ label: value, value }))}
-          onValueChange={(value) => {
-            const profileSigningAlgorithm = readOidcProfileSigningAlgorithm(value);
-
-            if (profileSigningAlgorithm) {
-              onChange({ profileSigningAlgorithm });
-            }
-          }}
-          triggerClassName="w-full sm:w-44"
-          value={form.profileSigningAlgorithm}
         />
       </SettingsRow>
       <SettingsRow controlId="auth-provider-end-session" density="compact" label="End session URL">
@@ -744,7 +717,7 @@ function createFormState(provider: AuthProviderSummary | undefined): AuthProvide
   }
 
   return {
-    providerKind: provider.providerKind,
+    providerKind: normalizeEditableAuthProviderKind(provider.providerKind),
     label: provider.label,
     issuer: provider.issuer,
     clientId: provider.clientId,
@@ -815,8 +788,8 @@ function createProviderRequest(form: AuthProviderFormState): AuthUpsertProviderR
   };
 }
 
-function readAuthProviderKind(value: string): AuthProviderKind | null {
-  return AUTH_PROVIDER_KIND_VALUES.find((providerKind) => providerKind === value) ?? null;
+function readEditableAuthProviderKind(value: string): AuthProviderKind | null {
+  return AUTH_PROVIDER_EDITABLE_KIND_VALUES.find((providerKind) => providerKind === value) ?? null;
 }
 
 function readTokenEndpointAuthMethod(
@@ -831,10 +804,8 @@ function readOidcSigningAlgorithm(
   return OIDC_SIGNING_ALGORITHM_VALUES.find((algorithm) => algorithm === value) ?? null;
 }
 
-function readOidcProfileSigningAlgorithm(
-  value: string,
-): AuthProviderSummary["profileSigningAlgorithm"] | null {
-  return OIDC_PROFILE_SIGNING_ALGORITHM_VALUES.find((algorithm) => algorithm === value) ?? null;
+function normalizeEditableAuthProviderKind(providerKind: AuthProviderKind): AuthProviderKind {
+  return readEditableAuthProviderKind(providerKind) ?? AUTH_PROVIDER_EDITABLE_KIND_VALUES[0];
 }
 
 function getErrorMessage(error: unknown): string | null {

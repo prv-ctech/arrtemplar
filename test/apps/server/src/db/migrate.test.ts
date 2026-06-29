@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { configure } from "@logtape/logtape";
-import { migrateDatabase } from "../../../../../apps/server/src/db/migrate";
+import {
+  migrateDatabase,
+  resolveMigrationsFolderFromModuleUrl,
+} from "../../../../../apps/server/src/db/migrate";
 import { APP_LOG_CATEGORY, TOAST_NOTIFICATION_EVENTS } from "../../../../../packages/shared/src";
 import {
   openTestDatabase,
@@ -38,6 +44,29 @@ afterEach(async () => {
 });
 
 describe("migrateDatabase", () => {
+  it("resolves the Drizzle migrations folder for both source and bundled entrypoints", async () => {
+    const fixtureRoot = await mkdtemp("/tmp/arrtemplar-migrations-");
+    const sourceModulePath = join(fixtureRoot, "src", "db", "migrate.ts");
+    const bundledModulePath = join(fixtureRoot, "dist", "main.js");
+    const sourceMigrationsFolder = join(fixtureRoot, "drizzle");
+    const bundledMigrationsFolder = join(fixtureRoot, "dist", "..", "drizzle");
+
+    await mkdir(join(fixtureRoot, "src", "db"), { recursive: true });
+    await mkdir(join(fixtureRoot, "dist"), { recursive: true });
+    await mkdir(sourceMigrationsFolder, { recursive: true });
+
+    try {
+      expect(resolveMigrationsFolderFromModuleUrl(pathToFileURL(sourceModulePath).toString())).toBe(
+        sourceMigrationsFolder,
+      );
+      expect(
+        resolveMigrationsFolderFromModuleUrl(pathToFileURL(bundledModulePath).toString()),
+      ).toBe(bundledMigrationsFolder);
+    } finally {
+      await rm(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
   it("creates all core tables on the canonical test database and can rerun", async () => {
     await removeTestDatabaseFiles();
 

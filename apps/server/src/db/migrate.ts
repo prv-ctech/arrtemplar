@@ -1,4 +1,4 @@
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { APP_LOG_CATEGORY } from "@arrtemplar/shared";
 import { dispose, getLogger } from "@logtape/logtape";
@@ -7,7 +7,9 @@ import { env } from "../config/env";
 import { configureServerLogging } from "../logging/config";
 import { createDatabase } from "./client";
 
-const migrationsFolder = join(dirname(fileURLToPath(import.meta.url)), "../../drizzle");
+const bundledMigrationsRelativePath = "../drizzle";
+const sourceMigrationsRelativePath = "../../drizzle";
+const migrationsFolder = resolveMigrationsFolderFromModuleUrl(import.meta.url);
 const serverLogger = getLogger([APP_LOG_CATEGORY, "server"]);
 const databaseLifecycleLogger = getLogger([APP_LOG_CATEGORY, "database", "lifecycle"]);
 
@@ -64,6 +66,17 @@ export function migrateDatabase(
   if (migrationError) {
     throw migrationError;
   }
+}
+
+export function resolveMigrationsFolderFromModuleUrl(moduleUrl: string): string {
+  const moduleDirectory = dirname(fileURLToPath(moduleUrl));
+
+  return join(
+    moduleDirectory,
+    basename(moduleDirectory) === "dist"
+      ? bundledMigrationsRelativePath
+      : sourceMigrationsRelativePath,
+  );
 }
 
 function runDrizzleMigrations(

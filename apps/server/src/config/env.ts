@@ -11,6 +11,7 @@ type RuntimeEnvironment = Record<string, string | undefined>;
 export type RuntimeEnv = {
   serverPort: number;
   webOrigin: string;
+  frontendDistRoot: string | null;
   databaseUrl: string;
   sessionCookieSecure: boolean;
   helpTicketStorageRoot: string;
@@ -138,6 +139,12 @@ function readDatabaseUrl(environment: RuntimeEnvironment): string {
   return databaseUrl;
 }
 
+function readOptionalPath(value: string | undefined): string | null {
+  const path = value?.trim();
+
+  return path ? path : null;
+}
+
 function readConfiguredDatabaseUrl(environment: RuntimeEnvironment): string {
   const fallbackDatabaseUrl = isTestEnvironment(environment) ? TEST_DATABASE_URL : DEV_DATABASE_URL;
   const databaseUrl = environment.DATABASE_URL?.trim() ?? fallbackDatabaseUrl;
@@ -207,6 +214,7 @@ export function readRuntimeEnv(environment: RuntimeEnvironment = Bun.env): Runti
   return {
     serverPort: readPort(environment.SERVER_PORT, environment),
     webOrigin: environment.WEB_ORIGIN ?? DEFAULT_WEB_ORIGIN,
+    frontendDistRoot: readOptionalPath(environment.FRONTEND_DIST_ROOT),
     databaseUrl: readDatabaseUrl(environment),
     sessionCookieSecure: readNamedBoolean(
       "SESSION_COOKIE_SECURE",

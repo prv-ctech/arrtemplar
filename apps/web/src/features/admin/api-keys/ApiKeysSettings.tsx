@@ -28,18 +28,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { TableCell, TableRow } from "@/components/ui/table";
 import { notify } from "@/features/notifications/notification-gateway";
 import { SettingsStatus } from "@/features/settings/SettingsPrimitives";
 import { cn } from "@/lib/utils";
 import { useAuthenticatedRouteUser } from "@/routes/authenticated-route-user";
+import { AdminDesktopTable } from "../admin-table-primitives";
 import {
   useApiKeysQuery,
   useCreateApiKeyMutation,
@@ -285,102 +279,86 @@ function ApiKeysError() {
 }
 
 const API_KEY_DESKTOP_COLUMN_COUNT = 5;
+const API_KEY_TABLE_COLUMNS = [
+  { label: "Key" },
+  { label: "Status" },
+  { label: "Last used" },
+  { label: "Created" },
+  { align: "right", label: "Actions" },
+] as const;
 
-function ApiKeysTable({
-  expandedKeyId,
-  isMutating,
-  onDelete,
-  onRotate,
-  onToggleExpand,
-  rows,
-}: {
+type ApiKeysTableProps = {
   expandedKeyId: string | null;
   isMutating: boolean;
   onDelete: (apiKey: ApiKeySummary) => void;
   onRotate: (apiKey: ApiKeySummary) => void;
   onToggleExpand: (apiKeyId: string | null) => void;
   rows: readonly ApiKeySummary[];
-}) {
+};
+
+function ApiKeysTable(props: ApiKeysTableProps) {
+  const { expandedKeyId, isMutating, onDelete, onRotate, onToggleExpand, rows } = props;
+
   return (
     <>
-      <div className="hidden md:block">
-        <Table containerClassName="rounded-lg border-border/80 bg-card/50 pb-0">
-          <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              <TableHead className="h-8 px-3 text-xs">Key</TableHead>
-              <TableHead className="h-8 px-3 text-xs">Status</TableHead>
-              <TableHead className="h-8 px-3 text-xs">Last used</TableHead>
-              <TableHead className="h-8 px-3 text-xs">Created</TableHead>
-              <TableHead className="h-8 px-3 text-right text-xs">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.length > 0 ? (
-              rows.map((apiKey) => {
-                const isExpanded = expandedKeyId === apiKey.id;
+      <AdminDesktopTable columns={API_KEY_TABLE_COLUMNS}>
+        {rows.length > 0 ? (
+          rows.map((apiKey) => {
+            const isExpanded = expandedKeyId === apiKey.id;
 
-                return (
-                  <Fragment key={apiKey.id}>
-                    <TableRow data-state={isExpanded ? "selected" : undefined}>
-                      <TableCell className="max-w-136 px-3 py-2">
-                        <ApiKeyTitleButton
-                          apiKey={apiKey}
-                          expanded={isExpanded}
-                          onToggle={() => onToggleExpand(isExpanded ? null : apiKey.id)}
-                        />
-                      </TableCell>
-                      <TableCell className="px-3 py-2">
-                        <ApiKeyStatusBadge status={apiKey.status} />
-                      </TableCell>
-                      <TableCell className="px-3 py-2 text-sm text-muted-foreground">
-                        {formatDate(apiKey.lastUsedAt)}
-                      </TableCell>
-                      <TableCell className="px-3 py-2 text-sm text-muted-foreground">
-                        {formatDate(apiKey.createdAt)}
-                      </TableCell>
-                      <TableCell className="px-3 py-2 text-right">
-                        <ApiKeyActionMenu
-                          apiKey={apiKey}
-                          disabled={isMutating}
-                          onDelete={() => onDelete(apiKey)}
-                          onRotate={() => onRotate(apiKey)}
-                        />
-                      </TableCell>
-                    </TableRow>
-                    {isExpanded ? (
-                      <TableRow className="hover:bg-transparent">
-                        <TableCell
-                          className="bg-background/35 px-3 py-3"
-                          colSpan={API_KEY_DESKTOP_COLUMN_COUNT}
-                        >
-                          <ApiKeyInlineDetail apiKey={apiKey} />
-                        </TableCell>
-                      </TableRow>
-                    ) : null}
-                  </Fragment>
-                );
-              })
-            ) : (
-              <TableRow className="hover:bg-transparent">
-                <TableCell
-                  className="px-3 py-8 text-center text-sm text-muted-foreground"
-                  colSpan={API_KEY_DESKTOP_COLUMN_COUNT}
-                >
-                  No API keys yet.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
-      <ApiKeysMobileList
-        expandedKeyId={expandedKeyId}
-        isMutating={isMutating}
-        onDelete={onDelete}
-        onRotate={onRotate}
-        onToggleExpand={onToggleExpand}
-        rows={rows}
-      />
+            return (
+              <Fragment key={apiKey.id}>
+                <TableRow data-state={isExpanded ? "selected" : undefined}>
+                  <TableCell className="max-w-136 px-3 py-2">
+                    <ApiKeyTitleButton
+                      apiKey={apiKey}
+                      expanded={isExpanded}
+                      onToggle={() => onToggleExpand(isExpanded ? null : apiKey.id)}
+                    />
+                  </TableCell>
+                  <TableCell className="px-3 py-2">
+                    <ApiKeyStatusBadge status={apiKey.status} />
+                  </TableCell>
+                  <TableCell className="px-3 py-2 text-sm text-muted-foreground">
+                    {formatDate(apiKey.lastUsedAt)}
+                  </TableCell>
+                  <TableCell className="px-3 py-2 text-sm text-muted-foreground">
+                    {formatDate(apiKey.createdAt)}
+                  </TableCell>
+                  <TableCell className="px-3 py-2 text-right">
+                    <ApiKeyActionMenu
+                      apiKey={apiKey}
+                      disabled={isMutating}
+                      onDelete={() => onDelete(apiKey)}
+                      onRotate={() => onRotate(apiKey)}
+                    />
+                  </TableCell>
+                </TableRow>
+                {isExpanded ? (
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell
+                      className="bg-background/35 px-3 py-3"
+                      colSpan={API_KEY_DESKTOP_COLUMN_COUNT}
+                    >
+                      <ApiKeyInlineDetail apiKey={apiKey} />
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </Fragment>
+            );
+          })
+        ) : (
+          <TableRow className="hover:bg-transparent">
+            <TableCell
+              className="px-3 py-8 text-center text-sm text-muted-foreground"
+              colSpan={API_KEY_DESKTOP_COLUMN_COUNT}
+            >
+              No API keys yet.
+            </TableCell>
+          </TableRow>
+        )}
+      </AdminDesktopTable>
+      <ApiKeysMobileList {...props} />
     </>
   );
 }
@@ -392,14 +370,7 @@ function ApiKeysMobileList({
   onRotate,
   onToggleExpand,
   rows,
-}: {
-  expandedKeyId: string | null;
-  isMutating: boolean;
-  onDelete: (apiKey: ApiKeySummary) => void;
-  onRotate: (apiKey: ApiKeySummary) => void;
-  onToggleExpand: (apiKeyId: string | null) => void;
-  rows: readonly ApiKeySummary[];
-}) {
+}: ApiKeysTableProps) {
   return (
     <div className="grid gap-2 md:hidden">
       {rows.length > 0 ? (

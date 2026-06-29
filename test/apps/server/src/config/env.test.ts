@@ -14,8 +14,10 @@ describe("server environment database paths", () => {
 
     expect(env.databaseUrl).toBe(DEV_DATABASE_URL);
     expect(env.serverPort).toBe(DEV_SERVER_PORT);
+    expect(env.sessionCookieSecure).toBe(true);
     expect(env.helpTicketStorageRoot).toBe("data/media/ticket");
     expect(env.helpTicketScanMode).toBe("none");
+    expect(env.frontendDistRoot).toBeNull();
     expect(env.logLevel).toBe("debug");
     expect(env.logFilePath).toBe(`data/logs/${APP_IDENTIFIER}.jsonl`);
     expect(env.logFileMaxSizeBytes).toBe(10 * 1024 * 1024);
@@ -45,6 +47,7 @@ describe("server environment database paths", () => {
     expect(readRuntimeEnv({ NODE_ENV: "production" })).toMatchObject({
       databaseUrl: DEV_DATABASE_URL,
       serverPort: DEV_SERVER_PORT,
+      sessionCookieSecure: true,
       logLevel: "info",
       logFilePath: `data/logs/${APP_IDENTIFIER}.jsonl`,
       logFileMaxSizeBytes: 10 * 1024 * 1024,
@@ -56,6 +59,7 @@ describe("server environment database paths", () => {
   it("keeps logging settings overridable", () => {
     expect(
       readRuntimeEnv({
+        FRONTEND_DIST_ROOT: "apps/web/dist",
         HELP_TICKET_STORAGE_ROOT: "tmp/ticket-media",
         HELP_TICKET_SCAN_MODE: "clamd",
         LOG_LEVEL: "trace",
@@ -63,8 +67,10 @@ describe("server environment database paths", () => {
         LOG_FILE_MAX_SIZE_BYTES: "1024",
         LOG_FILE_MAX_FILES: "2",
         LOG_CONSOLE: "false",
+        SESSION_COOKIE_SECURE: "false",
       }),
     ).toMatchObject({
+      frontendDistRoot: "apps/web/dist",
       helpTicketStorageRoot: "tmp/ticket-media",
       helpTicketScanMode: "clamd",
       logLevel: "trace",
@@ -72,6 +78,7 @@ describe("server environment database paths", () => {
       logFileMaxSizeBytes: 1024,
       logFileMaxFiles: 2,
       logConsoleEnabled: false,
+      sessionCookieSecure: false,
     });
 
     expect(readRuntimeEnv({ NODE_ENV: "production", LOG_CONSOLE: "true" })).toMatchObject({

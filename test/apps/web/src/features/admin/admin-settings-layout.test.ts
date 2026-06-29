@@ -3,12 +3,14 @@ import { readWorkspaceSource, readWorkspaceSources } from "./admin-settings-test
 
 const settingsSourcePath = "apps/web/src/features/admin/AdminSettings.tsx";
 const apiKeysSettingsSourcePath = "apps/web/src/features/admin/api-keys/ApiKeysSettings.tsx";
+const adminTablePrimitivesSourcePath = "apps/web/src/features/admin/admin-table-primitives.tsx";
 const authSettingsSourcePath = "apps/web/src/features/auth-settings/AuthSettings.tsx";
 const servicesSettingsSourcePath = "apps/web/src/features/services-settings/ServicesSettings.tsx";
 const settingsPrimitivesSourcePath = "apps/web/src/features/settings/SettingsPrimitives.tsx";
 const tableSourcePath = "apps/web/src/components/ui/table.tsx";
 const usersSourcePaths = [
   "apps/web/src/features/admin/AdminUsersSettings.tsx",
+  adminTablePrimitivesSourcePath,
   "apps/web/src/features/admin/admin-users-table.tsx",
   "apps/web/src/features/admin/change-user-password-dialog.tsx",
   "apps/web/src/features/admin/create-user-dialog.tsx",
@@ -188,7 +190,10 @@ describe("app settings layout", () => {
 
   it("uses API Keys as the real General settings surface", async () => {
     const settingsSource = await readWorkspaceSource(settingsSourcePath);
-    const apiKeysSource = await readWorkspaceSource(apiKeysSettingsSourcePath);
+    const apiKeysSource = await readWorkspaceSources([
+      apiKeysSettingsSourcePath,
+      adminTablePrimitivesSourcePath,
+    ]);
     const tableSource = await readWorkspaceSource(tableSourcePath);
 
     expect(settingsSource).toContain("ApiKeysSettings");
@@ -273,10 +278,14 @@ describe("app settings layout", () => {
     expect(source).toContain("Link Accounts");
     expect(source).toContain("Unlink all");
     expect(source).toContain("identity.displayName");
-    expect(source).toContain("AUTH_PROVIDER_KIND_VALUES");
+    expect(source).toContain("AUTH_PROVIDER_EDITABLE_KIND_VALUES");
     expect(source).not.toContain("min-h-20");
     expect(source).not.toContain("sm:w-96");
     expect(source).not.toContain("<textarea");
+    expect(source).not.toContain("Profile algorithm");
+    expect(source).not.toContain("auth-provider-profile-algorithm");
+    expect(source).not.toContain("Turn on the provider to edit OAuth/OIDC settings.");
+    expect(source).not.toContain("AUTH_PROVIDER_KIND_VALUES.map");
     expect(source).not.toContain("Link another OIDC account");
     expect(source).not.toContain("AUTHENTIK_LOGO_SRC");
     expect(source).not.toContain("AuthMethodStatusBadges");
