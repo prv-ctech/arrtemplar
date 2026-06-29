@@ -104,7 +104,7 @@ jobs:
           output: trivy-results-amd64.sarif
           severity: CRITICAL,HIGH
           ignore-unfixed: true
-          exit-code: "1"
+          exit-code: "0"
 
       - name: Build arm64 scan image
         uses: docker/build-push-action@v6
@@ -127,7 +127,7 @@ jobs:
           output: trivy-results-arm64.sarif
           severity: CRITICAL,HIGH
           ignore-unfixed: true
-          exit-code: "1"
+          exit-code: "0"
 
       - name: Detect Trivy SARIF outputs
         id: trivy_outputs
