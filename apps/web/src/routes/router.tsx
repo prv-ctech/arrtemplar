@@ -1,113 +1,31 @@
-import {
-  createRootRoute,
-  createRoute,
-  createRouter,
-  Navigate,
-  Outlet,
-} from "@tanstack/react-router";
-import { AuthGate } from "@/components/auth/AuthGate";
-import { LoginForm } from "@/components/auth/LoginForm";
-import { AppShell } from "@/components/layout/AppShell";
-import { Toaster } from "@/components/ui/sonner";
-import { getLandingPathForUser } from "@/features/auth/auth-navigation";
-import { useCurrentUserQuery } from "@/features/auth/auth-state";
-import { ThemeSwitcher } from "@/features/theme/ThemeSwitcher";
-import { useTheme } from "@/features/theme/theme-state";
-import { AdminDashboard } from "../features/admin/AdminDashboard";
-import { DashboardPage } from "../features/dashboard/DashboardPage";
+import { createRootRoute, createRoute, createRouter, Navigate } from "@tanstack/react-router";
+import { HelpFaqRoute } from "../features/help/FaqPage";
+import { HelpTicketsRoute } from "../features/help/TicketsPage";
+import { PersonalProfileRoute, UserProfilePage } from "../features/user/UserProfilePage";
+import { UserSettings } from "../features/user/UserSettings";
+import { AccountNotificationsRoute } from "./components/account-notifications-route";
+import { AccountRoute } from "./components/account-route";
+import { AdminAboutRoute } from "./components/admin-about-route";
+import { AdminAuthRoute } from "./components/admin-auth-route";
+import { AdminGeneralRoute } from "./components/admin-general-route";
+import { AdminLibraryRoute } from "./components/admin-library-route";
+import { AdminLogsRoute } from "./components/admin-logs-route";
+import { AdminNotificationsRoute } from "./components/admin-notifications-route";
+import { AdminServicesRoute } from "./components/admin-services-route";
+import { AdminThemeRoute } from "./components/admin-theme-route";
+import { AdminUsersRoute } from "./components/admin-users-route";
+import { DashboardRoute } from "./components/dashboard-route";
+import { IndexRoute } from "./components/index-route";
+import { LoginRoute } from "./components/login-route";
+import { ManagedProfileSettingsIndexRedirect } from "./components/managed-profile-settings-index-redirect";
+import { ProfileSettingsIndexRedirect } from "./components/profile-settings-index-redirect";
+import { ProfileSettingsMainRoute } from "./components/profile-settings-main-route";
+import { ProfileSettingsPasswordRoute } from "./components/profile-settings-password-route";
+import { RootLayout } from "./components/root-layout";
+import { RootNotFoundRoute } from "./components/root-not-found-route";
+import { SettingsIndexRedirect } from "./components/settings-index-redirect";
 
-const loginMediaAssets = {
-  backdrop: "https://picsum.photos/seed/arrtemplar-login-backdrop/1800/1200",
-  artwork: "https://picsum.photos/seed/arrtemplar-login-panel/1400/1600",
-} as const;
-
-function RootLayout() {
-  const { selectedTheme } = useTheme();
-
-  return (
-    <>
-      <Outlet />
-      <Toaster position="top-right" richColors theme={selectedTheme.dark ? "dark" : "light"} />
-    </>
-  );
-}
-
-function IndexRoute() {
-  return <Navigate replace to="/dashboard" />;
-}
-
-function LoginRoute() {
-  const userQuery = useCurrentUserQuery();
-
-  if (userQuery.data) {
-    return <Navigate replace to={getLandingPathForUser(userQuery.data)} />;
-  }
-
-  return (
-    <main className="relative isolate min-h-dvh w-full max-w-full overflow-x-hidden bg-background text-foreground">
-      <div className="fixed inset-0 -z-10 h-dvh w-full overflow-hidden">
-        <img
-          alt=""
-          aria-hidden="true"
-          className="h-full w-full scale-105 object-cover opacity-28 blur-[1.5px] saturate-[0.9]"
-          src={loginMediaAssets.backdrop}
-        />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_24%_18%,color-mix(in_srgb,var(--primary)_24%,transparent),transparent_28rem),radial-gradient(circle_at_78%_76%,color-mix(in_srgb,var(--ctp-peach)_16%,transparent),transparent_34rem),linear-gradient(180deg,color-mix(in_srgb,var(--background)_58%,transparent),var(--background)_88%)]" />
-        <div className="absolute inset-0 bg-background/54" />
-      </div>
-
-      <section className="relative grid min-h-dvh place-items-center px-3 py-3 sm:px-5 sm:py-4 lg:px-8">
-        <div className="w-full max-w-6xl overflow-hidden rounded-[1.65rem] border border-border bg-card/90 p-0 text-card-foreground shadow-(--shadow-panel) backdrop-blur-xl">
-          <div className="grid min-h-0 gap-3 p-3 md:h-[min(36rem,calc(100dvh-3.5rem))] md:grid-cols-[minmax(19rem,0.82fr)_minmax(23rem,1.18fr)]">
-            <div className="relative flex min-h-[min(34rem,calc(100dvh-2rem))] items-start justify-center overflow-x-hidden overflow-y-auto overscroll-contain rounded-[1.35rem] border border-border bg-[linear-gradient(135deg,color-mix(in_srgb,var(--card)_94%,transparent),color-mix(in_srgb,var(--background)_94%,transparent),color-mix(in_srgb,var(--secondary)_92%,transparent))] px-5 py-7 shadow-[inset_0_1px_0_hsl(0_0%_100%/0.08)] sm:px-8 md:h-full md:min-h-0 md:px-6 md:py-5 lg:px-8">
-              <div className="absolute right-4 top-4">
-                <ThemeSwitcher compact />
-              </div>
-              <LoginForm />
-            </div>
-
-            <div className="relative hidden h-full min-h-0 overflow-hidden rounded-[1.35rem] border border-border bg-background md:block">
-              <img
-                alt=""
-                aria-hidden="true"
-                className="h-full w-full object-cover opacity-90 saturate-[1.04]"
-                src={loginMediaAssets.artwork}
-              />
-              <div className="absolute inset-0 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--background)_6%,transparent),color-mix(in_srgb,var(--background)_28%,transparent)),radial-gradient(circle_at_70%_22%,color-mix(in_srgb,var(--primary)_22%,transparent),transparent_22rem)]" />
-              <div className="absolute inset-x-0 bottom-0 h-32 bg-linear-to-t from-background/78 to-transparent" />
-            </div>
-          </div>
-        </div>
-      </section>
-    </main>
-  );
-}
-
-function DashboardRoute() {
-  return (
-    <AuthGate>
-      {(user) => (
-        <AppShell section="Dashboard" user={user}>
-          <DashboardPage user={user} />
-        </AppShell>
-      )}
-    </AuthGate>
-  );
-}
-
-function AdminRoute() {
-  return (
-    <AuthGate requiredRole="admin">
-      {(user) => (
-        <AppShell section="Admin" user={user}>
-          <AdminDashboard />
-        </AppShell>
-      )}
-    </AuthGate>
-  );
-}
-
-const rootRoute = createRootRoute({ component: RootLayout });
+const rootRoute = createRootRoute({ component: RootLayout, notFoundComponent: RootNotFoundRoute });
 
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -121,19 +39,204 @@ const loginRoute = createRoute({
   component: LoginRoute,
 });
 
-const dashboardRoute = createRoute({
+const authenticatedRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/dashboard",
+  id: "authenticated",
+  component: AccountRoute,
+});
+
+const dashboardRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: "dashboard",
   component: DashboardRoute,
 });
 
-const adminRoute = createRoute({
+const helpRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/admin",
-  component: AdminRoute,
+  path: "help",
+  component: AccountRoute,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, loginRoute, dashboardRoute, adminRoute]);
+const helpIndexRoute = createRoute({
+  getParentRoute: () => helpRoute,
+  path: "/",
+  component: () => <Navigate replace to="/help/faq" />,
+});
+
+const helpTicketsRoute = createRoute({
+  getParentRoute: () => helpRoute,
+  path: "tickets",
+  component: HelpTicketsRoute,
+});
+
+const helpFaqRoute = createRoute({
+  getParentRoute: () => helpRoute,
+  path: "faq",
+  component: HelpFaqRoute,
+});
+
+const profileRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "profile",
+  component: AccountRoute,
+});
+
+const profileIndexRoute = createRoute({
+  getParentRoute: () => profileRoute,
+  path: "/",
+  component: PersonalProfileRoute,
+});
+
+const profileSettingsIndexRoute = createRoute({
+  getParentRoute: () => profileRoute,
+  path: "settings",
+  component: ProfileSettingsIndexRedirect,
+});
+
+const profileSettingsMainRoute = createRoute({
+  getParentRoute: () => profileRoute,
+  path: "settings/main",
+  component: ProfileSettingsMainRoute,
+});
+
+const profileSettingsPasswordRoute = createRoute({
+  getParentRoute: () => profileRoute,
+  path: "settings/password",
+  component: ProfileSettingsPasswordRoute,
+});
+
+const profileSettingsNotificationsRoute = createRoute({
+  getParentRoute: () => profileRoute,
+  path: "settings/notifications",
+  component: AccountNotificationsRoute,
+});
+
+const userProfileRoute = createRoute({
+  getParentRoute: () => profileRoute,
+  path: "$publicUserId",
+  component: UserProfilePage,
+});
+
+const userSettingsIndexRoute = createRoute({
+  getParentRoute: () => profileRoute,
+  path: "$publicUserId/settings",
+  component: ManagedProfileSettingsIndexRedirect,
+});
+
+const userSettingsMainRoute = createRoute({
+  getParentRoute: () => profileRoute,
+  path: "$publicUserId/settings/main",
+  component: () => <UserSettings activePage="main" />,
+});
+
+const userSettingsPasswordRoute = createRoute({
+  getParentRoute: () => profileRoute,
+  path: "$publicUserId/settings/password",
+  component: () => <UserSettings activePage="password" />,
+});
+
+const userSettingsPermissionsRoute = createRoute({
+  getParentRoute: () => profileRoute,
+  path: "$publicUserId/settings/permissions",
+  component: () => <UserSettings activePage="permissions" />,
+});
+
+const settingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "settings",
+  component: AccountRoute,
+});
+
+const settingsIndexRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "/",
+  component: SettingsIndexRedirect,
+});
+
+const settingsThemeRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "theme",
+  component: AdminThemeRoute,
+});
+
+const settingsAboutRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "about",
+  component: AdminAboutRoute,
+});
+
+const settingsGeneralRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "general",
+  component: AdminGeneralRoute,
+});
+
+const settingsLibraryRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "library",
+  component: AdminLibraryRoute,
+});
+
+const settingsUsersRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "users",
+  component: AdminUsersRoute,
+});
+
+const settingsNotificationsRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "notifications",
+  component: AdminNotificationsRoute,
+});
+
+const settingsAuthRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "auth",
+  component: AdminAuthRoute,
+});
+
+const settingsServicesRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "services",
+  component: AdminServicesRoute,
+});
+
+const settingsLogsRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "logs",
+  component: AdminLogsRoute,
+});
+
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  loginRoute,
+  authenticatedRoute.addChildren([dashboardRoute]),
+  helpRoute.addChildren([helpIndexRoute, helpFaqRoute, helpTicketsRoute]),
+  profileRoute.addChildren([
+    profileIndexRoute,
+    profileSettingsIndexRoute,
+    profileSettingsMainRoute,
+    profileSettingsPasswordRoute,
+    profileSettingsNotificationsRoute,
+    userProfileRoute,
+    userSettingsIndexRoute,
+    userSettingsMainRoute,
+    userSettingsPasswordRoute,
+    userSettingsPermissionsRoute,
+  ]),
+  settingsRoute.addChildren([
+    settingsIndexRoute,
+    settingsThemeRoute,
+    settingsAboutRoute,
+    settingsGeneralRoute,
+    settingsLibraryRoute,
+    settingsUsersRoute,
+    settingsNotificationsRoute,
+    settingsAuthRoute,
+    settingsServicesRoute,
+    settingsLogsRoute,
+  ]),
+]);
 
 export const router = createRouter({ routeTree });
 

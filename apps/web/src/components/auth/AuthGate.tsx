@@ -1,17 +1,17 @@
-import type { PublicUser, UserRole } from "@arrtemplar/shared";
+import type { PublicUser, UserPermission } from "@arrtemplar/shared";
 import { Navigate } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { hasRequiredRole, useCurrentUserQuery } from "@/features/auth/auth-state";
+import { hasRequiredPermission, useCurrentUserQuery } from "@/features/auth/auth-state";
 
 export function AuthGate({
   children,
-  requiredRole,
+  requiredPermission,
 }: {
   children: (user: PublicUser) => ReactNode;
-  requiredRole?: UserRole;
+  requiredPermission?: UserPermission;
 }) {
   const userQuery = useCurrentUserQuery();
 
@@ -27,7 +27,7 @@ export function AuthGate({
     return <Navigate replace to="/login" />;
   }
 
-  if (!hasRequiredRole(userQuery.data, requiredRole)) {
+  if (requiredPermission && !hasRequiredPermission(userQuery.data, requiredPermission)) {
     return <Navigate replace to="/dashboard" />;
   }
 

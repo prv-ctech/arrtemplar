@@ -43,7 +43,7 @@ ADRs capture the reasoning behind significant technical decisions. They're the h
 
 ### ADR Template
 
-Store ADRs in `docs/decisions/` with sequential numbering:
+If the task or active agent requires a persisted ADR draft, follow those instructions for destination and naming. This skill defines ADR content and decision quality, not automatic repo write locations.
 
 ```markdown
 # ADR-001: Use PostgreSQL for primary database
@@ -250,8 +250,8 @@ For shipped features:
 Special consideration for AI agent context:
 
 - **CLAUDE.md / rules files** — Document project conventions so agents follow them
-- **Spec files** — Keep specs updated so agents build the right thing
-- **ADRs** — Help agents understand why past decisions were made (prevents re-deciding)
+- **Spec files** — Keep specs current when the task or active agent requires persisted specs
+- **ADRs** — Keep ADRs current when the task or active agent requires persisted ADRs
 - **Inline gotchas** — Prevent agents from falling into known traps
 
 ## Common Rationalizations
@@ -278,7 +278,7 @@ Special consideration for AI agent context:
 
 After documenting:
 
-- [ ] ADRs exist for all significant architectural decisions
+- [ ] Significant architectural decisions are documented in the format and location required by the task or active agent
 - [ ] README covers quick start, commands, and architecture overview
 - [ ] API functions have parameter and return type documentation
 - [ ] Known gotchas are documented inline where they matter

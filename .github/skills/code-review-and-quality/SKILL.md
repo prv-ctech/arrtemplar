@@ -1,14 +1,6 @@
 ---
 name: code-review-and-quality
 description: Conducts multi-axis code review. Use before merging any change. Use when reviewing code written by yourself, another agent, or a human. Use when you need to assess code quality across multiple dimensions before it enters the main branch.
-compatibility:
-  - github-copilot
-  - claude-code
-  - openai-codex
-license: MIT
-metadata:
-  author: arrbit
-  version: "1.0"
 ---
 
 # Code Review and Quality
@@ -218,9 +210,9 @@ After any refactoring or implementation change, check for orphaned code:
 
 1. Identify code that is now unreachable or unused
 2. List it explicitly
-3. **Ask before deleting:** "Should I remove these now-unused elements: [list]?"
+3. **Ask before deleting with `vscode_askQuestions`:** "Should I remove these now-unused elements: [list]?"
 
-Don't leave dead code lying around — it confuses future readers and agents. But don't silently delete things you're not sure about. When in doubt, ask.
+Don't leave dead code lying around — it confuses future readers and agents. But don't silently delete things you're not sure about. When in doubt, ask through VS Code's native `vscode_askQuestions` tool, not markdown/plain chat.
 
 ```
 DEAD CODE IDENTIFIED:
@@ -268,7 +260,7 @@ Part of code review is dependency review:
 1. Does the existing stack solve this? (Often it does.)
 2. How large is the dependency? (Check bundle impact.)
 3. Is it actively maintained? (Check last commit, open issues.)
-4. Does it have known vulnerabilities? (`bun audit`)
+4. Does it have known vulnerabilities? (`npm audit`)
 5. What's the license? (Must be compatible with the project.)
 
 **Rule:** Prefer standard library and existing utilities over new dependencies. Every dependency is a liability.

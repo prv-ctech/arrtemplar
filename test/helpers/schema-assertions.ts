@@ -14,6 +14,7 @@ export function expectCoreTables(tableNames: string[]): void {
   expect(tableNames).toContain("users");
   expect(tableNames).toContain("sessions");
   expect(tableNames).toContain("audit_logs");
+  expect(tableNames).toContain("notification_history");
   expect(tableNames).not.toContain("anime_titles");
   expect(tableNames).not.toContain("anime_aliases");
   expect(tableNames).not.toContain("anime_external_ids");

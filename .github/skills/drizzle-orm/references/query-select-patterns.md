@@ -9,9 +9,11 @@ fetching too much data, getting wrong types from joins, or writing unnecessarily
 ## The Two APIs
 
 ### SQL-like API (`db.select()`)
+
 Best for: precise control over the SQL being generated, complex joins, aggregations, subqueries.
 
 ### Relational Query API (`db.query`)
+
 Best for: fetching related data in nested structures, avoiding manual join logic.
 
 ## Incorrect
@@ -29,6 +31,7 @@ const postsWithAuthors = await db
 ```
 
 **Problems:**
+
 - `select()` with no partial select fetches every column
 - Left joins return flat objects, not nested structures — you have to manually reshape
 - Type of joined table is `T | null` which requires null checks everywhere
@@ -139,7 +142,7 @@ const [{ activeCount }] = await db
 ## When to Use Which API
 
 | Scenario | Use |
-|----------|-----|
+| -------- | --- |
 | Fetch a record with its related data | `db.query.table.findMany({ with })` |
 | Aggregate queries (COUNT, SUM, AVG) | `db.select()` with `sql` operator |
 | Complex multi-table joins | `db.select()` with explicit joins |
@@ -148,6 +151,6 @@ const [{ activeCount }] = await db
 
 ## References
 
-- https://orm.drizzle.team/docs/select
-- https://orm.drizzle.team/docs/joins
-- https://orm.drizzle.team/docs/rqb-v2
+- <https://orm.drizzle.team/docs/select>
+- <https://orm.drizzle.team/docs/joins>
+- <https://orm.drizzle.team/docs/rqb-v2>

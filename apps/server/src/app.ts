@@ -1,4 +1,4 @@
-import { APP_NAME, APP_VERSION, type HealthResponse } from "@arrtemplar/shared";
+import { APP_LOG_CATEGORY, APP_NAME, APP_VERSION, type HealthResponse } from "@arrtemplar/shared";
 import { cors } from "@elysia/cors";
 import { openapi } from "@elysia/openapi";
 import { elysiaLogger } from "@logtape/elysia";
@@ -8,6 +8,7 @@ import type { LoginRateLimiter } from "./auth/rate-limit";
 import { createAuthRoutes } from "./auth/routes";
 import { env } from "./config/env";
 import { createDatabase, type DatabaseClient } from "./db/client";
+import { createHelpRoutes } from "./help/routes";
 import {
   corsAllowedHeaders,
   corsAllowedMethods,
@@ -16,6 +17,9 @@ import {
 import { enforceCsrfPolicy } from "./security/csrf";
 import { handleSafeError } from "./security/errors";
 import { appendSupplementalCspDirectives, securityHeaderConfig } from "./security/headers";
+import { createServiceIntegrationRoutes } from "./service-integrations/routes";
+
+const requestIdPattern = /^[A-Za-z0-9._:-]{1,128}$/;
 
 const healthResponseSchema = t.Object({
   name: t.Literal(APP_NAME),
@@ -48,9 +52,19 @@ type BackendRootResponse = {
   };
 };
 
+type RequestLogContext = {
+  path: string;
+  request: Request;
+  set: {
+    headers: Record<string, string | undefined>;
+    status?: number | string;
+  };
+};
+
 export type CreateAppOptions = {
   database?: DatabaseClient;
   loginRateLimiter?: LoginRateLimiter;
+  oauthClientSecretEncryptionKey?: string | null;
   sessionCookieSecure?: boolean;
 };
 
@@ -58,6 +72,10 @@ export function createApp(options: CreateAppOptions = {}) {
   const database = options.database ?? createDatabase();
   const authRoutesOptions = {
     database,
+    oauthClientSecretEncryptionKey:
+      "oauthClientSecretEncryptionKey" in options
+        ? options.oauthClientSecretEncryptionKey
+        : env.oauthClientSecretEncryptionKey,
     sessionCookieSecure: options.sessionCookieSecure ?? env.sessionCookieSecure,
     ...(options.loginRateLimiter ? { rateLimiter: options.loginRateLimiter } : {}),
   };
@@ -65,16 +83,24 @@ export function createApp(options: CreateAppOptions = {}) {
   return new Elysia()
     .use(
       elysiaLogger({
-        category: ["arrtemplar", "http"],
+        category: [APP_LOG_CATEGORY, "http"],
         level: "info",
         logRequest: false,
         scope: "global",
+        context: {
+          requestId: {
+            generate: () => Bun.randomUUIDv7(),
+            normalize: normalizeRequestId,
+          },
+        },
         skip: ({ path }) => path === "/health",
-        format: (context, responseTime) => ({
+        format: (context: RequestLogContext, responseTime: number) => ({
+          event: "http.request",
           method: context.request.method,
           url: context.path,
           path: context.path,
           status: normalizeStatusCode(context.set.status, readResponseValue(context)),
+          durationMs: responseTime,
           responseTime,
           contentLength: context.set.headers["content-length"],
         }),
@@ -99,16 +125,34 @@ export function createApp(options: CreateAppOptions = {}) {
           info: {
             title: `${APP_NAME} API`,
             version: APP_VERSION,
-            description: "Arrtemplar template API — extend for your domain.",
+            description: `${APP_NAME} API — extend for your domain.`,
           },
           tags: [
             { name: "System", description: "Application status and diagnostics" },
             { name: "Auth", description: "Authentication, sessions, and role checks" },
+            { name: "Help", description: "Help tickets, attachments, and FAQ scaffolding" },
+            {
+              name: "Settings",
+              description: "Admin-controlled settings and integration endpoints",
+            },
           ],
         },
       }),
     )
     .use(createAuthRoutes(authRoutesOptions))
+    .use(
+      createHelpRoutes({
+        database,
+        scanMode: env.helpTicketScanMode,
+        storageRoot: env.helpTicketStorageRoot,
+      }),
+    )
+    .use(
+      createServiceIntegrationRoutes({
+        database,
+        secretEncryptionKey: authRoutesOptions.oauthClientSecretEncryptionKey,
+      }),
+    )
     .get(
       "/",
       ({ request }): BackendRootResponse => ({
@@ -185,4 +229,10 @@ function readCustomStatusCode(responseValue: unknown): number | null {
   }
 
   return typeof responseValue.code === "number" ? responseValue.code : null;
+}
+
+function normalizeRequestId(value: string): string | null {
+  const requestId = value.trim();
+
+  return requestIdPattern.test(requestId) ? requestId : null;
 }

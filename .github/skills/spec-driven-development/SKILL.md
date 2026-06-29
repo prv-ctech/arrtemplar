@@ -1,14 +1,6 @@
 ---
 name: spec-driven-development
 description: Creates specs before coding. Use when starting a new project, feature, or significant change and no specification exists yet. Use when requirements are unclear, ambiguous, or only exist as a vague idea.
-compatibility:
-  - github-copilot
-  - claude-code
-  - openai-codex
-license: MIT
-metadata:
-  author: arrbit
-  version: "1.0"
 ---
 
 # Spec-Driven Development
@@ -39,19 +31,28 @@ SPECIFY ──→ PLAN ──→ TASKS ──→ IMPLEMENT
  reviews    reviews  reviews    reviews
 ```
 
+## User Input Tooling
+
+Every clarifying question, assumption correction, target confirmation, phase review, and approval gate must use VS Code's native `vscode_askQuestions` tool. Do not write the question only in markdown/plain chat and wait for a reply.
+
+- Use `vscode_askQuestions` for the Specify, Plan, Tasks, and Implement review gates.
+- Use options such as `Approve`, `Request changes`, and `Clarify` when reviewing artifacts.
+- Allow freeform input so the user can explain corrections.
+- Do not advance phases until the tool returns the user's answer.
+
 ### Phase 1: Specify
 
 Start with a high-level vision. Ask the human clarifying questions until requirements are concrete.
 
-**Surface assumptions immediately.** Before writing any spec content, list what you're assuming: (example)
+**Surface assumptions immediately.** Before writing any spec content, list what you're assuming:
 
 ```
 ASSUMPTIONS I'M MAKING:
-1. This is a mobile-first webapp and not a native app
+1. This is a web application (not native mobile)
 2. Authentication uses session-based cookies (not JWT)
-3. The database is PostgreSQL (based on existing Drizzle schema)
+3. The database is PostgreSQL (based on existing Prisma schema)
 4. We're targeting modern browsers only (no IE11)
-→ Correct me now or I'll proceed with these.
+→ Use `vscode_askQuestions` to ask whether to proceed with these assumptions or collect corrections.
 ```
 
 Don't silently fill in ambiguous requirements. The spec's entire purpose is to surface misunderstandings *before* code gets written — assumptions are the most dangerous form of misunderstanding.
@@ -63,19 +64,22 @@ Don't silently fill in ambiguous requirements. The spec's entire purpose is to s
 2. **Commands** — Full executable commands with flags, not just tool names.
    ```
    Build: bun run build
-   Test: bunx c8 --reporter=text --reporter=html bun test
-   Lint: biome check --write .
+   Test: DATABASE_URL=data/db/arrtemplar-test.sqlite bun test --coverage test
+   Typecheck: bun run typecheck
+   Lint: biome check .
+   Fix: biome check --write .
    Dev: bun run dev
    ```
 
 3. **Project Structure** — Where source code lives, where tests go, where docs belong.
    ```
-   src/           → Application source code
-   src/components → React components
-   src/lib        → Shared utilities
-   tests/         → Unit and integration tests
-   e2e/           → End-to-end tests
-   docs/          → Documentation
+   apps/server/src/        → Bun/Elysia API source code
+   apps/web/src/           → React frontend source code
+   apps/web/src/components → Reusable UI and layout components
+   apps/web/src/features   → Feature-specific frontend modules
+   packages/shared/src/    → Shared API contracts and constants
+   test/                   → Unit and integration tests
+   docs/                   → Architecture, plans, reviews, and project docs
    ```
 
 4. **Code Style** — One real code snippet showing your style beats three paragraphs describing it. Include naming conventions, formatting rules, and examples of good output.
@@ -148,6 +152,8 @@ With the validated spec, generate a technical implementation plan:
 
 The plan should be reviewable: the human should be able to read it and say "yes, that's the right approach" or "no, change X."
 
+Use `vscode_askQuestions` for this plan review gate; do not rely on a markdown-only prompt.
+
 ### Phase 3: Tasks
 
 Break the plan into discrete, implementable tasks:
@@ -168,7 +174,7 @@ Break the plan into discrete, implementable tasks:
 
 ### Phase 4: Implement
 
-Execute tasks one at a time following `incremental-implementation` and `test-driven-development` skills. Use `context-engineering` to load the right spec sections and source files at each step rather than flooding the agent with the entire spec.
+Execute tasks one at a time following `skills/incremental-implementation/SKILL.md` (`incremental-implementation`) and `skills/test-driven-development/SKILL.md` (`test-driven-development`). Use `skills/context-engineering/SKILL.md` (`context-engineering`) to load the right spec sections and source files at each step rather than flooding the agent with the entire spec.
 
 ## Keeping the Spec Alive
 
@@ -178,8 +184,6 @@ The spec is a living document, not a one-time artifact:
 - **Update when scope changes** — Features added or cut should be reflected in the spec.
 - **Commit the spec** — The spec belongs in version control alongside the code.
 - **Reference the spec in PRs** — Link back to the spec section that each PR implements.
-
-**File location:** The calling agent determines the exact file path and name. This skill provides the template and content guidance only; it does not create or save files.
 
 ## Common Rationalizations
 
@@ -204,7 +208,6 @@ The spec is a living document, not a one-time artifact:
 Before proceeding to implementation, confirm:
 
 - [ ] The spec covers all six core areas
-- [ ] The human has reviewed and approved the spec
+- [ ] The human has reviewed and approved the spec through `vscode_askQuestions`
 - [ ] Success criteria are specific and testable
 - [ ] Boundaries (Always/Ask First/Never) are defined
-- [ ] The calling agent has saved the spec to the agreed file location in the repository

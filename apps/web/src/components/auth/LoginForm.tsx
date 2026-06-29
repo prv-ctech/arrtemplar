@@ -1,15 +1,14 @@
-import type { CreateAdminRequest } from "@arrtemplar/shared";
-import { CaretRightIcon } from "@phosphor-icons/react";
+import { APP_NAME, type CreateAdminRequest } from "@arrtemplar/shared";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { type ComponentProps, type FormEvent, useId, useState } from "react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { type AuthMode, resolveAuthMode } from "@/features/auth/auth-mode";
 import { getLandingPathForUser } from "@/features/auth/auth-navigation";
 import { authQueryKey, authSetupQueryKey, useAuthSetupQuery } from "@/features/auth/auth-state";
+import { notify } from "@/features/notifications/notification-gateway";
 import { createInitialAdmin, login } from "@/lib/api";
 import { ApiClientError } from "@/lib/api-error";
 import { queryClient } from "@/lib/query-client";
@@ -31,8 +30,8 @@ export function LoginForm() {
           </div>
         ) : (
           <div
+            aria-live="polite"
             className="mt-7 rounded-2xl border border-border bg-secondary/45 px-4 py-3 text-center text-sm leading-6 text-muted-foreground [@media(max-height:640px)]:mt-5 [@media(max-height:640px)]:py-2"
-            role="status"
           >
             Checking setup status…
           </div>
@@ -53,7 +52,6 @@ export function LoginForm() {
         <AuthFields form={form} />
         <AuthErrorMessage message={form.errorMessage} />
         <AuthSubmitButton form={form} />
-        {form.mode === "login" ? <PlexSignInPlaceholder /> : null}
       </form>
     </div>
   );
@@ -73,7 +71,13 @@ function useAuthFormController() {
     mutationFn: login,
     onSuccess: ({ user }) => {
       queryClient.setQueryData(authQueryKey, user);
-      toast.success(`Signed in as ${user.username}.`);
+      notify(
+        {
+          id: "auth.signed_in",
+          title: `Signed in as ${user.username}.`,
+        },
+        user.notificationPreferences,
+      );
       navigate({ to: getLandingPathForUser(user) });
     },
   });
@@ -82,7 +86,13 @@ function useAuthFormController() {
     onSuccess: ({ user }) => {
       queryClient.setQueryData(authQueryKey, user);
       queryClient.setQueryData(authSetupQueryKey, { required: false });
-      toast.success(`Admin account created for ${user.username}.`);
+      notify(
+        {
+          id: "auth.admin.created",
+          title: `Admin account created for ${user.username}.`,
+        },
+        user.notificationPreferences,
+      );
       navigate({ to: getLandingPathForUser(user) });
     },
   });
@@ -277,27 +287,6 @@ function AuthSubmitButton({ form }: { form: AuthFormController }) {
   );
 }
 
-function PlexSignInPlaceholder() {
-  return (
-    <>
-      <div className="flex items-center gap-3 py-1 text-xs text-muted-foreground">
-        <div className="h-px flex-1 bg-border" aria-hidden="true" />
-        <span>or continue with</span>
-        <div className="h-px flex-1 bg-border" aria-hidden="true" />
-      </div>
-      <button
-        className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-2xl border border-border bg-secondary/70 px-3 text-sm font-semibold text-secondary-foreground shadow-[inset_0_1px_0_hsl(0_0%_100%/0.04)] transition-[background-color,border-color,box-shadow,transform] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 hover:border-primary/40 hover:bg-secondary active:translate-y-0 active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-70 [@media(max-height:640px)]:h-9"
-        disabled
-        title="Plex sign-in is not configured for this local build."
-        type="button"
-      >
-        <CaretRightIcon aria-hidden="true" className="size-4 text-primary" weight="bold" />
-        <span>Plex</span>
-      </button>
-    </>
-  );
-}
-
 function getAuthFormCopy(mode: AuthMode): { title: string; description: string | null } {
   return mode === "setup"
     ? {
@@ -305,7 +294,7 @@ function getAuthFormCopy(mode: AuthMode): { title: string; description: string |
         description: null,
       }
     : {
-        title: "Arrtemplar",
+        title: APP_NAME,
         description: null,
       };
 }

@@ -1,25 +1,26 @@
 import { describe, expect, it } from "bun:test";
-import { LoginRateLimiter } from "../../../../../apps/server/src/auth/rate-limit";
+import {
+  createOAuthRouteRateLimitKey,
+  LoginRateLimiter,
+} from "../../../../../apps/server/src/auth/rate-limit";
 
 describe("LoginRateLimiter", () => {
-  it("tracks lockout independently per email and IP key", () => {
+  it("tracks lockout independently per account key", () => {
     const limiter = new LoginRateLimiter(2, 60_000);
     const now = Date.now();
 
-    limiter.recordFailure("127.0.0.1:admin@example.local", now);
-    limiter.recordFailure("127.0.0.1:admin@example.local", now + 1);
-    limiter.recordFailure("127.0.0.1:viewer@example.local", now + 2);
-    limiter.recordFailure("192.0.2.10:admin@example.local", now + 3);
+    limiter.recordFailure("admin@example.local", now);
+    limiter.recordFailure("admin@example.local", now + 1);
+    limiter.recordFailure("viewer@example.local", now + 2);
 
-    expect(limiter.isBlocked("127.0.0.1:admin@example.local", now + 4)).toBe(true);
-    expect(limiter.isBlocked("127.0.0.1:viewer@example.local", now + 4)).toBe(false);
-    expect(limiter.isBlocked("192.0.2.10:admin@example.local", now + 4)).toBe(false);
+    expect(limiter.isBlocked("admin@example.local", now + 4)).toBe(true);
+    expect(limiter.isBlocked("viewer@example.local", now + 4)).toBe(false);
   });
 
   it("resets a lockout after the configured window", () => {
     const limiter = new LoginRateLimiter(2, 1_000);
     const now = Date.now();
-    const key = "127.0.0.1:admin@example.local";
+    const key = "admin@example.local";
 
     limiter.recordFailure(key, now);
     limiter.recordFailure(key, now + 500);
@@ -31,7 +32,7 @@ describe("LoginRateLimiter", () => {
 
   it("clears failures after a successful login", () => {
     const limiter = new LoginRateLimiter(1, 60_000);
-    const key = "127.0.0.1:admin@example.local";
+    const key = "admin@example.local";
 
     limiter.recordFailure(key);
     expect(limiter.isBlocked(key)).toBe(true);
@@ -39,5 +40,39 @@ describe("LoginRateLimiter", () => {
     limiter.clear(key);
 
     expect(limiter.isBlocked(key)).toBe(false);
+  });
+
+  it("partitions OAuth route keys by IP, route, provider, and mode", () => {
+    const baseKey = createOAuthRouteRateLimitKey({
+      ipAddress: "198.51.100.10",
+      provider: "oidc",
+      route: "start",
+      mode: "login",
+    });
+
+    expect(
+      createOAuthRouteRateLimitKey({
+        ipAddress: "198.51.100.11",
+        provider: "oidc",
+        route: "start",
+        mode: "login",
+      }),
+    ).not.toBe(baseKey);
+    expect(
+      createOAuthRouteRateLimitKey({
+        ipAddress: "198.51.100.10",
+        provider: "oidc",
+        route: "callback",
+        mode: "login",
+      }),
+    ).not.toBe(baseKey);
+    expect(
+      createOAuthRouteRateLimitKey({
+        ipAddress: "198.51.100.10",
+        provider: "oidc",
+        route: "start",
+        mode: "link",
+      }),
+    ).not.toBe(baseKey);
   });
 });

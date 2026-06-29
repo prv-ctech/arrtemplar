@@ -1,6 +1,8 @@
 {
   "name": "Arrtemplar",
-  "image": "oven/bun:1-debian",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
   "init": true,
   "containerUser": "root",
   "remoteUser": "root",
@@ -43,7 +45,8 @@
         "vscjava.vscode-java-debug",
         "github.vscode-github-actions",
         "vscjava.vscode-java-pack",
-        "bierner.markdown-mermaid"
+        "bierner.markdown-mermaid",
+        "DavidAnson.vscode-markdownlint"
       ],
       "settings": {
         "workbench.browser.openLocalhostLinks": true,
@@ -56,11 +59,16 @@
     }
   },
 
-  "forwardPorts": [3000, 5173],
+  "forwardPorts": [3000, 5173, 4983],
   "portsAttributes": {
     "3000": {
       "label": "Bun API",
       "onAutoForward": "notify"
+    },
+    "4983": {
+      "label": "Drizzle Studio",
+      "onAutoForward": "silent",
+      "protocol": "http"
     },
     "5173": {
       "label": "Vite web app",
@@ -72,6 +80,6 @@
     "onAutoForward": "notify"
   },
 
-  "postCreateCommand": "bun --version && python3 --version && uv --version && ruff --version && if [ -f bun.lock ] || [ -f bun.lockb ]; then bun install --frozen-lockfile; elif [ -f package.json ]; then bun install; fi",
+  "postCreateCommand": "bun --version && python3 --version && uv --version && ruff --version && rg --version && if [ -f bun.lock ] || [ -f bun.lockb ]; then bun install --frozen-lockfile; elif [ -f package.json ]; then bun install; fi",
   "waitFor": "postCreateCommand"
 }

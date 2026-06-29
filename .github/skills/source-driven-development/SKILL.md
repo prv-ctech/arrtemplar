@@ -1,14 +1,6 @@
 ---
 name: source-driven-development
 description: Grounds every implementation decision in official documentation. Use when you want authoritative, source-cited code free from outdated patterns. Use when building with any framework or library where correctness matters.
-compatibility:
-  - github-copilot
-  - claude-code
-  - openai-codex
-license: MIT
-metadata:
-  author: arrbit
-  version: "1.0"
 ---
 
 # Source-Driven Development
@@ -66,7 +58,7 @@ STACK DETECTED:
 → Fetching official docs for the relevant patterns.
 ```
 
-If versions are missing or ambiguous, **ask the user**. Don't guess — the version determines which patterns are correct.
+If versions are missing or ambiguous, use VS Code's native `vscode_askQuestions` tool to ask the user. Don't guess — the version determines which patterns are correct. Do not write the question only in markdown/plain chat and wait for a reply.
 
 ### Step 2: Fetch Official Documentation
 
@@ -122,8 +114,10 @@ but React 19 docs recommend useActionState for this pattern.
 Options:
 A) Use the modern pattern (useActionState) — consistent with current docs
 B) Match existing code (useState) — consistent with codebase
-→ Which approach do you prefer?
+→ Use `vscode_askQuestions` to ask the user to choose A, B, or provide another approach.
 ```
+
+Ask this docs-vs-codebase conflict with `vscode_askQuestions` and do not proceed until the user answers.
 
 Surface the conflict. Don't silently pick one.
 

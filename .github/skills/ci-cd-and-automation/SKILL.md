@@ -1,14 +1,6 @@
 ---
 name: ci-cd-and-automation
 description: Automates CI/CD pipeline setup. Use when setting up or modifying build and deployment pipelines. Use when you need to automate quality gates, configure test runners in CI, or establish deployment strategies.
-compatibility:
-  - github-copilot
-  - claude-code
-  - openai-codex
-license: MIT
-metadata:
-  author: arrbit
-  version: "1.0"
 ---
 
 # CI/CD and Automation
@@ -44,13 +36,13 @@ Pull Request Opened
 │   ↓ pass         │
 │   UNIT TESTS     │  jest/vitest
 │   ↓ pass         │
-│   BUILD          │  bun run build
+│   BUILD          │  npm run build
 │   ↓ pass         │
 │   INTEGRATION    │  API/DB tests
 │   ↓ pass         │
 │   E2E (optional) │  Playwright/Cypress
 │   ↓ pass         │
-│   SECURITY AUDIT │  bun audit
+│   SECURITY AUDIT │  npm audit
 │   ↓ pass         │
 │   BUNDLE SIZE    │  bundlesize check
 └─────────────────┘
@@ -87,22 +79,22 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: bun install
+        run: npm ci
 
       - name: Lint
-        run: bun run lint
+        run: npm run lint
 
       - name: Type check
-        run: bunx tsc --noEmit
+        run: npx tsc --noEmit
 
       - name: Test
-        run: bun test -- --coverage
+        run: npm test -- --coverage
 
       - name: Build
-        run: bun run build
+        run: npm run build
 
       - name: Security audit
-        run: bun audit --audit-level=high
+        run: npm audit --audit-level=high
 ```
 
 ### With Database Integration Tests
@@ -130,13 +122,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: bun install
+          cache: 'npm'
+      - run: npm ci
       - name: Run migrations
-        run: bun run db:push
+        run: npx prisma migrate deploy
         env:
           DATABASE_URL: postgresql://ci_user:${{ secrets.CI_DB_PASSWORD }}@localhost:5432/testdb
       - name: Integration tests
-        run: bun run test:integration
+        run: npm run test:integration
         env:
           DATABASE_URL: postgresql://ci_user:${{ secrets.CI_DB_PASSWORD }}@localhost:5432/testdb
 ```
@@ -153,13 +146,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: bun install
+          cache: 'npm'
+      - run: npm ci
       - name: Install Playwright
-        run: bunx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium
       - name: Build
-        run: bun run build
+        run: npm run build
       - name: Run E2E tests
-        run: bunx playwright test
+        run: npx playwright test
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -190,7 +184,7 @@ Agent fixes → pushes → CI runs again
 **Key patterns:**
 
 ```
-Lint failure → Agent runs `bun run lint --fix` and commits
+Lint failure → Agent runs `npm run lint --fix` and commits
 Type error  → Agent reads the error location and fixes the type
 Test failure → Agent follows debugging-and-error-recovery skill
 Build error → Agent checks config and dependencies
@@ -210,7 +204,8 @@ deploy-preview:
   steps:
     - uses: actions/checkout@v4
     - name: Deploy preview
-      run: bunx vercel --token=${{ secrets.VERCEL_TOKEN }}
+      run: npx vercel --token=${{ secrets.VERCEL_TOKEN }}
+```
 
 ### Feature Flags
 
@@ -270,7 +265,7 @@ jobs:
       - name: Rollback deployment
         run: |
           # Deploy the specified previous version
-          bunx vercel rollback ${{ inputs.version }}
+          npx vercel rollback ${{ inputs.version }}
 ```
 
 ## Environment Management
@@ -338,29 +333,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: '22' }
-      - run: bun install
-      - run: bun run lint
+        with: { node-version: '22', cache: 'npm' }
+      - run: npm ci
+      - run: npm run lint
 
   typecheck:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: '22' }
-      - run: bun install
-      - run: bunx tsc --noEmit
+        with: { node-version: '22', cache: 'npm' }
+      - run: npm ci
+      - run: npx tsc --noEmit
 
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: '22' }
-      - run: bun install
-      - run: bun test -- --coverage
+        with: { node-version: '22', cache: 'npm' }
+      - run: npm ci
+      - run: npm test -- --coverage
 ```
 
 ## Common Rationalizations

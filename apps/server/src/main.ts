@@ -1,11 +1,11 @@
-import { APP_NAME } from "@arrtemplar/shared";
-import { getLogger } from "@logtape/logtape";
+import { APP_LOG_CATEGORY, APP_NAME } from "@arrtemplar/shared";
+import { dispose, getLogger } from "@logtape/logtape";
 import { createApp } from "./app";
 import { env } from "./config/env";
 import { migrateDatabase as runDatabaseMigrations } from "./db/migrate";
 import { configureServerLogging } from "./logging/config";
 
-const serverLogger = getLogger(["arrtemplar", "server"]);
+const serverLogger = getLogger([APP_LOG_CATEGORY, "server"]);
 
 type RuntimeApp = {
   listen: (port: number) => unknown;
@@ -17,6 +17,19 @@ type StartServerOptions = {
   createRuntimeApp?: () => RuntimeApp;
   serverPort?: number;
   logServerStarted?: (event: { appName: string; port: number; url: string }) => void;
+};
+
+type RunServerProcessOptions = StartServerOptions & {
+  disposeLogging?: () => Promise<void>;
+  registerShutdown?: () => void;
+};
+
+type ShutdownSignal = "SIGINT" | "SIGTERM";
+
+type RegisterShutdownHandlersOptions = {
+  disposeLogging?: () => Promise<void>;
+  exitProcess?: (code: number) => void;
+  onSignal?: (signal: ShutdownSignal, listener: () => void | Promise<void>) => void;
 };
 
 export async function startServer(options: StartServerOptions = {}): Promise<RuntimeApp> {
@@ -39,8 +52,50 @@ export async function startServer(options: StartServerOptions = {}): Promise<Run
   return app;
 }
 
+export async function runServerProcess(options: RunServerProcessOptions = {}): Promise<void> {
+  const {
+    disposeLogging = dispose,
+    registerShutdown = registerShutdownHandlers,
+    ...startOptions
+  } = options;
+
+  try {
+    await startServer(startOptions);
+    registerShutdown();
+  } catch (error) {
+    await disposeLogging();
+    throw error;
+  }
+}
+
+export function registerShutdownHandlers(options: RegisterShutdownHandlersOptions = {}): void {
+  const disposeLogging = options.disposeLogging ?? dispose;
+  const exitProcess = options.exitProcess ?? ((code) => process.exit(code));
+  const onSignal = options.onSignal ?? ((signal, listener) => process.once(signal, listener));
+  let isShuttingDown = false;
+
+  const handleShutdown = async (): Promise<void> => {
+    if (isShuttingDown) {
+      return;
+    }
+
+    isShuttingDown = true;
+
+    try {
+      await disposeLogging();
+    } finally {
+      exitProcess(0);
+    }
+  };
+
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    onSignal(signal, handleShutdown);
+  }
+}
+
 function logDefaultServerStarted(event: { appName: string; port: number; url: string }): void {
   serverLogger.info("{appName} API listening on {serverUrl}", {
+    event: "server.started",
     appName: event.appName,
     port: event.port,
     serverUrl: event.url,
@@ -48,5 +103,5 @@ function logDefaultServerStarted(event: { appName: string; port: number; url: st
 }
 
 if (import.meta.main) {
-  await startServer();
+  await runServerProcess();
 }

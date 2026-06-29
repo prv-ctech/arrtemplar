@@ -22,6 +22,7 @@ export const products = pgTable('products', {
 ```
 
 **Problems:**
+
 - No primary key generation strategy means manual ID management
 - Numeric data stored as text loses database-level validation and math operations
 - Boolean as text means you get `"true"` / `"false"` strings instead of actual booleans
@@ -45,6 +46,7 @@ export const products = pgTable('products', {
 ```
 
 **Why this is better:**
+
 - `generatedAlwaysAsIdentity()` handles ID generation at the database level
 - `numeric` with precision/scale stores exact decimal values
 - `boolean` maps to actual `true`/`false` in TypeScript
@@ -55,7 +57,7 @@ export const products = pgTable('products', {
 ## Key Column Type Mappings (PostgreSQL)
 
 | Use Case | Type | TypeScript |
-|----------|------|------------|
+| -------- | ---- | ---------- |
 | Primary key | `integer().generatedAlwaysAsIdentity()` | `number` |
 | UUID primary key | `uuid().defaultRandom()` | `string` |
 | Short strings | `varchar({ length: N })` | `string` |
@@ -88,4 +90,4 @@ This is compile-time only — it doesn't add any runtime validation.
 
 ## References
 
-- https://orm.drizzle.team/docs/column-types/pg
+- <https://orm.drizzle.team/docs/column-types/pg>

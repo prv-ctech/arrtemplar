@@ -1,12 +1,13 @@
 {
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
 
-  // Bun discovers tests under test/ and preloads test/setup.ts from bunfig.toml.
-  // Fallow 2.75.0 does not currently turn those Bun test conventions into entry points.
-  "entry": ["test/**/*.test.ts", "test/setup.ts", ".github/scripts/*.ts"],
+  // Fallow's Bun plugin discovers tests under test/ and the preload in bunfig.toml.
+  // Keep only project-specific tooling that is not reached through package scripts.
+  "entry": [".github/scripts/*.ts"],
 
-  // Agent skill/template assets are documentation inputs, not this app's source graph.
-  "ignorePatterns": [".github/skills/**"],
+  // Agent skill/template assets and generated output are not this app's source graph.
+  // Tests intentionally stay in dead-code and dependency analysis.
+  "ignorePatterns": [".github/skills/**", "apps/server/dist/**", "apps/web/dist/**", "coverage/**"],
 
   // `import { $ } from "bun"` and other Bun module imports are runtime-provided by Bun.
   "ignoreDependencies": ["bun"],
@@ -31,6 +32,7 @@
     "unused-class-members": "warn",
     "duplicate-exports": "warn",
     "circular-dependencies": "error",
+    "boundary-violation": "warn",
     "type-only-dependencies": "warn",
     "test-only-dependencies": "warn",
     "stale-suppressions": "warn"
@@ -40,7 +42,9 @@
     "mode": "mild",
     "minTokens": 50,
     "minLines": 5,
-    "threshold": 0
+    "threshold": 0,
+    "ignoreImports": true,
+    "ignore": ["test/**", "**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"]
   },
 
   "health": {
@@ -55,6 +59,23 @@
   // TypeScript owns type soundness, and Fallow owns codebase graph health.
   "audit": {
     "gate": "new-only"
+  },
+
+  "boundaries": {
+    "zones": [
+      { "name": "web", "patterns": ["apps/web/src/**"] },
+      { "name": "server", "patterns": ["apps/server/src/**"] },
+      { "name": "shared", "patterns": ["packages/shared/src/**"] },
+      { "name": "tooling", "patterns": ["scripts/**", ".github/scripts/**"] },
+      { "name": "tests", "patterns": ["test/**"] }
+    ],
+    "rules": [
+      { "from": "web", "allow": ["server", "shared"] },
+      { "from": "server", "allow": ["shared"] },
+      { "from": "shared", "allow": [] },
+      { "from": "tooling", "allow": ["web", "server", "shared"] },
+      { "from": "tests", "allow": ["web", "server", "shared", "tooling"] }
+    ]
   },
 
   "production": {

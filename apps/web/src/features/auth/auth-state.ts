@@ -1,4 +1,4 @@
-import type { PublicUser, UserRole } from "@arrtemplar/shared";
+import { hasPermissionGrant, type PublicUser, type UserPermission } from "@arrtemplar/shared";
 import { useQuery } from "@tanstack/react-query";
 import { getAuthSetupStatus, getCurrentUser } from "@/lib/api";
 
@@ -23,6 +23,29 @@ export function useAuthSetupQuery() {
   });
 }
 
-export function hasRequiredRole(user: PublicUser, role?: UserRole): boolean {
-  return role ? user.role === role : true;
+export function hasRequiredPermission(user: PublicUser, permission: UserPermission): boolean {
+  return hasPermissionGrant(user.permissions, permission);
+}
+
+export function hasAnyRequiredPermission(
+  user: PublicUser,
+  permissions: readonly UserPermission[],
+): boolean {
+  return permissions.some((permission) => hasRequiredPermission(user, permission));
+}
+
+export function canManageUsers(user: PublicUser): boolean {
+  return hasRequiredPermission(user, "users:manage");
+}
+
+export function canAccessSettings(user: PublicUser): boolean {
+  return hasRequiredPermission(user, "settings:view");
+}
+
+export function canAccessHelp(user: PublicUser): boolean {
+  return hasRequiredPermission(user, "help:view");
+}
+
+export function canManageHelpTickets(user: PublicUser): boolean {
+  return hasRequiredPermission(user, "help:manage");
 }

@@ -124,5 +124,5 @@ db.select().from(users).where(not(eq(users.role, 'admin')));
 
 ## References
 
-- https://orm.drizzle.team/docs/operators
-- https://orm.drizzle.team/docs/select#filtering
+- <https://orm.drizzle.team/docs/operators>
+- <https://orm.drizzle.team/docs/select#filtering>

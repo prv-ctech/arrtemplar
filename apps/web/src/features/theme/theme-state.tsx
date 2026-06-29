@@ -1,42 +1,47 @@
-import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from "react";
+import { APP_STORAGE_PREFIX } from "@arrtemplar/shared";
+import { createContext, type ReactNode, use, useEffect, useMemo, useState } from "react";
 import {
-  CATPPUCCIN_THEMES,
-  type CatppuccinTheme,
-  DEFAULT_CATPPUCCIN_THEME,
-  getCatppuccinThemeOption,
-  resolveCatppuccinTheme,
+  APP_THEMES,
+  type AppTheme,
+  DEFAULT_THEME,
+  getThemeOption,
+  resolveAppTheme,
+  THEME_PACKS,
 } from "./theme-options";
 
-const THEME_STORAGE_KEY = "arrtemplar.catppuccin-theme";
+const THEME_STORAGE_KEY = `${APP_STORAGE_PREFIX}.theme`;
 
 type ThemeContextValue = {
-  theme: CatppuccinTheme;
-  selectedTheme: ReturnType<typeof getCatppuccinThemeOption>;
-  themes: typeof CATPPUCCIN_THEMES;
-  setTheme: (theme: CatppuccinTheme) => void;
+  theme: AppTheme;
+  selectedTheme: ReturnType<typeof getThemeOption>;
+  themePacks: typeof THEME_PACKS;
+  themes: typeof APP_THEMES;
+  setTheme: (theme: AppTheme) => void;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-function readStoredTheme(): CatppuccinTheme {
+function readStoredTheme(): AppTheme {
   if (typeof window === "undefined") {
-    return DEFAULT_CATPPUCCIN_THEME;
+    return DEFAULT_THEME;
   }
 
   try {
-    return resolveCatppuccinTheme(window.localStorage.getItem(THEME_STORAGE_KEY));
+    return resolveAppTheme(window.localStorage.getItem(THEME_STORAGE_KEY));
   } catch {
-    return DEFAULT_CATPPUCCIN_THEME;
+    return DEFAULT_THEME;
   }
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<CatppuccinTheme>(readStoredTheme);
-  const selectedTheme = getCatppuccinThemeOption(theme);
+  const [theme, setThemeState] = useState<AppTheme>(readStoredTheme);
+  const selectedTheme = getThemeOption(theme);
 
   useEffect(() => {
     const root = document.documentElement;
     root.dataset.theme = theme;
+    root.classList.remove(...APP_THEMES.map((option) => option.value));
+    root.classList.add(theme);
     root.style.colorScheme = selectedTheme.dark ? "dark" : "light";
 
     try {
@@ -50,7 +55,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     () => ({
       theme,
       selectedTheme,
-      themes: CATPPUCCIN_THEMES,
+      themePacks: THEME_PACKS,
+      themes: APP_THEMES,
       setTheme: setThemeState,
     }),
     [selectedTheme, theme],
@@ -60,7 +66,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 }
 
 export function useTheme() {
-  const context = useContext(ThemeContext);
+  const context = use(ThemeContext);
 
   if (!context) {
     throw new Error("useTheme must be used inside ThemeProvider.");

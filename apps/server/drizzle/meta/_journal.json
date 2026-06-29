@@ -1,12 +1,26 @@
 {
-  "version": "1",
+  "version": "7",
   "dialect": "sqlite",
   "entries": [
     {
       "idx": 0,
-      "version": "1",
-      "when": 1747815432,
-      "tag": "0000_core_tables",
+      "version": "6",
+      "when": 1782416294534,
+      "tag": "0000_sqlite_core_baseline",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1782452410210,
+      "tag": "0001_rename_download_clients_to_service_integrations",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1782571002930,
+      "tag": "0002_classy_mauler",
       "breakpoints": true
     }
   ]

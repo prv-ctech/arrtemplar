@@ -44,3 +44,15 @@ describe("Vite development hardening", () => {
     );
   });
 });
+
+describe("Vite production build", () => {
+  it("splits large vendor dependencies into dedicated chunks", async () => {
+    const configSource = await Bun.file(viteConfigPath).text();
+
+    expect(configSource).toContain("rolldownOptions");
+    expect(configSource).toContain("codeSplitting");
+    expect(configSource).toContain("react-vendor");
+    expect(configSource).toContain("tanstack-vendor");
+    expect(configSource).toContain("ui-vendor");
+  });
+});

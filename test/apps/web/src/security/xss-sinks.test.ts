@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { Glob } from "bun";
-import { resolve, dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Glob } from "bun";
 
 const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../..");
 const webSourceRoot = `${workspaceRoot}/apps/web/src`;

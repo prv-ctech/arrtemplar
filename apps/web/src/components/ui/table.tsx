@@ -1,9 +1,18 @@
 import type { ComponentProps } from "react";
 import { cn } from "@/lib/utils";
 
-export function Table({ className, ...props }: ComponentProps<"table">) {
+type TableProps = ComponentProps<"table"> & {
+  containerClassName?: string;
+};
+
+export function Table({ className, containerClassName, ...props }: TableProps) {
   return (
-    <div className="relative w-full overflow-x-auto" data-slot="table-container">
+    <div
+      className={cn(
+        "relative w-full overflow-x-auto rounded-3xl border border-border bg-card/60 pb-4 sm:pb-0",
+        containerClassName,
+      )}
+    >
       <table
         className={cn("w-full caption-bottom text-sm", className)}
         data-slot="table"
@@ -27,10 +36,23 @@ export function TableBody({ className, ...props }: ComponentProps<"tbody">) {
   );
 }
 
+export function TableFooter({ className, ...props }: ComponentProps<"tfoot">) {
+  return (
+    <tfoot
+      className={cn("border-t bg-muted/40 font-medium [&>tr]:last:border-b-0", className)}
+      data-slot="table-footer"
+      {...props}
+    />
+  );
+}
+
 export function TableRow({ className, ...props }: ComponentProps<"tr">) {
   return (
     <tr
-      className={cn("border-b border-border/70 transition-colors hover:bg-muted/35", className)}
+      className={cn(
+        "border-border border-b transition-colors hover:bg-muted/35 data-[state=selected]:bg-muted",
+        className,
+      )}
       data-slot="table-row"
       {...props}
     />
@@ -41,7 +63,7 @@ export function TableHead({ className, ...props }: ComponentProps<"th">) {
   return (
     <th
       className={cn(
-        "h-11 px-3 text-left align-middle font-medium text-muted-foreground",
+        "h-12 px-4 text-left align-middle font-medium text-muted-foreground whitespace-nowrap has-[[role=checkbox]]:pr-0",
         className,
       )}
       data-slot="table-head"
@@ -51,7 +73,13 @@ export function TableHead({ className, ...props }: ComponentProps<"th">) {
 }
 
 export function TableCell({ className, ...props }: ComponentProps<"td">) {
-  return <td className={cn("p-3 align-middle", className)} data-slot="table-cell" {...props} />;
+  return (
+    <td
+      className={cn("px-4 py-3 align-middle has-[[role=checkbox]]:pr-0", className)}
+      data-slot="table-cell"
+      {...props}
+    />
+  );
 }
 
 export function TableCaption({ className, ...props }: ComponentProps<"caption">) {

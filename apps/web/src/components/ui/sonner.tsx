@@ -1,6 +1,13 @@
-import { CheckCircleIcon, InfoIcon, WarningCircleIcon, XCircleIcon } from "@phosphor-icons/react";
+import {
+  CheckCircleIcon,
+  InfoIcon,
+  SpinnerGapIcon,
+  WarningCircleIcon,
+  XCircleIcon,
+} from "@phosphor-icons/react";
 import type * as React from "react";
 import { Toaster as Sonner, type ToasterProps } from "sonner";
+import { toastPalette } from "./toast-palette";
 
 export function Toaster(props: ToasterProps) {
   return (
@@ -11,13 +18,25 @@ export function Toaster(props: ToasterProps) {
         info: <InfoIcon className="size-4" weight="duotone" />,
         warning: <WarningCircleIcon className="size-4" weight="duotone" />,
         error: <XCircleIcon className="size-4" weight="duotone" />,
-        loading: <InfoIcon className="size-4 animate-pulse" weight="duotone" />,
+        loading: <SpinnerGapIcon className="size-4 animate-spin" weight="duotone" />,
       }}
       style={
         {
-          "--normal-bg": "var(--popover)",
-          "--normal-text": "var(--popover-foreground)",
-          "--normal-border": "var(--border)",
+          "--normal-bg": toastPalette.infoBg,
+          "--normal-text": toastPalette.infoText,
+          "--normal-border": toastPalette.infoBorder,
+          "--info-bg": toastPalette.infoBg,
+          "--info-text": toastPalette.infoText,
+          "--info-border": toastPalette.infoBorder,
+          "--success-bg": toastPalette.successBg,
+          "--success-text": toastPalette.successText,
+          "--success-border": toastPalette.successBorder,
+          "--error-bg": toastPalette.errorBg,
+          "--error-text": toastPalette.errorText,
+          "--error-border": toastPalette.errorBorder,
+          "--warning-bg": toastPalette.warningBg,
+          "--warning-text": toastPalette.warningText,
+          "--warning-border": toastPalette.warningBorder,
           "--border-radius": "var(--radius)",
         } as React.CSSProperties
       }

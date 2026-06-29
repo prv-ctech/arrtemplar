@@ -5,8 +5,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton";
 import { getHealth } from "@/lib/api";
 
+const healthTimestampFormatter = new Intl.DateTimeFormat(undefined, {
+  dateStyle: "medium",
+  timeStyle: "short",
+});
+
 export function HealthPanel() {
-  const healthQuery = useQuery({
+  const {
+    data: health,
+    error,
+    isError,
+    isPending,
+    refetch,
+  } = useQuery({
     queryKey: ["health"],
     queryFn: getHealth,
     refetchInterval: 30_000,
@@ -14,25 +25,53 @@ export function HealthPanel() {
 
   return (
     <Card className="h-full overflow-hidden bg-card/78">
-      <CardHeader>
-        <div className="flex items-center gap-3">
-          <div className="rounded-2xl border border-primary/25 bg-primary/10 p-2 text-primary">
-            <ActivityIcon aria-hidden="true" className="h-5 w-5" weight="duotone" />
-          </div>
-          <div>
-            <CardTitle>Backend health</CardTitle>
-            <CardDescription>Live status from the Elysia API.</CardDescription>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {healthQuery.isPending ? <HealthLoading /> : null}
-        {healthQuery.isError ? (
-          <HealthError message={healthQuery.error.message} onRetry={() => healthQuery.refetch()} />
-        ) : null}
-        {healthQuery.data ? <HealthReady health={healthQuery.data} /> : null}
-      </CardContent>
+      <HealthPanelHeader />
+      <HealthPanelContent
+        errorMessage={error?.message}
+        health={health}
+        isError={isError}
+        isPending={isPending}
+        onRetry={() => refetch()}
+      />
     </Card>
+  );
+}
+
+function HealthPanelHeader() {
+  return (
+    <CardHeader>
+      <div className="flex items-center gap-3">
+        <div className="rounded-2xl border border-primary/25 bg-primary/10 p-2 text-primary">
+          <ActivityIcon aria-hidden="true" className="size-5" weight="duotone" />
+        </div>
+        <div>
+          <CardTitle>Backend health</CardTitle>
+          <CardDescription>Live status from the Elysia API.</CardDescription>
+        </div>
+      </div>
+    </CardHeader>
+  );
+}
+
+function HealthPanelContent({
+  errorMessage,
+  health,
+  isError,
+  isPending,
+  onRetry,
+}: {
+  errorMessage?: string | undefined;
+  health?: { name: string; version: string; status: string; timestamp: string } | undefined;
+  isError: boolean;
+  isPending: boolean;
+  onRetry: () => void;
+}) {
+  return (
+    <CardContent>
+      {isPending ? <HealthLoading /> : null}
+      {isError && errorMessage ? <HealthError message={errorMessage} onRetry={onRetry} /> : null}
+      {health ? <HealthReady health={health} /> : null}
+    </CardContent>
   );
 }
 
@@ -40,10 +79,10 @@ function HealthLoading() {
   return (
     <div
       aria-busy="true"
-      aria-label="Checking API status"
+      aria-live="polite"
       className="space-y-3 rounded-3xl border border-border bg-background/48 p-4"
-      role="status"
     >
+      <span className="sr-only">Checking API status</span>
       <Skeleton className="h-4 w-2/3" />
       <Skeleton className="h-4 w-1/2" />
       <Skeleton className="h-12 w-full" />
@@ -57,7 +96,7 @@ function HealthError({ message, onRetry }: { message: string; onRetry: () => voi
       <div className="flex items-start gap-3">
         <WarningCircleIcon
           aria-hidden="true"
-          className="mt-0.5 h-5 w-5 text-destructive"
+          className="mt-0.5 size-5 text-destructive"
           weight="duotone"
         />
         <div>
@@ -80,14 +119,17 @@ function HealthReady({
   return (
     <div className="grid gap-4 rounded-3xl border border-primary/25 bg-primary/10 p-4 sm:grid-cols-2">
       <div className="flex items-center gap-3 sm:col-span-2">
-        <CheckCircleIcon aria-hidden="true" className="h-5 w-5 text-primary" weight="duotone" />
+        <CheckCircleIcon aria-hidden="true" className="size-5 text-primary" weight="duotone" />
         <p className="font-medium">
           {health.name} API is {health.status}
         </p>
       </div>
       <dl className="grid gap-4 sm:col-span-2 sm:grid-cols-2">
         <StatusField label="Version" value={health.version} />
-        <StatusField label="Updated" value={new Date(health.timestamp).toLocaleString()} />
+        <StatusField
+          label="Updated"
+          value={healthTimestampFormatter.format(Date.parse(health.timestamp))}
+        />
       </dl>
     </div>
   );

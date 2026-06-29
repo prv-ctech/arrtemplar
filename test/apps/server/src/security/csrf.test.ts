@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import type { DatabaseClient } from "../../../../../apps/server/src/db/client";
+import { enforceCsrfPolicy } from "../../../../../apps/server/src/security/csrf";
 import { CSRF_HEADER_NAME, CSRF_HEADER_VALUE } from "../../../../../packages/shared/src";
 import {
   closeServerTestDatabases,
@@ -86,6 +87,95 @@ describe("CSRF request policy", () => {
     expect(response.status).toBe(403);
   });
 
+  it("rejects session-cookie unsafe requests with bearer auth when CSRF is missing", async () => {
+    const app = await createCsrfTestApp();
+
+    const response = await app.handle(
+      unsafeJsonRequest(
+        "/api/profile/notifications/history",
+        { eventId: "profile.noop", title: "Noop" },
+        {
+          authorization: "Bearer artk_invalid",
+          cookie: "arrtemplar_session=bogus",
+          csrfHeader: false,
+        },
+      ),
+    );
+
+    expect(response.status).toBe(403);
+  });
+
+  it("keeps API-key management endpoints CSRF-protected even with bearer auth", async () => {
+    const app = await createCsrfTestApp();
+
+    const response = await app.handle(
+      unsafeJsonRequest(
+        "/api/api-keys",
+        { name: "Blocked", permissions: ["settings:services"] },
+        { authorization: "Bearer artk_invalid", csrfHeader: false },
+      ),
+    );
+
+    expect(response.status).toBe(403);
+  });
+
+  it("exempts pure API-key help ticket writes from CSRF checks", () => {
+    const statusCalls: Array<{ code: number; body: unknown }> = [];
+    const headers: Record<string, string | number | boolean | undefined> = {};
+    const policy = enforceCsrfPolicy(TEST_WEB_ORIGIN);
+    const request = new Request("http://localhost/api/help/tickets", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer artk_example",
+      },
+    });
+
+    const result = policy({
+      request,
+      set: { headers },
+      status: (code, body) => {
+        statusCalls.push({ code, body });
+        return { code, body };
+      },
+    });
+
+    expect(result).toBeUndefined();
+    expect(statusCalls).toHaveLength(0);
+    expect(headers.vary).toContain("Origin");
+  });
+
+  it("keeps browser-cookie help ticket writes CSRF-protected even if bearer auth is present", () => {
+    const statusCalls: Array<{ code: number; body: unknown }> = [];
+    const policy = enforceCsrfPolicy(TEST_WEB_ORIGIN);
+    const request = new Request("http://localhost/api/help/tickets", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer artk_example",
+        cookie: "arrtemplar_session=abc123",
+      },
+    });
+
+    const result = policy({
+      request,
+      set: { headers: {} },
+      status: (code, body) => {
+        statusCalls.push({ code, body });
+        return { code, body };
+      },
+    });
+
+    expect(result).toEqual({
+      body: {
+        error: {
+          code: "CSRF_REJECTED",
+          message: "Request rejected by CSRF protection.",
+        },
+      },
+      code: 403,
+    });
+    expect(statusCalls).toHaveLength(1);
+  });
+
   it("rejects unsafe API requests from an unexpected Origin", async () => {
     const app = await createCsrfTestApp();
 
@@ -121,6 +211,20 @@ describe("CSRF request policy", () => {
 
     expect(response.status).toBe(200);
   });
+
+  it("lets the OIDC back-channel logout endpoint validate its signed server-to-server token", async () => {
+    const app = await createCsrfTestApp();
+
+    const response = await app.handle(
+      new Request("http://localhost/api/auth/oauth/backchannel-logout", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ logout_token: "not-a-jwt" }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+  });
 });
 
 async function createCsrfTestApp(): Promise<TestAppContext["app"]> {
@@ -133,6 +237,8 @@ function unsafeJsonRequest(
   path: string,
   body: unknown,
   options: {
+    authorization?: string;
+    cookie?: string;
     origin?: string | null;
     referer?: string;
     secFetchSite?: string;
@@ -156,6 +262,14 @@ function unsafeJsonRequest(
 
   if (options.csrfHeader !== false) {
     headers.set(CSRF_HEADER_NAME, CSRF_HEADER_VALUE);
+  }
+
+  if (options.authorization) {
+    headers.set("authorization", options.authorization);
+  }
+
+  if (options.cookie) {
+    headers.set("cookie", options.cookie);
   }
 
   return new Request(`http://localhost${path}`, {

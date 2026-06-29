@@ -1,14 +1,6 @@
 ---
 name: incremental-implementation
 description: Delivers changes incrementally. Use when implementing any feature or change that touches more than one file. Use when you're about to write a large amount of code at once, or when a task feels too big to land in one step.
-compatibility:
-  - github-copilot
-  - claude-code
-  - openai-codex
-license: MIT
-metadata:
-  author: arrbit
-  version: "1.0"
 ---
 
 # Incremental Implementation
@@ -16,6 +8,13 @@ metadata:
 ## Overview
 
 Build in thin vertical slices — implement one piece, test it, verify it, then expand. Avoid implementing an entire feature in one pass. Each increment should leave the system in a working, testable state. This is the execution discipline that makes large features manageable.
+
+## User Input Tooling
+
+When an increment requires user input to proceed — scope expansion, creating follow-up tasks, choosing the next slice, approving a feature flag strategy, or resolving an out-of-scope change — use VS Code's native `vscode_askQuestions` tool. Do not write the question only in markdown/plain chat and wait for a reply.
+
+- Use options for known choices such as `Create follow-up task`, `Skip`, `Include now`, and `Defer`.
+- Do not expand scope or touch out-of-scope files until the tool returns explicit approval.
 
 ## When to Use
 
@@ -137,8 +136,10 @@ If you notice something worth improving outside your task scope, note it — don
 NOTICED BUT NOT TOUCHING:
 - src/utils/format.ts has an unused import (unrelated to this task)
 - The auth middleware could use better error messages (separate task)
-→ Want me to create tasks for these?
+→ Use `vscode_askQuestions` to ask whether to create follow-up tasks for these.
 ```
+
+Ask this follow-up choice with `vscode_askQuestions` before creating tasks or expanding scope.
 
 ### Rule 1: One Thing at a Time
 
@@ -198,7 +199,7 @@ When directing an agent to implement incrementally:
 Start with just the database schema change and the API endpoint.
 Don't touch the UI yet — we'll do that in the next increment.
 
-After implementing, run `bun test` and `bun run build` to verify
+After implementing, run `npm test` and `npm run build` to verify
 nothing is broken."
 ```
 
@@ -209,10 +210,10 @@ Be explicit about what's in scope and what's NOT in scope for each increment.
 After each increment, verify:
 
 - [ ] The change does one thing and does it completely
-- [ ] All existing tests still pass (`bun test`)
-- [ ] The build succeeds (`bun run build`)
-- [ ] Type checking passes (`bunx tsc --noEmit`)
-- [ ] Linting passes (`biome check .`)
+- [ ] All existing tests still pass (`npm test`)
+- [ ] The build succeeds (`npm run build`)
+- [ ] Type checking passes (`npx tsc --noEmit`)
+- [ ] Linting passes (`npm run lint`)
 - [ ] The new functionality works as expected
 - [ ] The change is committed with a descriptive message
 

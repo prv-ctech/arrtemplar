@@ -1,14 +1,6 @@
 ---
 name: idea-refine
-description: Refines ideas iteratively. Refine ideas through structured divergent and convergent thinking. Use "idea-refine" or "ideate" to trigger.
-compatibility:
-  - github-copilot
-  - claude-code
-  - openai-codex
-license: MIT
-metadata:
-  author: arrbit
-  version: "1.0"
+description: Refines raw ideas into sharp, actionable concepts through structured divergent and convergent thinking. Use when an idea is still vague, when you need to stress-test assumptions before committing to a plan, or when you want to expand options before converging on one. Triggers on "ideate", "refine this idea", or "stress-test my plan".
 ---
 
 # Idea Refine
@@ -19,16 +11,13 @@ Refines raw ideas into sharp, actionable concepts worth building through structu
 
 1.  **Understand & Expand (Divergent):** Restate the idea, ask sharpening questions, and generate variations.
 2.  **Evaluate & Converge:** Cluster ideas, stress-test them, and surface hidden assumptions.
-3.  **Sharpen & Ship:** Produce a concrete markdown one-pager moving work forward.
+3.  **Sharpen & Ship:** Produce a concrete one-pager-style recommendation moving work forward.
 
 ## Usage
 
 This skill is primarily an interactive dialogue. Invoke it with an idea, and the agent will guide you through the process.
 
-```bash
-# Optional: Initialize the ideas directory
-bash /mnt/skills/user/idea-refine/scripts/idea-refine.sh
-```
+No initializer is required.
 
 **Trigger Phrases:**
 - "Help me refine this idea"
@@ -37,14 +26,21 @@ bash /mnt/skills/user/idea-refine/scripts/idea-refine.sh
 
 ## Output
 
-The final output is a markdown one-pager (produced by the calling agent), containing:
+The final output is a concise one-pager-style recommendation, delivered in chat by default, containing:
 - Problem Statement
 - Recommended Direction
 - Key Assumptions
 - MVP Scope
 - Not Doing list
 
-**Note:** This skill provides the content template only. The calling agent determines the exact file name and location.
+## User Input Tooling
+
+Every sharpening question, direction choice, confirmation, and save/persist prompt must use VS Code's native `vscode_askQuestions` tool. Do not write the question only in markdown/plain chat and wait for a reply.
+
+- Use one `vscode_askQuestions` call for the 3-5 Phase 1 sharpening questions.
+- Use selectable options when asking which direction resonates, and allow freeform feedback.
+- Use `vscode_askQuestions` for the final save confirmation.
+- Do not proceed to the next phase until the required answer is returned by the tool.
 
 ## Detailed Instructions
 
@@ -76,7 +72,7 @@ When the user invokes this skill with an idea (`$ARGUMENTS`), guide them through
    - What's been tried before?
    - Why now?
 
-   Use the `AskUserQuestion` tool to gather this input. Do NOT proceed until you understand who this is for and what success looks like.
+   Use the `vscode_askQuestions` tool to gather this input in the VS Code chat UI. Do NOT proceed until you understand who this is for and what success looks like.
 
 3. **Generate 5-8 idea variations** using these lenses:
    - **Inversion:** "What if we did the opposite?"
@@ -117,7 +113,7 @@ After the user reacts to Phase 1 (indicates which ideas resonate, pushes back, a
 
 #### Phase 3: Sharpen & Ship
 
-Produce a concrete artifact — a markdown one-pager that moves work forward:
+Produce a concrete artifact — a one-pager-style recommendation that moves work forward:
 
 ```markdown
 # [Idea Name]
@@ -147,7 +143,7 @@ Produce a concrete artifact — a markdown one-pager that moves work forward:
 
 **The "Not Doing" list is arguably the most valuable part.** Focus is about saying no to good ideas. Make the trade-offs explicit.
 
-The calling agent is responsible for persisting this output to the appropriate file location (e.g., `docs/brainstorm/<feature-name>-brainstorm.md`). This skill does not create files.
+If the active agent or the user explicitly requires this to be persisted, follow those instructions for destination and naming. Do not invent a repo markdown path from this skill alone.
 
 ### Anti-patterns to Avoid
 
@@ -184,5 +180,5 @@ After completing an ideation session:
 - [ ] Multiple directions were explored, not just the first idea
 - [ ] Hidden assumptions are explicitly listed with validation strategies
 - [ ] A "Not Doing" list makes trade-offs explicit
-- [ ] The output is a concrete artifact (markdown one-pager), not just conversation
+- [ ] The output is a concrete one-pager-style recommendation, not just conversation
 - [ ] The user confirmed the final direction before any implementation work

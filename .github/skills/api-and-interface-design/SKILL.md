@@ -1,14 +1,6 @@
 ---
 name: api-and-interface-design
 description: Guides stable API and interface design. Use when designing APIs, module boundaries, or any public interface. Use when creating REST or GraphQL endpoints, defining type contracts between modules, or establishing boundaries between frontend and backend.
-compatibility:
-  - github-copilot
-  - claude-code
-  - openai-codex
-license: MIT
-metadata:
-  author: arrbit
-  version: "1.0"
 ---
 
 # API and Interface Design
@@ -16,6 +8,13 @@ metadata:
 ## Overview
 
 Design stable, well-documented interfaces that are hard to misuse. Good interfaces make the right thing easy and the wrong thing hard. This applies to REST APIs, GraphQL schemas, module boundaries, component props, and any surface where one piece of code talks to another.
+
+## User Input Tooling
+
+When API/interface design requires user input to proceed — choosing between incompatible contracts, resolving docs-vs-codebase conflicts, approving public API changes, or deciding whether to preserve/deprecate observable behavior — use VS Code's native `vscode_askQuestions` tool. Do not write the question only in markdown/plain chat and wait for a reply.
+
+- Use selectable options when trade-offs are known, and allow freeform rationale.
+- Do not implement a public API change until the tool returns explicit direction.
 
 ## When to Use
 
@@ -65,6 +64,8 @@ interface TaskAPI {
   deleteTask(id: string): Promise<void>;
 }
 ```
+
+If the task or active agent requires a persisted contract draft before implementation, follow those instructions for where and how to save it.
 
 ### 2. Consistent Error Semantics
 
@@ -299,4 +300,4 @@ After designing an API:
 - [ ] List endpoints support pagination
 - [ ] New fields are additive and optional (backward compatible)
 - [ ] Naming follows consistent conventions across all endpoints
-- [ ] API documentation or types are committed alongside the implementation
+- [ ] API documentation or types are committed alongside the implementation, and any persisted contract draft follows the active agent or task instructions

@@ -1,10 +1,13 @@
 import type { ApiErrorResponse } from "@arrtemplar/shared";
 
+type ApiClientFieldError = NonNullable<ApiErrorResponse["error"]["fieldErrors"]>[number];
+
 export class ApiClientError extends Error {
   constructor(
     message: string,
     readonly status: number,
     readonly code = "API_ERROR",
+    readonly fieldErrors?: ApiClientFieldError[],
   ) {
     super(message);
     this.name = "ApiClientError";
@@ -64,4 +67,18 @@ function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
     "code" in error &&
     typeof (error as { code?: unknown }).code === "string"
   );
+}
+
+export function getApiErrorFieldErrors(error: unknown): ApiClientFieldError[] | undefined {
+  const response = readEdenErrorValue(error);
+
+  if (isApiErrorResponse(response)) {
+    return response.error.fieldErrors;
+  }
+
+  if (isApiErrorResponse(error)) {
+    return error.error.fieldErrors;
+  }
+
+  return undefined;
 }

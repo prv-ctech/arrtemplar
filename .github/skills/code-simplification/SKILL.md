@@ -1,14 +1,6 @@
 ---
 name: code-simplification
 description: Simplifies code for clarity. Use when refactoring code for clarity without changing behavior. Use when code works but is harder to read, maintain, or extend than it should be. Use when reviewing code that has accumulated unnecessary complexity.
-compatibility:
-  - github-copilot
-  - claude-code
-  - openai-codex
-license: MIT
-metadata:
-  author: arrbit
-  version: "1.0"
 ---
 
 # Code Simplification
@@ -18,6 +10,13 @@ metadata:
 ## Overview
 
 Simplify code by reducing complexity while preserving exact behavior. The goal is not fewer lines — it's code that is easier to read, understand, modify, and debug. Every simplification must pass a simple test: "Would a new team member understand this faster than the original?"
+
+## User Input Tooling
+
+When simplification requires user input to proceed — uncertain behavior preservation, scope expansion beyond recently changed code, deleting questionable code, or choosing whether to split refactoring from feature work — use VS Code's native `vscode_askQuestions` tool. Do not write the question only in markdown/plain chat and wait for a reply.
+
+- Use options such as `Proceed`, `Do not change`, `Split into separate task`, and `Needs more context`.
+- Do not simplify code you do not understand or broaden scope until the tool returns explicit approval.
 
 ## When to Use
 

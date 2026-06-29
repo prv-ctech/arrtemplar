@@ -1,14 +1,6 @@
 ---
 name: shipping-and-launch
 description: Prepares production launches. Use when preparing to deploy to production. Use when you need a pre-launch checklist, when setting up monitoring, when planning a staged rollout, or when you need a rollback strategy.
-compatibility:
-  - github-copilot
-  - claude-code
-  - openai-codex
-license: MIT
-metadata:
-  author: arrbit
-  version: "1.0"
 ---
 
 # Shipping and Launch
@@ -40,7 +32,7 @@ Ship with confidence. The goal is not just to deploy — it's to deploy safely, 
 ### Security
 
 - [ ] No secrets in code or version control
-- [ ] `bun audit` shows no critical or high vulnerabilities
+- [ ] `npm audit` shows no critical or high vulnerabilities
 - [ ] Input validation on all user-facing endpoints
 - [ ] Authentication and authorization checks in place
 - [ ] Security headers configured (CSP, HSTS, etc.)
@@ -263,7 +255,7 @@ Every deployment needs a rollback plan before it happens:
 3. Communicate: notify team of rollback
 
 ### Database Considerations
-- Migration [X] has a rollback: `bun run db:reset` (or `drizzle-kit drop` for specific migration)
+- Migration [X] has a rollback: `npx prisma migrate rollback`
 - Data inserted by new feature: [preserved / cleaned up]
 
 ### Time to Rollback
@@ -271,6 +263,8 @@ Every deployment needs a rollback plan before it happens:
 - Redeploy previous version: < 5 minutes
 - Database rollback: < 15 minutes
 ```
+
+If the task or active agent requires a persisted launch or rollback plan, follow those instructions for destination and format.
 ## See Also
 
 - For security pre-launch checks, see `references/security-checklist.md`
@@ -304,6 +298,7 @@ Before deploying:
 - [ ] Pre-launch checklist completed (all sections green)
 - [ ] Feature flag configured (if applicable)
 - [ ] Rollback plan documented
+- [ ] Launch planning artifact exists when the task or active agent requires one
 - [ ] Monitoring dashboards set up
 - [ ] Team notified of deployment
 

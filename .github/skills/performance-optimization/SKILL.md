@@ -1,14 +1,6 @@
 ---
 name: performance-optimization
 description: Optimizes application performance. Use when performance requirements exist, when you suspect performance regressions, or when Core Web Vitals or load times need improvement. Use when profiling reveals bottlenecks that need fixing.
-compatibility:
-  - github-copilot
-  - claude-code
-  - openai-codex
-license: MIT
-metadata:
-  author: arrbit
-  version: "1.0"
 ---
 
 # Performance Optimization
@@ -56,7 +48,7 @@ Two complementary approaches — use both:
 ```bash
 # Synthetic: Lighthouse in Chrome DevTools (or CI)
 # Chrome DevTools → Performance tab → Record
-# Chrome DevTools MCP → Performance trace
+# VS Code integrated browser / browser-testing → runtime viewport and interaction checks
 
 # RUM: Web Vitals library in code
 import { onLCP, onINP, onCLS } from 'web-vitals';

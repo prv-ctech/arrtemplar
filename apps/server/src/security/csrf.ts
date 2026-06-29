@@ -1,6 +1,15 @@
-import { type ApiErrorResponse, CSRF_HEADER_NAME, CSRF_HEADER_VALUE } from "@arrtemplar/shared";
+import {
+  API_KEY_CSRF_EXEMPT_PATH_PREFIXES,
+  API_KEY_HEADER_NAME,
+  API_KEY_MANAGEMENT_PATH_PREFIX,
+  type ApiErrorResponse,
+  CSRF_HEADER_NAME,
+  CSRF_HEADER_VALUE,
+} from "@arrtemplar/shared";
+import { SESSION_COOKIE_NAME } from "../auth/session-token";
 
 const unsafeMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+const csrfExemptApiPaths = new Set(["/api/auth/oauth/backchannel-logout"]);
 const csrfVaryHeaders = ["Sec-Fetch-Site", "Origin"];
 
 const csrfRejectedError: ApiErrorResponse = {
@@ -41,10 +50,52 @@ export function enforceCsrfPolicy(allowedOrigin: string) {
 }
 
 function requiresCsrfProtection(request: Request): boolean {
+  const pathname = new URL(request.url).pathname;
+
+  if (pathname.startsWith(API_KEY_MANAGEMENT_PATH_PREFIX)) {
+    return unsafeMethods.has(request.method.toUpperCase());
+  }
+
+  if (isBearerCsrfExemptRequest(pathname, request.headers)) {
+    return false;
+  }
+
   return (
     unsafeMethods.has(request.method.toUpperCase()) &&
-    new URL(request.url).pathname.startsWith("/api/")
+    pathname.startsWith("/api/") &&
+    !csrfExemptApiPaths.has(pathname)
   );
+}
+
+function isBearerCsrfExemptRequest(pathname: string, headers: Headers): boolean {
+  return (
+    API_KEY_CSRF_EXEMPT_PATH_PREFIXES.some((pathPrefix) => pathname.startsWith(pathPrefix)) &&
+    hasApiKeyTransport(headers) &&
+    !hasSessionCookie(headers)
+  );
+}
+
+function hasApiKeyTransport(headers: Headers): boolean {
+  if (headers.get(API_KEY_HEADER_NAME)?.trim()) {
+    return true;
+  }
+
+  const authorization = headers.get("authorization");
+
+  return typeof authorization === "string" && /^Bearer\s+\S+$/i.test(authorization);
+}
+
+function hasSessionCookie(headers: Headers): boolean {
+  const cookieHeader = headers.get("cookie");
+
+  if (!cookieHeader) {
+    return false;
+  }
+
+  return cookieHeader
+    .split(";")
+    .map((entry) => entry.trim())
+    .some((entry) => entry.startsWith(`${SESSION_COOKIE_NAME}=`));
 }
 
 function hasTrustedSourceOrigin(headers: Headers, allowedOrigin: string): boolean {
