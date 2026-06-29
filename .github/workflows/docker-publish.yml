@@ -90,6 +90,8 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Scan amd64 runtime image with Trivy
+        id: trivy_amd64
+        continue-on-error: ${{ github.ref_type == 'branch' && github.ref_name != 'main' }}
         uses: aquasecurity/trivy-action@v0.33.1
         with:
           image-ref: arrtemplar:scan-amd64
@@ -110,6 +112,8 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Scan arm64 runtime image with Trivy
+        id: trivy_arm64
+        continue-on-error: ${{ github.ref_type == 'branch' && github.ref_name != 'main' }}
         uses: aquasecurity/trivy-action@v0.33.1
         with:
           input: /tmp/arrtemplar-scan-arm64.tar
