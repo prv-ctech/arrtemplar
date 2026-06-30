@@ -1,9 +1,9 @@
 import type { PublicUser } from "@arrtemplar/shared";
 import {
-  BookOpenIcon,
   GearSixIcon,
   HouseIcon,
   MagnifyingGlassIcon,
+  QuestionIcon,
   SignOutIcon,
   UserCircleIcon,
 } from "@phosphor-icons/react";
@@ -41,7 +41,7 @@ const shellNavItems: ShellNavLinkItem[] = [
   {
     label: "Help",
     to: "/help",
-    icon: <BookOpenIcon aria-hidden="true" className="size-5" />,
+    icon: <QuestionIcon aria-hidden="true" className="size-5" />,
     activeExact: false,
   },
 ];

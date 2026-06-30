@@ -239,7 +239,7 @@ export const PERMISSION_CATALOG = [
     description: "View safe application information, version details, and support metadata.",
     risk: "low",
     defaultGrant: "signed-in-user",
-    route: { surface: "settings", path: "/settings/about" },
+    route: { surface: "help", path: "/help/about" },
   },
   {
     permission: "settings:theme",

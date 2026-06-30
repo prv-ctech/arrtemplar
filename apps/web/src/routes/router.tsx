@@ -1,11 +1,11 @@
 import { createRootRoute, createRoute, createRouter, Navigate } from "@tanstack/react-router";
+import { HelpAboutRoute } from "../features/help/AboutPage";
 import { HelpFaqRoute } from "../features/help/FaqPage";
 import { HelpTicketsRoute } from "../features/help/TicketsPage";
 import { PersonalProfileRoute, UserProfilePage } from "../features/user/UserProfilePage";
 import { UserSettings } from "../features/user/UserSettings";
 import { AccountNotificationsRoute } from "./components/account-notifications-route";
 import { AccountRoute } from "./components/account-route";
-import { AdminAboutRoute } from "./components/admin-about-route";
 import { AdminAuthRoute } from "./components/admin-auth-route";
 import { AdminGeneralRoute } from "./components/admin-general-route";
 import { AdminLibraryRoute } from "./components/admin-library-route";
@@ -73,6 +73,12 @@ const helpFaqRoute = createRoute({
   getParentRoute: () => helpRoute,
   path: "faq",
   component: HelpFaqRoute,
+});
+
+const helpAboutRoute = createRoute({
+  getParentRoute: () => helpRoute,
+  path: "about",
+  component: HelpAboutRoute,
 });
 
 const profileRoute = createRoute({
@@ -159,12 +165,6 @@ const settingsThemeRoute = createRoute({
   component: AdminThemeRoute,
 });
 
-const settingsAboutRoute = createRoute({
-  getParentRoute: () => settingsRoute,
-  path: "about",
-  component: AdminAboutRoute,
-});
-
 const settingsGeneralRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "general",
@@ -211,7 +211,7 @@ const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
   authenticatedRoute.addChildren([dashboardRoute]),
-  helpRoute.addChildren([helpIndexRoute, helpFaqRoute, helpTicketsRoute]),
+  helpRoute.addChildren([helpIndexRoute, helpFaqRoute, helpTicketsRoute, helpAboutRoute]),
   profileRoute.addChildren([
     profileIndexRoute,
     profileSettingsIndexRoute,
@@ -227,7 +227,6 @@ const routeTree = rootRoute.addChildren([
   settingsRoute.addChildren([
     settingsIndexRoute,
     settingsThemeRoute,
-    settingsAboutRoute,
     settingsGeneralRoute,
     settingsLibraryRoute,
     settingsUsersRoute,

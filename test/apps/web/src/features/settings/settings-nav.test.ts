@@ -46,4 +46,10 @@ describe("settings navigation", () => {
 
     expect(source).toContain("data-[state=active]:z-10");
   });
+
+  it("aligns shared settings panels with the tabs rail inset", async () => {
+    const source = await readWorkspaceSource(settingsPrimitivesSourcePath);
+
+    expect(source).toContain('className="min-w-0 flex-1 px-1 pt-6"');
+  });
 });

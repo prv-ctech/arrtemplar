@@ -4,7 +4,6 @@ import {
   BookOpenIcon,
   FingerprintIcon,
   GearIcon,
-  InfoIcon,
   PaletteIcon,
   PlugsConnectedIcon,
   ScrollIcon,
@@ -24,7 +23,6 @@ import { SettingsPanel } from "../settings/SettingsPrimitives";
 import { AdminUsersSettings } from "./AdminUsersSettings";
 
 export type AdminSettingsPage =
-  | "about"
   | "theme"
   | "general"
   | "library"
@@ -36,7 +34,6 @@ export type AdminSettingsPage =
 
 type SettingsRouteTarget =
   | "/settings/users"
-  | "/settings/about"
   | "/settings/theme"
   | "/settings/general"
   | "/settings/library"
@@ -51,12 +48,6 @@ type AdminSettingsEntry = SettingsEntry<AdminSettingsPage> & {
 
 function createSettingsEntries(user: PublicUser) {
   const entries: AdminSettingsEntry[] = [
-    {
-      id: "about",
-      label: "About",
-      icon: <InfoIcon aria-hidden="true" className="size-5" />,
-      path: "/settings/about",
-    },
     {
       id: "theme",
       label: "Theme",
@@ -155,13 +146,6 @@ function SettingsPlaceholder({
 
 function ActiveSettingsPage({ activePage }: { activePage: AdminSettingsPage }) {
   switch (activePage) {
-    case "about":
-      return (
-        <SettingsPlaceholder
-          description="Version details, support context, and application information."
-          title="About"
-        />
-      );
     case "theme":
       return <ThemeSettings />;
     case "general":

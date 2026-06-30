@@ -56,6 +56,7 @@ describe("router route taxonomy", () => {
     expect(source).toContain('to="/help/faq"');
     expect(source).toContain("HelpTicketsRoute");
     expect(source).toContain("HelpFaqRoute");
+    expect(source).toContain("HelpAboutRoute");
     expect(source).toContain('path: "help"');
     expect(source).toContain('path: "tickets"');
     expect(source).toContain('path: "faq"');

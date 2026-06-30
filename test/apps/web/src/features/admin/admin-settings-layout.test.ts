@@ -28,7 +28,7 @@ describe("app settings layout", () => {
     const source = await readWorkspaceSource(settingsSourcePath);
 
     expect(source).toContain('<h1 className="sr-only">Settings</h1>');
-    expect(source).toContain('path: "/settings/about"');
+    expect(source).not.toContain('path: "/settings/about"');
     expect(source).toContain('path: "/settings/theme"');
     expect(source).not.toContain("ThemePackHeader");
     expect(source).not.toContain("CATPPUCCIN_LOGO_SRC");

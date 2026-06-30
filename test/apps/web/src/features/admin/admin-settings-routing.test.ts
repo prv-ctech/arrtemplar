@@ -4,7 +4,6 @@ import { readWorkspaceSource } from "./admin-settings-test-sources";
 const settingsSourcePath = "apps/web/src/features/admin/AdminSettings.tsx";
 
 const SETTINGS_PAGE_IDS = [
-  "about",
   "theme",
   "general",
   "library",

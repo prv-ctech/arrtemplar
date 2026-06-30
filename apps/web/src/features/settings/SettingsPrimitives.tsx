@@ -171,7 +171,7 @@ export function SettingsPanel({ activeId, children }: { activeId: string; childr
   return (
     <div
       aria-labelledby={`${activeId}-settings-tab`}
-      className="min-w-0 flex-1 pt-6"
+      className="min-w-0 flex-1 px-1 pt-6"
       id={`${activeId}-settings-panel`}
       role="tabpanel"
     >

@@ -1,12 +1,12 @@
-import { InfoIcon, ScrollIcon } from "@phosphor-icons/react";
+import { InfoIcon, QuestionIcon, ScrollIcon } from "@phosphor-icons/react";
 import { useNavigate } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { type SettingsEntry, SettingsNav } from "../settings/SettingsNav";
 import { SettingsPanel } from "../settings/SettingsPrimitives";
 
-export type HelpPage = "tickets" | "faq";
+export type HelpPage = "tickets" | "faq" | "about";
 
-type HelpRouteTarget = "/help/tickets" | "/help/faq";
+type HelpRouteTarget = "/help/tickets" | "/help/faq" | "/help/about";
 
 type HelpEntry = SettingsEntry<HelpPage> & {
   to: HelpRouteTarget;
@@ -16,7 +16,7 @@ const helpEntries: readonly [HelpEntry, ...HelpEntry[]] = [
   {
     id: "faq",
     label: "FAQ",
-    icon: <InfoIcon aria-hidden="true" className="size-5" />,
+    icon: <QuestionIcon aria-hidden="true" className="size-5" />,
     to: "/help/faq",
   },
   {
@@ -24,6 +24,12 @@ const helpEntries: readonly [HelpEntry, ...HelpEntry[]] = [
     label: "Tickets",
     icon: <ScrollIcon aria-hidden="true" className="size-5" />,
     to: "/help/tickets",
+  },
+  {
+    id: "about",
+    label: "About",
+    icon: <InfoIcon aria-hidden="true" className="size-5" />,
+    to: "/help/about",
   },
 ];
 
