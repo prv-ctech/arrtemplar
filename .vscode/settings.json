@@ -6,6 +6,10 @@
   "workbench.commandPalette.experimental.askChatLocation": "chatView",
   "search.searchView.semanticSearchBehavior": "manual",
   "search.searchView.keywordSuggestions": false,
+  "files.associations": {
+    ".github/workflows/docker-publish.yml": "plaintext",
+    "**/.github/workflows/docker-publish.yml": "plaintext"
+  },
 
   // ---------- Code editing (Copilot completions / NES) ----------
   "github.copilot.editor.enableCodeActions": true,
