@@ -45,7 +45,7 @@ const presetCardTriggerClassName = [
 
 const presetButtonClassName = [
   "h-auto min-h-10 justify-start rounded-xl px-2.5 py-2 text-left text-xs",
-  "shadow-none hover:translate-y-0 active:translate-y-0",
+  "shadow-none",
 ].join(" ");
 
 type EditUserPermissionsDialogProps = {

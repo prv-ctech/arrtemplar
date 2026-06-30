@@ -631,7 +631,7 @@ function ThemeOptionButton({
       aria-pressed={isSelected}
       className={cn(
         "h-auto min-h-11 justify-start gap-2 rounded-xl px-2.5 py-2 text-left",
-        "cursor-pointer shadow-none hover:translate-y-0 active:translate-y-0",
+        "cursor-pointer shadow-none",
         isSelected
           ? "border-selected-border bg-selected text-foreground hover:bg-selected"
           : "border-border bg-card/72 text-muted-foreground hover:bg-accent hover:text-foreground",

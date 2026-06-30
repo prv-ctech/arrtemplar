@@ -13,13 +13,13 @@ export function RootNotFoundRoute() {
         </p>
         <div className="mt-5 flex flex-wrap justify-center gap-2">
           <Link
-            className="rounded-2xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-(--shadow-button) transition-[background,transform] duration-300 hover:-translate-y-0.5 hover:bg-primary/90 active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="rounded-2xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-(--shadow-button) transition-colors duration-300 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             to="/settings/users"
           >
             Open Users
           </Link>
           <Link
-            className="rounded-2xl border border-border px-4 py-2 text-sm font-medium text-muted-foreground transition-[background,color,transform] duration-300 hover:-translate-y-0.5 hover:bg-card hover:text-foreground active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="rounded-2xl border border-border px-4 py-2 text-sm font-medium text-muted-foreground transition-colors duration-300 hover:bg-card hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             to="/profile"
           >
             Open Profile

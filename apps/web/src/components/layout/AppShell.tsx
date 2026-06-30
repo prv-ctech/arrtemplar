@@ -270,7 +270,7 @@ function ShellBrandLink() {
   return (
     <Link
       aria-label="Open dashboard"
-      className="group grid size-11 shrink-0 place-items-center rounded-[1.15rem] bg-primary text-primary-foreground shadow-(--shadow-button) transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 active:translate-y-px"
+      className="group grid size-11 shrink-0 place-items-center rounded-[1.15rem] bg-primary text-primary-foreground shadow-(--shadow-button)"
       to="/dashboard"
     >
       <span className="text-sm font-black tracking-[-0.08em]">AW</span>
@@ -286,7 +286,7 @@ function ShellNavLink({ item }: { item: ShellNavLinkItem }) {
         className: "border-primary/35 bg-primary text-primary-foreground shadow-(--shadow-button)",
       }}
       aria-label={item.label}
-      className="group relative grid size-10 place-items-center rounded-2xl border border-transparent text-muted-foreground transition-[background,color,border-color,box-shadow,transform] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 hover:border-border hover:bg-card hover:text-foreground active:translate-y-px"
+      className="group relative grid size-10 place-items-center rounded-2xl border border-transparent text-muted-foreground transition-[background,color,border-color,box-shadow] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:border-border hover:bg-card hover:text-foreground"
       title={item.label}
       to={item.to}
     >
