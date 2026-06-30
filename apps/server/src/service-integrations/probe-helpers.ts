@@ -256,7 +256,7 @@ export function logServiceIntegrationProbeFailure(
   }));
 }
 
-function isServiceIntegrationOperationError(
+export function isServiceIntegrationOperationError(
   error: unknown,
 ): error is ServiceIntegrationOperationError {
   return Boolean(

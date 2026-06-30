@@ -44,6 +44,8 @@ type ServiceIntegrationCardDefinition = {
     label: string;
     value: UpsertServiceIntegrationRequest["authMode"];
   }>;
+  defaultAuthMode?: UpsertServiceIntegrationRequest["authMode"];
+  defaultPort?: string;
 };
 
 type ServiceIntegrationFormState = {
@@ -150,6 +152,17 @@ const serviceIntegrationCards: readonly ServiceIntegrationCardDefinition[] = [
     title: "Jellyfin",
     logoPath: "/services/jellyfin.svg",
     authModeOptions: [{ label: "API key", value: "api_key" }],
+  },
+  {
+    kind: "slskd",
+    title: "slskd",
+    logoPath: "/services/slskd.svg",
+    authModeOptions: [
+      { label: "API key", value: "api_key" },
+      { label: "No auth", value: "none" },
+    ],
+    defaultPort: "5030",
+    defaultAuthMode: "api_key",
   },
 ] as const;
 
@@ -374,7 +387,7 @@ function useServiceIntegrationCardController({
   function updateForm(next: Partial<ServiceIntegrationFormState>) {
     setErrorMessage(null);
     setStatusMessage(null);
-    setForm((current) => ({ ...current, ...next }));
+    setForm((current) => mergeServiceIntegrationFormState(current, next));
   }
 
   function handleSave(event: FormEvent<HTMLFormElement>) {
@@ -409,11 +422,16 @@ function useServiceIntegrationCardController({
   }
 
   function handleTestSuccess(result: ServiceIntegrationProbeResponse) {
-    setErrorMessage(result.error?.fieldErrors?.[0]?.message ?? result.error?.message ?? null);
+    const failureMessage =
+      result.error?.fieldErrors?.[0]?.message ??
+      result.error?.message ??
+      (result.result.outcome !== "success" ? result.result.summary : null);
+
+    setErrorMessage(failureMessage);
     notify(
       {
-        id: "services.tested",
-        title: "Connection test passed.",
+        id: failureMessage ? "services.test.failed" : "services.tested",
+        title: failureMessage ?? "Connection test passed.",
         description: title,
       },
       notificationPreferences,
@@ -968,6 +986,10 @@ function ServiceIntegrationCredentialFields({
   passwordDescription: string | undefined;
   updateForm: FormUpdate;
 }) {
+  if (form.authMode === "none") {
+    return null;
+  }
+
   if (form.authMode === "username_password") {
     return (
       <>
@@ -1399,7 +1421,7 @@ function createFormState(
   draft?: DraftServiceInstance,
 ): ServiceIntegrationFormState {
   if (!config) {
-    return createEmptyFormState(draft?.displayName ?? card.title);
+    return createEmptyFormState(card, draft?.displayName ?? card.title);
   }
 
   return {
@@ -1415,18 +1437,38 @@ function createFormState(
   };
 }
 
-function createEmptyFormState(displayName: string): ServiceIntegrationFormState {
+function createEmptyFormState(
+  card: ServiceIntegrationCardDefinition,
+  displayName: string,
+): ServiceIntegrationFormState {
   return {
     displayName,
     useSsl: false,
     host: "",
-    port: "",
+    port: card.defaultPort ?? "",
     urlBase: "",
-    authMode: "api_key",
+    authMode: card.defaultAuthMode ?? "api_key",
     username: "",
     apiKey: "",
     password: "",
   };
+}
+
+function mergeServiceIntegrationFormState(
+  current: ServiceIntegrationFormState,
+  next: Partial<ServiceIntegrationFormState>,
+): ServiceIntegrationFormState {
+  if (next.authMode === "none") {
+    return {
+      ...current,
+      ...next,
+      username: "",
+      apiKey: "",
+      password: "",
+    };
+  }
+
+  return { ...current, ...next };
 }
 
 function readUpsertRequest(
@@ -1449,19 +1491,39 @@ function readUpsertRequest(
     return { ok: false, message: `${displayName} username is required.` };
   }
 
+  const value: UpsertServiceIntegrationRequest = {
+    displayName,
+    useSsl: form.useSsl,
+    host,
+    port,
+    urlBase: form.urlBase.trim() ? form.urlBase.trim() : null,
+    authMode: form.authMode,
+  };
+
+  if (form.authMode === "username_password") {
+    return {
+      ok: true,
+      value: {
+        ...value,
+        username: form.username.trim(),
+        ...(form.password ? { password: form.password } : {}),
+      },
+    };
+  }
+
+  if (form.authMode === "api_key") {
+    return {
+      ok: true,
+      value: {
+        ...value,
+        ...(form.apiKey.trim() ? { apiKey: form.apiKey.trim() } : {}),
+      },
+    };
+  }
+
   return {
     ok: true,
-    value: {
-      displayName,
-      useSsl: form.useSsl,
-      host,
-      port,
-      urlBase: form.urlBase.trim() ? form.urlBase.trim() : null,
-      authMode: form.authMode,
-      ...(form.username.trim() ? { username: form.username.trim() } : {}),
-      ...(form.apiKey.trim() ? { apiKey: form.apiKey.trim() } : {}),
-      ...(form.password ? { password: form.password } : {}),
-    },
+    value,
   };
 }
 

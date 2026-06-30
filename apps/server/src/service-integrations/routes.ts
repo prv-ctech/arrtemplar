@@ -47,6 +47,9 @@ type KindRequestRouteContext = BaseRouteContext & { params: { kind: unknown } };
 type InstanceRequestRouteContext = BaseRouteContext & { params: { integrationId: unknown } };
 type KindStatusRouteContext = BaseRouteContext & { params: { kind: unknown } };
 type InstanceStatusRouteContext = BaseRouteContext & { params: { integrationId: unknown } };
+type RouteUpsertServiceIntegrationRequest = Omit<UpsertServiceIntegrationRequest, "authMode"> & {
+  authMode?: UpsertServiceIntegrationRequest["authMode"];
+};
 
 const serviceIntegrationKindSchema = t.Union(
   SERVICE_INTEGRATION_KIND_VALUES.map((kind) => t.Literal(kind)) as [
@@ -160,7 +163,7 @@ const upsertServiceIntegrationRequestSchema = t.Object({
   host: t.String({ minLength: 1 }),
   port: t.Number({ minimum: 1, maximum: 65_535 }),
   urlBase: t.Optional(t.Union([t.String(), t.Null()])),
-  authMode: serviceIntegrationAuthModeSchema,
+  authMode: t.Optional(serviceIntegrationAuthModeSchema),
   username: t.Optional(t.Union([t.String(), t.Null()])),
   apiKey: t.Optional(t.String()),
   password: t.Optional(t.String()),
@@ -231,7 +234,7 @@ function createKindBodyRouteHandler<T>(
       (actor, context) =>
         action(
           params.kind as ServiceIntegrationKind,
-          body as UpsertServiceIntegrationRequest,
+          normalizeUpsertServiceIntegrationInput(body as RouteUpsertServiceIntegrationRequest),
           actor,
           context,
         ),
@@ -259,7 +262,7 @@ function createInstanceBodyRouteHandler<T>(
       (actor, context) =>
         action(
           params.integrationId as string,
-          body as UpsertServiceIntegrationRequest,
+          normalizeUpsertServiceIntegrationInput(body as RouteUpsertServiceIntegrationRequest),
           actor,
           context,
         ),
@@ -592,4 +595,22 @@ function responseOrStatus<T>(
 
 function readSessionToken(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function normalizeUpsertServiceIntegrationInput(
+  input: RouteUpsertServiceIntegrationRequest,
+): UpsertServiceIntegrationRequest {
+  if (input.authMode) {
+    const { authMode, ...rest } = input;
+
+    return {
+      ...rest,
+      authMode,
+    };
+  }
+
+  return {
+    ...input,
+    authMode: "api_key",
+  };
 }

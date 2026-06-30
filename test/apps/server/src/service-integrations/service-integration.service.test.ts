@@ -9,6 +9,7 @@ import type { ProwlarrProbeResponse } from "../../../../../apps/server/src/servi
 import type { QbittorrentProbeResult } from "../../../../../apps/server/src/service-integrations/qbittorrent-client";
 import type { SabnzbdClientProbeResponse } from "../../../../../apps/server/src/service-integrations/sabnzbd-client";
 import { ServiceIntegrationService } from "../../../../../apps/server/src/service-integrations/service-integration.service";
+import type { SlskdProbeResponse } from "../../../../../apps/server/src/service-integrations/slskd-client";
 import { resetAndOpenTestDatabase } from "../../../../helpers/database";
 
 const secretEncryptionKey = "hex:000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
@@ -24,6 +25,7 @@ describe("ServiceIntegrationService", () => {
     mockState.prowlarrCalls = [];
     mockState.qbittorrentCalls = [];
     mockState.sabnzbdCalls = [];
+    mockState.slskdCalls = [];
   });
 
   it("stores safe metadata and encrypted secrets", async () => {
@@ -439,6 +441,142 @@ describe("ServiceIntegrationService", () => {
     expect(jellyfin?.lastStatusCheckedAt).toEqual(expect.any(String));
   });
 
+  it("supports slskd api_key and clears secrets when auth switches to none", async () => {
+    const database = await openDatabase();
+    const service = createService(database);
+
+    const saveResult = await service.upsertConfig("slskd", {
+      displayName: "Main slskd",
+      enabled: true,
+      useSsl: false,
+      host: "slskd.local",
+      port: 5030,
+      authMode: "api_key",
+      apiKey: "slskd-secret",
+    });
+
+    expect(saveResult.ok).toBe(true);
+    if (!saveResult.ok) {
+      throw new Error("Expected slskd api_key config to save.");
+    }
+
+    const apiKeyProbe = await service.testConfig("slskd");
+
+    expect(apiKeyProbe.ok).toBe(true);
+    if (!apiKeyProbe.ok) {
+      throw new Error("Expected slskd api_key probe to succeed.");
+    }
+
+    expect(mockState.slskdCalls[0]).toMatchObject({
+      apiKey: "slskd-secret",
+      authMode: "api_key",
+    });
+
+    const noneResult = await service.upsertConfig("slskd", {
+      displayName: "Main slskd",
+      enabled: true,
+      useSsl: false,
+      host: "slskd.local",
+      port: 5030,
+      authMode: "none",
+      apiKey: "discard-me",
+      username: "discard-me",
+      password: "discard-me",
+    });
+
+    expect(noneResult.ok).toBe(true);
+    if (!noneResult.ok) {
+      throw new Error("Expected slskd none config to save.");
+    }
+
+    expect(noneResult.body.integration).toMatchObject({
+      authMode: "none",
+      hasApiKey: false,
+      hasPassword: false,
+      username: null,
+    });
+
+    const storedRow = database.db.select().from(serviceIntegrations).all();
+    const stored = storedRow.find((entry) => entry.kind === "slskd");
+
+    expect(stored?.authMode).toBe("none");
+    expect(stored?.apiKeyEncrypted).toBeNull();
+    expect(stored?.passwordEncrypted).toBeNull();
+    expect(stored?.username).toBeNull();
+
+    const statusResult = await service.getStatus("slskd");
+
+    expect(statusResult.ok).toBe(true);
+    if (!statusResult.ok) {
+      throw new Error("Expected slskd none status to succeed.");
+    }
+
+    expect(mockState.slskdCalls.at(-1)).toMatchObject({
+      apiKey: null,
+      authMode: "none",
+      password: null,
+      username: null,
+    });
+  });
+
+  it("clears stale API keys when switching qBittorrent to username/password", async () => {
+    const database = await openDatabase();
+    const service = createService(database);
+
+    await service.upsertConfig("qbittorrent", {
+      displayName: "Main qBittorrent",
+      enabled: true,
+      useSsl: false,
+      host: "qbittorrent.local",
+      port: 8080,
+      authMode: "api_key",
+      apiKey: "qbt-secret",
+    });
+
+    const switched = await service.upsertConfig("qbittorrent", {
+      displayName: "Main qBittorrent",
+      enabled: true,
+      useSsl: false,
+      host: "qbittorrent.local",
+      port: 8080,
+      authMode: "username_password",
+      username: "admin",
+      password: "qbt-password",
+    });
+
+    expect(switched.ok).toBe(true);
+    if (!switched.ok) {
+      throw new Error("Expected qBittorrent auth mode switch to save.");
+    }
+
+    expect(switched.body.integration).toMatchObject({
+      authMode: "username_password",
+      hasApiKey: false,
+      hasPassword: true,
+      username: "admin",
+    });
+
+    const storedRow = database.db.select().from(serviceIntegrations).all();
+    const stored = storedRow.find((entry) => entry.kind === "qbittorrent");
+
+    expect(stored?.apiKeyEncrypted).toBeNull();
+    expect(stored?.passwordEncrypted).toEqual(expect.any(String));
+
+    const testResult = await service.testConfig("qbittorrent");
+
+    expect(testResult.ok).toBe(true);
+    if (!testResult.ok) {
+      throw new Error("Expected qBittorrent username/password probe to succeed.");
+    }
+
+    expect(mockState.qbittorrentCalls.at(-1)).toMatchObject({
+      apiKey: null,
+      authMode: "username_password",
+      password: "qbt-password",
+      username: "admin",
+    });
+  });
+
   it("rejects username/password auth for Prowlarr before probing", async () => {
     const database = await openDatabase();
     const service = createService(database);
@@ -502,6 +640,46 @@ describe("ServiceIntegrationService", () => {
     expect(mockState.nzbhydra2Calls).toHaveLength(0);
     expect(mockState.plexCalls).toHaveLength(0);
   });
+
+  it("rejects none auth for services that do not allow it", async () => {
+    const database = await openDatabase();
+    const service = createService(database);
+
+    for (const kind of [
+      "qbittorrent",
+      "sabnzbd",
+      "prowlarr",
+      "jackett",
+      "nzbhydra2",
+      "plex",
+      "jellyfin",
+    ] as const) {
+      const result = await service.upsertConfig(kind, {
+        displayName: kind,
+        enabled: true,
+        useSsl: false,
+        host: `${kind}.local`,
+        port: readUnsupportedNonePort(kind),
+        authMode: "none",
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        throw new Error(`Expected ${kind} none auth validation to fail.`);
+      }
+
+      expect(result.status).toBe(422);
+      expect(result.body.error.fieldErrors?.[0]?.field).toBe("authMode");
+    }
+
+    expect(mockState.jackettCalls).toHaveLength(0);
+    expect(mockState.jellyfinCalls).toHaveLength(0);
+    expect(mockState.nzbhydra2Calls).toHaveLength(0);
+    expect(mockState.plexCalls).toHaveLength(0);
+    expect(mockState.prowlarrCalls).toHaveLength(0);
+    expect(mockState.qbittorrentCalls).toHaveLength(0);
+    expect(mockState.sabnzbdCalls).toHaveLength(0);
+  });
 });
 
 const mockState: {
@@ -513,6 +691,7 @@ const mockState: {
   prowlarrCalls: Array<Record<string, unknown>>;
   qbittorrentCalls: Array<Record<string, unknown>>;
   sabnzbdCalls: Array<Record<string, unknown>>;
+  slskdCalls: Array<Record<string, unknown>>;
 } = {
   database: null,
   jackettCalls: [],
@@ -522,6 +701,7 @@ const mockState: {
   prowlarrCalls: [],
   qbittorrentCalls: [],
   sabnzbdCalls: [],
+  slskdCalls: [],
 };
 
 async function openDatabase(): Promise<DatabaseClient> {
@@ -561,6 +741,10 @@ function createService(database: DatabaseClient): ServiceIntegrationService {
       sabnzbd: async (config) => {
         mockState.sabnzbdCalls.push(config as Record<string, unknown>);
         return successSabnzbdProbe();
+      },
+      slskd: async (config) => {
+        mockState.slskdCalls.push(config as Record<string, unknown>);
+        return successSlskdProbe();
       },
     },
   });
@@ -686,6 +870,26 @@ function successSabnzbdProbe(): SabnzbdClientProbeResponse {
   };
 }
 
+function successSlskdProbe(): SlskdProbeResponse {
+  return {
+    ok: true,
+    result: {
+      kind: "slskd",
+      configured: true,
+      enabled: true,
+      outcome: "success",
+      summary: "Connected to slskd 0.22.1. State: connected.",
+      checkedAt: new Date().toISOString(),
+      reachable: true,
+      authenticated: true,
+      compatible: true,
+      version: "0.22.1",
+      webApiVersion: null,
+      connectionState: "connected",
+    },
+  };
+}
+
 function successProwlarrProbe(): ProwlarrProbeResponse {
   return {
     ok: true,
@@ -729,5 +933,26 @@ function readServiceName(kind: "jackett" | "nzbhydra2" | "plex" | "jellyfin"): s
       return "Plex";
     case "jellyfin":
       return "Jellyfin";
+  }
+}
+
+function readUnsupportedNonePort(
+  kind: "qbittorrent" | "sabnzbd" | "prowlarr" | "jackett" | "nzbhydra2" | "plex" | "jellyfin",
+): number {
+  switch (kind) {
+    case "qbittorrent":
+      return 8080;
+    case "sabnzbd":
+      return 8081;
+    case "prowlarr":
+      return 9696;
+    case "jackett":
+      return 9117;
+    case "nzbhydra2":
+      return 5076;
+    case "plex":
+      return 32400;
+    case "jellyfin":
+      return 8096;
   }
 }

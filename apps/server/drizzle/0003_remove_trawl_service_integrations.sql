@@ -1,0 +1,1 @@
+DELETE FROM `service_integrations` WHERE `kind` = 'trawl';

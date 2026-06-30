@@ -6,13 +6,69 @@ export const SERVICE_INTEGRATION_KIND_VALUES = [
   "nzbhydra2",
   "plex",
   "jellyfin",
+  "slskd",
 ] as const;
 
 export type ServiceIntegrationKind = (typeof SERVICE_INTEGRATION_KIND_VALUES)[number];
 
-export const SERVICE_INTEGRATION_AUTH_MODE_VALUES = ["api_key", "username_password"] as const;
+export const SERVICE_INTEGRATION_AUTH_MODE_VALUES = [
+  "api_key",
+  "username_password",
+  "none",
+] as const;
 
 export type ServiceIntegrationAuthMode = (typeof SERVICE_INTEGRATION_AUTH_MODE_VALUES)[number];
+
+export type ServiceIntegrationAuthModeSelector = "visible" | "hidden";
+
+export type ServiceIntegrationAuthPolicy = {
+  supportedModes: readonly ServiceIntegrationAuthMode[];
+  defaultMode: ServiceIntegrationAuthMode;
+  selector: ServiceIntegrationAuthModeSelector;
+};
+
+export const SERVICE_INTEGRATION_AUTH_POLICIES = {
+  qbittorrent: {
+    supportedModes: ["api_key", "username_password"],
+    defaultMode: "api_key",
+    selector: "visible",
+  },
+  sabnzbd: {
+    supportedModes: ["api_key", "username_password"],
+    defaultMode: "api_key",
+    selector: "visible",
+  },
+  prowlarr: {
+    supportedModes: ["api_key"],
+    defaultMode: "api_key",
+    selector: "visible",
+  },
+  jackett: {
+    supportedModes: ["api_key"],
+    defaultMode: "api_key",
+    selector: "visible",
+  },
+  nzbhydra2: {
+    supportedModes: ["api_key"],
+    defaultMode: "api_key",
+    selector: "visible",
+  },
+  plex: {
+    supportedModes: ["api_key"],
+    defaultMode: "api_key",
+    selector: "visible",
+  },
+  jellyfin: {
+    supportedModes: ["api_key"],
+    defaultMode: "api_key",
+    selector: "visible",
+  },
+  slskd: {
+    supportedModes: ["api_key", "none"],
+    defaultMode: "api_key",
+    selector: "visible",
+  },
+} satisfies Record<ServiceIntegrationKind, ServiceIntegrationAuthPolicy>;
 
 export const SERVICE_INTEGRATION_PROBE_OUTCOME_VALUES = [
   "success",
@@ -157,10 +213,32 @@ export function isServiceIntegrationKind(value: unknown): value is ServiceIntegr
   );
 }
 
+export function readServiceIntegrationAuthPolicy(
+  kind: ServiceIntegrationKind,
+): ServiceIntegrationAuthPolicy {
+  return SERVICE_INTEGRATION_AUTH_POLICIES[kind];
+}
+
 export function isServiceIntegrationAuthMode(value: unknown): value is ServiceIntegrationAuthMode {
   return (
     typeof value === "string" && SERVICE_INTEGRATION_AUTH_MODE_VALUES.some((mode) => mode === value)
   );
+}
+
+export function isServiceIntegrationAuthModeSupported(
+  kind: ServiceIntegrationKind,
+  value: unknown,
+): value is ServiceIntegrationAuthMode {
+  return (
+    typeof value === "string" &&
+    readServiceIntegrationAuthPolicy(kind).supportedModes.some((mode) => mode === value)
+  );
+}
+
+export function shouldShowServiceIntegrationAuthModeSelector(
+  kind: ServiceIntegrationKind,
+): boolean {
+  return readServiceIntegrationAuthPolicy(kind).selector === "visible";
 }
 
 export function isServiceIntegrationProbeOutcome(

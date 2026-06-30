@@ -1,16 +1,17 @@
-import type {
-  ApiErrorResponse,
-  DeleteServiceIntegrationResponse,
-  PublicUser,
-  ServiceIntegrationKind,
-  ServiceIntegrationListResponse,
-  ServiceIntegrationOperationError,
-  ServiceIntegrationProbeResponse,
-  ServiceIntegrationResponse,
-  ServiceIntegrationSavedConfig,
-  UpsertServiceIntegrationRequest,
+import {
+  APP_LOG_CATEGORY,
+  type ApiErrorResponse,
+  type DeleteServiceIntegrationResponse,
+  type PublicUser,
+  readServiceIntegrationAuthPolicy,
+  type ServiceIntegrationKind,
+  type ServiceIntegrationListResponse,
+  type ServiceIntegrationOperationError,
+  type ServiceIntegrationProbeResponse,
+  type ServiceIntegrationResponse,
+  type ServiceIntegrationSavedConfig,
+  type UpsertServiceIntegrationRequest,
 } from "@arrtemplar/shared";
-import { APP_LOG_CATEGORY } from "@arrtemplar/shared";
 import { getLogger } from "@logtape/logtape";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { type AuditLogInput, writeAuditLog } from "../audit/audit-log";
@@ -53,6 +54,7 @@ import {
   type SabnzbdClientProbeResponse,
   type SabnzbdClientSettings,
 } from "./sabnzbd-client";
+import { probeSlskdClient, type SlskdClientConfig, type SlskdProbeResponse } from "./slskd-client";
 
 const logger = getLogger([APP_LOG_CATEGORY, "service-integrations"]);
 
@@ -68,6 +70,7 @@ type ServiceIntegrationProbers = {
   nzbhydra2: (config: Nzbhydra2ClientConfig) => Promise<Nzbhydra2ProbeResponse>;
   plex: (config: PlexClientConfig) => Promise<PlexProbeResponse>;
   jellyfin: (config: JellyfinClientConfig) => Promise<JellyfinProbeResponse>;
+  slskd: (config: SlskdClientConfig) => Promise<SlskdProbeResponse>;
 };
 
 type ServiceIntegrationServiceOptions = {
@@ -80,6 +83,12 @@ type ResolvedSecrets = {
   password: string | null;
 };
 
+type EncryptedServiceSecrets = {
+  apiKeyEncrypted: string | null;
+  passwordEncrypted: string | null;
+  masterKeyId: string | null;
+};
+
 type ResolvedProbeConfig =
   | QbittorrentClientConfig
   | SabnzbdClientSettings
@@ -87,18 +96,10 @@ type ResolvedProbeConfig =
   | JackettClientConfig
   | Nzbhydra2ClientConfig
   | PlexClientConfig
-  | JellyfinClientConfig;
+  | JellyfinClientConfig
+  | SlskdClientConfig;
 
 const maxServiceIntegrationInstancesPerKind = 10;
-const defaultServiceIntegrationIdByKind = {
-  qbittorrent: "qbittorrent",
-  sabnzbd: "sabnzbd",
-  prowlarr: "prowlarr",
-  jackett: "jackett",
-  nzbhydra2: "nzbhydra2",
-  plex: "plex",
-  jellyfin: "jellyfin",
-} satisfies Record<ServiceIntegrationKind, string>;
 
 export class ServiceIntegrationService {
   private readonly probers: ServiceIntegrationProbers;
@@ -115,6 +116,7 @@ export class ServiceIntegrationService {
       nzbhydra2: options.probers?.nzbhydra2 ?? probeNzbhydra2Client,
       plex: options.probers?.plex ?? probePlexClient,
       jellyfin: options.probers?.jellyfin ?? probeJellyfinClient,
+      slskd: options.probers?.slskd ?? probeSlskdClient,
     };
   }
 
@@ -144,7 +146,7 @@ export class ServiceIntegrationService {
     actor?: PublicUser,
     context?: AuthRequestContext,
   ): Promise<ServiceResult<ServiceIntegrationResponse>> {
-    const id = defaultServiceIntegrationIdByKind[kind];
+    const id = readDefaultServiceIntegrationId(kind);
     const existing = this.readConfigById(id) ?? this.readDefaultConfig(kind);
 
     return await this.saveConfig({
@@ -224,14 +226,16 @@ export class ServiceIntegrationService {
       isDefault,
     });
 
-    const validationError = this.validateUpsertInput(kind, input, existing);
+    const normalizedInput = normalizeUpsertInput(kind, input);
+
+    const validationError = this.validateUpsertInput(kind, normalizedInput, existing);
 
     if (validationError) {
       this.logServiceError("validation", kind, validationError.body);
       return validationError;
     }
 
-    const encryptedSecrets = await this.encryptIncomingSecrets(input, existing);
+    const encryptedSecrets = await this.encryptIncomingSecrets(normalizedInput, existing);
 
     if (!encryptedSecrets.ok) {
       this.logServiceError("save", kind, encryptedSecrets.body);
@@ -241,7 +245,7 @@ export class ServiceIntegrationService {
     const values = this.buildServiceIntegrationRecord({
       existing,
       id,
-      input,
+      input: normalizedInput,
       isDefault,
       kind,
       secrets: encryptedSecrets.value,
@@ -558,6 +562,7 @@ export class ServiceIntegrationService {
         host: config.host,
         port: config.port,
         urlBase: config.urlBase,
+        integrationId: config.id,
         authMode: config.authMode,
         username: config.username,
         apiKey: secretValues.value.apiKey,
@@ -571,6 +576,7 @@ export class ServiceIntegrationService {
     input: UpsertServiceIntegrationRequest,
     existing: ServiceIntegration | undefined,
   ): { ok: false; status: 422; body: ApiErrorResponse } | null {
+    const authPolicy = readServiceIntegrationAuthPolicy(kind);
     const baseUrlValidation = buildServiceIntegrationBaseUrl({
       serviceLabel: readServiceLabel(kind),
       useSsl: input.useSsl,
@@ -583,26 +589,33 @@ export class ServiceIntegrationService {
       return { ok: false, status: 422, body: validationError(baseUrlValidation.error) };
     }
 
-    if (isApiKeyOnlyServiceKind(kind) && input.authMode !== "api_key") {
-      const serviceLabel = readServiceLabel(kind);
+    if (!authPolicy.supportedModes.some((mode) => mode === input.authMode)) {
+      const message = buildUnsupportedAuthModeMessage(readServiceLabel(kind), authPolicy);
+
       return {
         ok: false,
         status: 422,
         body: validationError({
           code: "configuration_incomplete",
-          message: `${serviceLabel} only supports API key authentication.`,
+          message,
           fieldErrors: [
             {
               field: "authMode",
               code: "configuration_incomplete",
-              message: `${serviceLabel} only supports API key authentication.`,
+              message,
             },
           ],
         }),
       };
     }
 
-    if (input.authMode === "api_key" && !hasUsableSecret(input.apiKey, existing?.apiKeyEncrypted)) {
+    if (
+      input.authMode === "api_key" &&
+      !hasUsableSecret(
+        input.apiKey,
+        existing?.authMode === "api_key" ? existing.apiKeyEncrypted : null,
+      )
+    ) {
       return {
         ok: false,
         status: 422,
@@ -639,7 +652,12 @@ export class ServiceIntegrationService {
         };
       }
 
-      if (!hasUsableSecret(input.password, existing?.passwordEncrypted)) {
+      if (
+        !hasUsableSecret(
+          input.password,
+          existing?.authMode === "username_password" ? existing.passwordEncrypted : null,
+        )
+      ) {
         return {
           ok: false,
           status: 422,
@@ -665,49 +683,110 @@ export class ServiceIntegrationService {
     input: UpsertServiceIntegrationRequest,
     existing: ServiceIntegration | undefined,
   ): Promise<
-    | {
-        ok: true;
-        value: {
-          apiKeyEncrypted: string | null;
-          passwordEncrypted: string | null;
-          masterKeyId: string | null;
-        };
-      }
+    | { ok: true; value: EncryptedServiceSecrets }
     | { ok: false; status: 503; body: ApiErrorResponse }
   > {
-    let apiKeyEncrypted = existing?.apiKeyEncrypted ?? null;
-    let passwordEncrypted = existing?.passwordEncrypted ?? null;
-    let masterKeyId = existing?.masterKeyId ?? null;
+    switch (input.authMode) {
+      case "none":
+        return { ok: true, value: emptyEncryptedServiceSecrets() };
+      case "api_key":
+        return await this.resolveApiKeySecrets(input.apiKey, existing);
+      case "username_password":
+        return await this.resolvePasswordSecrets(input.password, existing);
+    }
+  }
+
+  private async resolveApiKeySecrets(
+    apiKey: string | undefined,
+    existing: ServiceIntegration | undefined,
+  ): Promise<
+    | { ok: true; value: EncryptedServiceSecrets }
+    | { ok: false; status: 503; body: ApiErrorResponse }
+  > {
+    if (!hasConfiguredValue(apiKey)) {
+      return {
+        ok: true,
+        value: {
+          ...emptyEncryptedServiceSecrets(),
+          apiKeyEncrypted: existing?.authMode === "api_key" ? existing.apiKeyEncrypted : null,
+          masterKeyId:
+            existing?.authMode === "api_key" && existing.apiKeyEncrypted
+              ? existing.masterKeyId
+              : null,
+        },
+      };
+    }
+
+    const encrypted = await this.encryptSecretValue(apiKey.trim());
+
+    if (!encrypted.ok) {
+      return encrypted;
+    }
+
+    return {
+      ok: true,
+      value: {
+        ...emptyEncryptedServiceSecrets(),
+        apiKeyEncrypted: encrypted.value.encrypted,
+        masterKeyId: encrypted.value.masterKeyId,
+      },
+    };
+  }
+
+  private async resolvePasswordSecrets(
+    password: string | undefined,
+    existing: ServiceIntegration | undefined,
+  ): Promise<
+    | { ok: true; value: EncryptedServiceSecrets }
+    | { ok: false; status: 503; body: ApiErrorResponse }
+  > {
+    if (!hasConfiguredValue(password)) {
+      return {
+        ok: true,
+        value: {
+          ...emptyEncryptedServiceSecrets(),
+          passwordEncrypted:
+            existing?.authMode === "username_password" ? existing.passwordEncrypted : null,
+          masterKeyId:
+            existing?.authMode === "username_password" && existing.passwordEncrypted
+              ? existing.masterKeyId
+              : null,
+        },
+      };
+    }
+
+    const encrypted = await this.encryptSecretValue(password);
+
+    if (!encrypted.ok) {
+      return encrypted;
+    }
+
+    return {
+      ok: true,
+      value: {
+        ...emptyEncryptedServiceSecrets(),
+        passwordEncrypted: encrypted.value.encrypted,
+        masterKeyId: encrypted.value.masterKeyId,
+      },
+    };
+  }
+
+  private async encryptSecretValue(
+    value: string,
+  ): Promise<
+    | { ok: true; value: { encrypted: string; masterKeyId: string } }
+    | { ok: false; status: 503; body: ApiErrorResponse }
+  > {
     const secretEncryptionKey = this.options.secretEncryptionKey;
 
-    if (hasConfiguredValue(input.apiKey) || hasConfiguredValue(input.password)) {
-      if (!secretEncryptionKey) {
-        return { ok: false, status: 503, body: encryptionUnavailableError() };
-      }
+    if (!secretEncryptionKey) {
+      return { ok: false, status: 503, body: encryptionUnavailableError() };
     }
 
-    if (hasConfiguredValue(input.apiKey)) {
-      if (!secretEncryptionKey) {
-        return { ok: false, status: 503, body: encryptionUnavailableError() };
-      }
-      const encrypted = await encryptServiceIntegrationSecret(
-        input.apiKey.trim(),
-        secretEncryptionKey,
-      );
-      apiKeyEncrypted = encrypted.encrypted;
-      masterKeyId = encrypted.masterKeyId;
-    }
-
-    if (hasConfiguredValue(input.password)) {
-      if (!secretEncryptionKey) {
-        return { ok: false, status: 503, body: encryptionUnavailableError() };
-      }
-      const encrypted = await encryptServiceIntegrationSecret(input.password, secretEncryptionKey);
-      passwordEncrypted = encrypted.encrypted;
-      masterKeyId = encrypted.masterKeyId;
-    }
-
-    return { ok: true, value: { apiKeyEncrypted, passwordEncrypted, masterKeyId } };
+    return {
+      ok: true,
+      value: await encryptServiceIntegrationSecret(value, secretEncryptionKey),
+    };
   }
 
   private async decryptSecrets(
@@ -761,6 +840,8 @@ export class ServiceIntegrationService {
         return await this.probers.plex(config as PlexClientConfig);
       case "jellyfin":
         return await this.probers.jellyfin(config as JellyfinClientConfig);
+      case "slskd":
+        return await this.probers.slskd(config as SlskdClientConfig);
     }
   }
 
@@ -953,6 +1034,18 @@ function createUnavailableProbe(
   };
 }
 
+function readDefaultServiceIntegrationId(kind: ServiceIntegrationKind): string {
+  return kind;
+}
+
+function emptyEncryptedServiceSecrets(): EncryptedServiceSecrets {
+  return {
+    apiKeyEncrypted: null,
+    passwordEncrypted: null,
+    masterKeyId: null,
+  };
+}
+
 function readServiceLabel(kind: ServiceIntegrationKind): string {
   switch (kind) {
     case "qbittorrent":
@@ -969,17 +1062,72 @@ function readServiceLabel(kind: ServiceIntegrationKind): string {
       return "Plex";
     case "jellyfin":
       return "Jellyfin";
+    case "slskd":
+      return "slskd";
   }
 }
 
-function isApiKeyOnlyServiceKind(kind: ServiceIntegrationKind): boolean {
-  return (
-    kind === "prowlarr" ||
-    kind === "jackett" ||
-    kind === "nzbhydra2" ||
-    kind === "plex" ||
-    kind === "jellyfin"
-  );
+function normalizeUpsertInput(
+  kind: ServiceIntegrationKind,
+  input: UpsertServiceIntegrationRequest,
+): UpsertServiceIntegrationRequest {
+  const authPolicy = readServiceIntegrationAuthPolicy(kind);
+  const authMode = authPolicy.selector === "hidden" ? authPolicy.defaultMode : input.authMode;
+
+  if (authMode === "none") {
+    const { apiKey: _apiKey, password: _password, ...rest } = input;
+
+    return {
+      ...rest,
+      authMode,
+      username: null,
+    };
+  }
+
+  if (authMode === "api_key") {
+    const { password: _password, ...rest } = input;
+
+    return {
+      ...rest,
+      authMode,
+      username: null,
+    };
+  }
+
+  const { apiKey: _apiKey, ...rest } = input;
+
+  return {
+    ...rest,
+    authMode,
+  };
+}
+
+function buildUnsupportedAuthModeMessage(
+  serviceLabel: string,
+  authPolicy: ReturnType<typeof readServiceIntegrationAuthPolicy>,
+): string {
+  const labels = authPolicy.supportedModes.map((mode) => {
+    switch (mode) {
+      case "api_key":
+        return "API key authentication";
+      case "username_password":
+        return "username and password authentication";
+      case "none":
+        return "no authentication";
+      default:
+        return mode;
+    }
+  });
+
+  if (labels.length === 1) {
+    return `${serviceLabel} only supports ${labels[0]}.`;
+  }
+
+  if (labels.length === 2) {
+    return `${serviceLabel} supports ${labels[0]} or ${labels[1]}.`;
+  }
+
+  return `${serviceLabel} supports ${labels.slice(0, -1).join(", ")}, or ${labels.at(-1)}.`;
 }
 
 function normalizeDisplayName(

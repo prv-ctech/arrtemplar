@@ -10,6 +10,7 @@ import {
 import {
   CSRF_HEADER_NAME,
   CSRF_HEADER_VALUE,
+  isServiceIntegrationAuthMode,
   isServiceIntegrationKind,
 } from "../../../../../packages/shared/src";
 
@@ -250,14 +251,20 @@ describe("service integration api client", () => {
     expect(normalizersSource).toContain("isServiceIntegrationProbeOutcome");
   });
 
-  it("accepts Jackett, NZBHydra2, Plex, and Jellyfin service kinds", () => {
+  it("accepts Jackett, NZBHydra2, Plex, Jellyfin, and slskd service kinds", () => {
     expect(isServiceIntegrationKind("jackett")).toBe(true);
     expect(isServiceIntegrationKind("nzbhydra2")).toBe(true);
     expect(isServiceIntegrationKind("plex")).toBe(true);
     expect(isServiceIntegrationKind("jellyfin")).toBe(true);
+    expect(isServiceIntegrationKind("slskd")).toBe(true);
+    expect(isServiceIntegrationKind("trawl")).toBe(false);
   });
 
-  it("renders Plex and Jellyfin services with API-key-only cards", async () => {
+  it("accepts none auth mode for service integrations", () => {
+    expect(isServiceIntegrationAuthMode("none")).toBe(true);
+  });
+
+  it("renders Plex, Jellyfin, and slskd services with the expected card policies", async () => {
     const servicesSettingsSource = await Bun.file(apiSourcePaths.servicesSettings).text();
     const serviceIntegrationsSource = await Bun.file(apiSourcePaths.serviceIntegrations).text();
 
@@ -281,6 +288,23 @@ describe("service integration api client", () => {
         "  },",
       ].join("\n"),
     );
+    expect(servicesSettingsSource).toContain(
+      [
+        "  {",
+        '    kind: "slskd",',
+        '    title: "slskd",',
+        '    logoPath: "/services/slskd.svg",',
+        "    authModeOptions: [",
+        '      { label: "API key", value: "api_key" },',
+        '      { label: "No auth", value: "none" },',
+        "    ],",
+        '    defaultPort: "5030",',
+        '    defaultAuthMode: "api_key",',
+        "  },",
+      ].join("\n"),
+    );
+    expect(servicesSettingsSource).not.toContain('kind: "trawl"');
+    expect(servicesSettingsSource).not.toContain("/services/trawl.svg");
     expect(serviceIntegrationsSource).not.toContain("apiKeyEncrypted");
     expect(serviceIntegrationsSource).not.toContain("passwordEncrypted");
   });

@@ -9,6 +9,7 @@ import {
   createServiceIntegrationOperationError,
   requestServiceIntegrationText,
 } from "./outbound-request-policy";
+import { isRecord, isServiceIntegrationOperationError } from "./probe-helpers";
 
 const API_KEY_REQUIRED_TEXT = "API Key Required";
 const API_KEY_INCORRECT_TEXT = "API Key Incorrect";
@@ -395,17 +396,6 @@ function hasConfiguredValue(value: string | null | undefined): value is string {
   return typeof value === "string" && value.length > 0;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function isOperationError(error: unknown): error is ServiceIntegrationOperationError {
-  return Boolean(
-    error &&
-      typeof error === "object" &&
-      "code" in error &&
-      typeof error.code === "string" &&
-      "message" in error &&
-      typeof error.message === "string",
-  );
+  return isServiceIntegrationOperationError(error);
 }

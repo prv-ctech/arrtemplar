@@ -333,6 +333,91 @@ describe("service integration routes", () => {
     expect(listSnapshot).not.toContain("jellyfin-route-secret");
   });
 
+  it("saves slskd api_key configs and clears secrets when switching to none", async () => {
+    const { app } = await createTestApp();
+    const adminCookie = await createInitialAdmin(app);
+
+    const apiKeySaveResponse = await app.handle(
+      jsonRequest(
+        "PUT",
+        "/api/settings/services/slskd",
+        {
+          displayName: "Main slskd",
+          enabled: true,
+          useSsl: false,
+          host: "127.0.0.1",
+          port: 9,
+          authMode: "api_key",
+          apiKey: "slskd-route-secret",
+        },
+        { cookie: adminCookie },
+      ),
+    );
+    const apiKeySaveBody = await apiKeySaveResponse.json();
+
+    expect(apiKeySaveResponse.status).toBe(200);
+    expect(apiKeySaveBody.integration).toMatchObject({
+      id: "slskd",
+      kind: "slskd",
+      authMode: "api_key",
+      hasApiKey: true,
+      hasPassword: false,
+    });
+
+    const noneSaveResponse = await app.handle(
+      jsonRequest(
+        "PUT",
+        "/api/settings/services/slskd",
+        {
+          displayName: "Main slskd",
+          enabled: true,
+          useSsl: false,
+          host: "127.0.0.1",
+          port: 9,
+          authMode: "none",
+          apiKey: "discard-me",
+          username: "discard-me",
+          password: "discard-me",
+        },
+        { cookie: adminCookie },
+      ),
+    );
+    const noneSaveBody = await noneSaveResponse.json();
+    const noneSaveSnapshot = JSON.stringify(noneSaveBody);
+
+    expect(noneSaveResponse.status).toBe(200);
+    expect(noneSaveBody.integration).toMatchObject({
+      id: "slskd",
+      kind: "slskd",
+      authMode: "none",
+      hasApiKey: false,
+      hasPassword: false,
+      username: null,
+    });
+    expect(noneSaveSnapshot).not.toContain("slskd-route-secret");
+    expect(noneSaveSnapshot).not.toContain("discard-me");
+
+    const testResponse = await app.handle(
+      jsonRequest("POST", "/api/settings/services/slskd/test", {}, { cookie: adminCookie }),
+    );
+    const testBody = await testResponse.json();
+
+    expect(testResponse.status).toBe(200);
+    expect(testBody.result.kind).toBe("slskd");
+    expect(["success", "error"]).toContain(testBody.result.outcome);
+
+    const statusResponse = await app.handle(
+      new Request("http://localhost/api/settings/services/slskd/status", {
+        headers: { cookie: adminCookie },
+      }),
+    );
+    const statusBody = await statusResponse.json();
+
+    expect(statusResponse.status).toBe(200);
+    expect(statusBody.result.kind).toBe("slskd");
+    expect(["success", "error"]).toContain(statusBody.result.outcome);
+  });
+
   it("rejects unsupported Prowlarr auth modes before outbound requests", async () => {
     const { app } = await createTestApp();
     const adminCookie = await createInitialAdmin(app);
@@ -395,6 +480,28 @@ describe("service integration routes", () => {
         message: `${readServiceName(kind)} only supports API key authentication.`,
       });
     }
+  });
+
+  it("rejects Trawl as an unsupported service kind", async () => {
+    const { app } = await createTestApp();
+    const adminCookie = await createInitialAdmin(app);
+
+    const saveResponse = await app.handle(
+      jsonRequest(
+        "PUT",
+        "/api/settings/services/trawl",
+        {
+          enabled: true,
+          useSsl: false,
+          host: "127.0.0.1",
+          port: 9,
+          authMode: "none",
+        },
+        { cookie: adminCookie },
+      ),
+    );
+
+    expect(saveResponse.status).toBe(422);
   });
 
   it("returns unavailable status for unconfigured services and checks saved services", async () => {
