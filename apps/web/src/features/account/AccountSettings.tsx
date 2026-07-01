@@ -12,11 +12,20 @@ import {
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { type ChangeEvent, type FormEvent, useId, useRef, useState } from "react";
+import { type ChangeEvent, type FormEvent, type ReactNode, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { authQueryKey } from "@/features/auth/auth-state";
 import { notify } from "@/features/notifications/notification-gateway";
 import {
@@ -78,6 +87,81 @@ function createSettingsEntries() {
   ] satisfies [AccountSettingsEntry, ...AccountSettingsEntry[]];
 }
 
+const compactAccountInputClassName =
+  "h-8 w-full min-w-0 rounded-md border-border/85 bg-background/72 px-2.5 py-1 text-sm shadow-xs sm:w-64";
+
+const accountSettingsActionButtonClassName = "h-8 rounded-md px-2.5 text-sm";
+
+function AccountSettingsSectionHeader({
+  action,
+  icon,
+  status,
+  title,
+}: {
+  action: ReactNode;
+  icon: ReactNode;
+  status?: ReactNode;
+  title: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="grid size-7 shrink-0 place-items-center rounded-md border border-border bg-secondary text-secondary-foreground">
+          {icon}
+        </span>
+        <h2 className="truncate text-base font-semibold leading-5 tracking-tight">{title}</h2>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {status}
+        {action}
+      </div>
+    </div>
+  );
+}
+
+function AccountSettingsFieldTable({
+  children,
+  label = "Value",
+}: {
+  children: ReactNode;
+  label?: string;
+}) {
+  return (
+    <Table containerClassName="rounded-lg border-border/90 bg-card/72 pb-0">
+      <TableHeader>
+        <TableRow className="hover:bg-transparent">
+          <TableHead className="h-8 px-3 text-xs">Setting</TableHead>
+          <TableHead className="h-8 px-3 text-right text-xs">{label}</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>{children}</TableBody>
+    </Table>
+  );
+}
+
+function AccountSettingsFieldRow({
+  children,
+  controlId,
+  label,
+}: {
+  children: ReactNode;
+  controlId: string;
+  label: string;
+}) {
+  return (
+    <TableRow>
+      <TableCell className="w-48 px-3 py-2 sm:w-64">
+        <Label className="text-sm font-medium" htmlFor={controlId}>
+          {label}
+        </Label>
+      </TableCell>
+      <TableCell className="px-3 py-2">
+        <div className="flex min-w-0 justify-end">{children}</div>
+      </TableCell>
+    </TableRow>
+  );
+}
+
 function MainSettings({ user }: { user: PublicUser }) {
   const queryClient = useQueryClient();
   const { data: profile, isFetching: isProfileFetching } = useQuery({
@@ -135,42 +219,51 @@ function MainSettings({ user }: { user: PublicUser }) {
 
   return (
     <form
-      className="space-y-5"
+      className="flex flex-col gap-3"
       key={`${profile.id}:${profile.username}:${profile.email}`}
       onSubmit={handleProfileSubmit}
     >
-      <SettingsSection title="Profile Settings">
-        <SettingsRow controlId="profile-settings-username" label="Username">
+      <AccountSettingsSectionHeader
+        action={
+          <Button
+            className={accountSettingsActionButtonClassName}
+            disabled={profileMutation.isPending}
+            type="submit"
+          >
+            {profileMutation.isPending ? "Saving profile" : "Save profile"}
+          </Button>
+        }
+        icon={<UserCircleIcon aria-hidden="true" className="size-4" />}
+        status={
+          isProfileFetching ? (
+            <span className="hidden text-xs text-muted-foreground sm:inline">Refreshing</span>
+          ) : null
+        }
+        title="Profile"
+      />
+      <AccountSettingsFieldTable label="Value">
+        <AccountSettingsFieldRow controlId="profile-settings-username" label="Username">
           <Input
             autoComplete="username"
-            className="sm:max-w-72"
+            className={compactAccountInputClassName}
             defaultValue={profile.username}
             id="profile-settings-username"
             name="username"
             required
           />
-        </SettingsRow>
-        <SettingsRow controlId="profile-settings-email" label="Email">
+        </AccountSettingsFieldRow>
+        <AccountSettingsFieldRow controlId="profile-settings-email" label="Email">
           <Input
             autoComplete="email"
-            className="sm:max-w-72"
+            className={compactAccountInputClassName}
             defaultValue={profile.email}
             id="profile-settings-email"
             name="email"
             required
             type="email"
           />
-        </SettingsRow>
-      </SettingsSection>
-
-      <div className="flex items-center justify-end gap-3">
-        {isProfileFetching ? (
-          <span className="text-xs text-muted-foreground">Refreshing profile</span>
-        ) : null}
-        <Button disabled={profileMutation.isPending} type="submit">
-          {profileMutation.isPending ? "Saving profile" : "Save profile"}
-        </Button>
-      </div>
+        </AccountSettingsFieldRow>
+      </AccountSettingsFieldTable>
     </form>
   );
 }
@@ -179,10 +272,14 @@ function PasswordSettings({ user }: { user: PublicUser }) {
   const controls = usePasswordSettingsControls(user);
 
   return (
-    <form className="space-y-3" onSubmit={controls.handleSubmit} ref={controls.formRef}>
+    <form className="flex flex-col gap-3" onSubmit={controls.handleSubmit} ref={controls.formRef}>
+      <AccountSettingsSectionHeader
+        action={<PasswordSubmitButton isPending={controls.isPending} />}
+        icon={<LockIcon aria-hidden="true" className="size-4" />}
+        title="Password"
+      />
       <PasswordFieldSection />
       <PasswordMismatchAlert message={controls.passwordMismatchError} />
-      <PasswordSubmitButton isPending={controls.isPending} />
     </form>
   );
 }
@@ -250,16 +347,12 @@ function usePasswordSettingsControls(user: PublicUser) {
   };
 }
 
-const compactPasswordInputClassName = "h-10 rounded-xl px-3 sm:h-9 sm:max-w-64";
+const compactPasswordInputClassName = compactAccountInputClassName;
 
 function PasswordFieldSection() {
   return (
-    <SettingsSection
-      density="compact"
-      description="Use your current password to authorize password changes."
-      title="Password"
-    >
-      <SettingsRow controlId="profile-current-password" density="compact" label="Current password">
+    <AccountSettingsFieldTable label="Value">
+      <AccountSettingsFieldRow controlId="profile-current-password" label="Current password">
         <Input
           autoComplete="current-password"
           className={compactPasswordInputClassName}
@@ -268,8 +361,8 @@ function PasswordFieldSection() {
           required
           type="password"
         />
-      </SettingsRow>
-      <SettingsRow controlId="profile-new-password" density="compact" label="New password">
+      </AccountSettingsFieldRow>
+      <AccountSettingsFieldRow controlId="profile-new-password" label="New password">
         <Input
           autoComplete="new-password"
           className={compactPasswordInputClassName}
@@ -278,12 +371,8 @@ function PasswordFieldSection() {
           required
           type="password"
         />
-      </SettingsRow>
-      <SettingsRow
-        controlId="profile-confirm-password"
-        density="compact"
-        label="Confirm new password"
-      >
+      </AccountSettingsFieldRow>
+      <AccountSettingsFieldRow controlId="profile-confirm-password" label="Confirm new password">
         <Input
           autoComplete="new-password"
           className={compactPasswordInputClassName}
@@ -292,8 +381,8 @@ function PasswordFieldSection() {
           required
           type="password"
         />
-      </SettingsRow>
-    </SettingsSection>
+      </AccountSettingsFieldRow>
+    </AccountSettingsFieldTable>
   );
 }
 
@@ -307,11 +396,14 @@ function PasswordMismatchAlert({ message }: { message: string | null }) {
 
 function PasswordSubmitButton({ isPending }: { isPending: boolean }) {
   return (
-    <div className="flex justify-end">
-      <Button className="rounded-xl" disabled={isPending} size="sm" type="submit">
-        {isPending ? "Updating password" : "Update password"}
-      </Button>
-    </div>
+    <Button
+      className={accountSettingsActionButtonClassName}
+      disabled={isPending}
+      size="sm"
+      type="submit"
+    >
+      {isPending ? "Updating password" : "Update password"}
+    </Button>
   );
 }
 
@@ -425,7 +517,7 @@ function NotificationToastToggleRow({
         />
         <span
           aria-hidden="true"
-          className="relative h-5 w-9 rounded-full border border-border bg-muted transition-colors after:absolute after:top-0.5 after:left-0.5 after:size-4 after:rounded-full after:bg-background after:shadow-sm after:transition-transform peer-checked:border-primary/60 peer-checked:bg-primary peer-checked:after:translate-x-4"
+          className="relative h-4 w-8 rounded-full border border-border bg-muted transition-colors after:absolute after:top-0.5 after:left-0.5 after:size-3 after:rounded-full after:bg-background after:shadow-sm after:transition-transform peer-checked:border-primary/60 peer-checked:bg-primary peer-checked:after:translate-x-4"
         />
         <span className="text-foreground">{preferences.toastsEnabled ? "On" : "Off"}</span>
       </label>
@@ -446,7 +538,7 @@ function NotificationFrequencyRow({
     <SettingsRow controlId="notification-frequency" density="compact" label="Frequency">
       <div className="relative w-full min-w-0 sm:w-64">
         <select
-          className="h-9 w-full appearance-none rounded-lg border border-border bg-card/72 px-3 pr-8 text-sm text-foreground outline-none transition-colors hover:bg-accent focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60"
+          className="h-8 w-full appearance-none rounded-md border border-border bg-card/72 px-2.5 pr-8 text-sm text-foreground outline-none transition-colors hover:bg-accent focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60"
           disabled={isDisabled}
           id="notification-frequency"
           onChange={handleNotificationFrequencyChange(onFrequencyChange)}

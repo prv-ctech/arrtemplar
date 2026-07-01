@@ -75,7 +75,11 @@ export function HelpTicketList({
 
               return (
                 <Fragment key={ticket.id}>
-                  <TableRow data-state={isExpanded ? "selected" : undefined}>
+                  <TableRow
+                    className="cursor-pointer"
+                    data-state={isExpanded ? "selected" : undefined}
+                    onClick={() => onToggle(isExpanded ? null : ticket.id)}
+                  >
                     <TableCell className="max-w-136 px-3 py-2">
                       <TicketTitleButton
                         expanded={isExpanded}
@@ -98,7 +102,10 @@ export function HelpTicketList({
                       {formatTicketDate(ticket.updatedAt)}
                     </TableCell>
                     {canManage ? (
-                      <TableCell className="px-3 py-2 text-right">
+                      <TableCell
+                        className="px-3 py-2 text-right"
+                        onClick={(event) => event.stopPropagation()}
+                      >
                         <TicketActionMenu
                           disabled={ticketActionPending}
                           onDelete={() => onDelete(ticket.id)}
@@ -195,7 +202,10 @@ function TicketTitleButton({
     <button
       aria-expanded={expanded}
       className="group flex min-w-0 flex-col text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      onClick={onToggle}
+      onClick={(event) => {
+        event.stopPropagation();
+        onToggle();
+      }}
       type="button"
     >
       <span className="block truncate text-sm font-medium text-foreground group-hover:text-primary">

@@ -63,6 +63,17 @@ describe("profile self-service settings layout", () => {
     expect(source).not.toContain("Personal theme preference");
     expect(source).not.toContain("Theme settings affect only the signed-in user.");
     expect(source).not.toContain("profile.role");
+    expect(source).toContain("compactAccountInputClassName");
+    expect(source).toContain("AccountSettingsFieldTable");
+    expect(source).toContain('containerClassName="rounded-lg border-border/90 bg-card/72 pb-0"');
+    expect(source).toContain("TableHead");
+    expect(source).toContain('label="Value"');
+    expect(source).not.toContain('SettingsSection density="compact" title="Profile"');
+    expect(source).toContain("className={compactAccountInputClassName}");
+    expect(source).toContain(
+      'const accountSettingsActionButtonClassName = "h-8 rounded-md px-2.5 text-sm";',
+    );
+    expect(source).not.toContain('className="sm:max-w-72"');
   });
 
   it("keeps theme flavor options as real activatable buttons", async () => {

@@ -9,27 +9,35 @@ export function HelpTicketStatusBadge({
   className?: string;
   status: HelpTicketStatus;
 }) {
+  const badge = readHelpTicketStatusBadge(status);
+
   return (
     <Badge
-      className={cn(
-        "rounded-md px-1.5 py-0.5 capitalize",
-        readHelpTicketStatusClassName(status),
-        className,
-      )}
-      variant="outline"
+      className={cn("rounded-md px-1.5 py-0.5 capitalize", badge.className, className)}
+      variant={badge.variant}
     >
       {status.replaceAll("_", " ")}
     </Badge>
   );
 }
 
-function readHelpTicketStatusClassName(status: HelpTicketStatus): string {
+function readHelpTicketStatusBadge(status: HelpTicketStatus): {
+  className?: string;
+  variant: "outline" | "success";
+} {
   switch (status) {
     case "new":
-      return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+      return {
+        className:
+          "border-[color:var(--action-info-border)] bg-[color:var(--action-info-bg)] text-[color:var(--action-info-foreground)]",
+        variant: "outline",
+      };
     case "in_progress":
-      return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+      return {
+        className: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+        variant: "outline",
+      };
     case "completed":
-      return "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300";
+      return { variant: "success" };
   }
 }

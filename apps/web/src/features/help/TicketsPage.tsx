@@ -82,13 +82,7 @@ function TicketsPage() {
           <TabsContent className="mt-0" key={filter.value} value={filter.value}>
             <TicketResults
               canManage={state.canManage}
-              emptyMessage={state.emptyMessage}
-              hasActiveFilters={state.hasActiveFilters}
               listQuery={state.listQuery}
-              onClearFilters={() => {
-                state.setActiveStatus("all");
-                state.setSearchQuery("");
-              }}
               detailErrorMessage={
                 state.detailQuery.error instanceof Error ? state.detailQuery.error.message : null
               }
@@ -188,13 +182,10 @@ function TicketToolbar({
 
 function TicketResults({
   canManage,
-  emptyMessage,
-  hasActiveFilters,
   listQuery,
   detailErrorMessage,
   expandedTicketId,
   onDeleteTicket,
-  onClearFilters,
   onOpenTicket,
   onStatusChange,
   selectedTicket,
@@ -205,11 +196,8 @@ function TicketResults({
 }: {
   canManage: boolean;
   detailErrorMessage: string | null;
-  emptyMessage: string;
   expandedTicketId: string | null;
-  hasActiveFilters: boolean;
   listQuery: ReturnType<typeof useHelpTicketsPageState>["listQuery"];
-  onClearFilters: () => void;
   onDeleteTicket: (ticketId: string) => void;
   onOpenTicket: (ticketId: string | null) => void;
   onStatusChange: Parameters<typeof HelpTicketList>[0]["onStatusChange"];
@@ -220,10 +208,7 @@ function TicketResults({
   tickets: ReturnType<typeof useHelpTicketsPageState>["tickets"];
 }) {
   const stateContent = readTicketResultsState({
-    emptyMessage,
-    hasActiveFilters,
     listQuery,
-    onClearFilters,
     ticketsLength: tickets.length,
   });
 
@@ -249,16 +234,10 @@ function TicketResults({
 }
 
 function readTicketResultsState({
-  emptyMessage,
-  hasActiveFilters,
   listQuery,
-  onClearFilters,
   ticketsLength,
 }: {
-  emptyMessage: string;
-  hasActiveFilters: boolean;
   listQuery: ReturnType<typeof useHelpTicketsPageState>["listQuery"];
-  onClearFilters: () => void;
   ticketsLength: number;
 }) {
   if (listQuery.isLoading) {
@@ -274,46 +253,17 @@ function readTicketResultsState({
   }
 
   if (ticketsLength === 0) {
-    return (
-      <TicketEmptyState
-        emptyMessage={emptyMessage}
-        hasActiveFilters={hasActiveFilters}
-        onClearFilters={onClearFilters}
-      />
-    );
+    return <TicketEmptyState />;
   }
 
   return null;
 }
 
-function TicketEmptyState({
-  emptyMessage,
-  hasActiveFilters,
-  onClearFilters,
-}: {
-  emptyMessage: string;
-  hasActiveFilters: boolean;
-  onClearFilters: () => void;
-}) {
+function TicketEmptyState() {
   return (
-    <HelpEmptyStateCard title="Tickets">
-      <span>
-        {hasActiveFilters
-          ? `${emptyMessage} Try another filter.`
-          : `${emptyMessage} Create first ticket.`}
-      </span>
-      {hasActiveFilters ? (
-        <Button
-          className="mt-3 h-8 rounded-md px-2.5 text-sm"
-          onClick={onClearFilters}
-          size="sm"
-          type="button"
-          variant="secondary"
-        >
-          Clear filters
-        </Button>
-      ) : null}
-    </HelpEmptyStateCard>
+    <div className="rounded-lg border border-dashed border-border bg-card/70 px-3 py-3 text-sm text-muted-foreground">
+      No matches found.
+    </div>
   );
 }
 

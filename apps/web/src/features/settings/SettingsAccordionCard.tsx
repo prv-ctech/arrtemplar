@@ -24,23 +24,23 @@ export function SettingsAccordionCard({
   toggleLabel: string;
 }) {
   return (
-    <Card className="w-full min-w-0 overflow-hidden rounded-2xl bg-card/50 shadow-none">
+    <Card className="w-full min-w-0 overflow-hidden rounded-xl bg-card/50 shadow-none">
       <CardHeader className="p-0">
-        <div className="flex items-start gap-2 p-3">
+        <div className="flex items-start gap-2 p-2.5">
           <button
             aria-controls={contentId}
             aria-expanded={isExpanded}
             aria-label={toggleLabel}
             className={cn(
-              "flex min-w-0 flex-1 cursor-pointer items-start gap-3 rounded-xl text-left transition-colors duration-200",
+              "flex min-w-0 flex-1 cursor-pointer items-start gap-2 rounded-lg text-left transition-colors duration-200",
               "hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             )}
             onClick={onToggle}
             type="button"
           >
             {icon}
-            <div className="min-w-0 flex-1 py-2.5">
-              <CardTitle className="truncate text-sm leading-5 sm:text-base">{title}</CardTitle>
+            <div className="min-w-0 flex-1 py-1.5">
+              <CardTitle className="truncate text-sm leading-5">{title}</CardTitle>
             </div>
           </button>
           <div className="flex shrink-0 items-center justify-end gap-1.5">
@@ -67,7 +67,7 @@ export function SettingsAccordionCard({
       {isExpanded ? (
         <>
           <Separator />
-          <CardContent className="p-2.5" id={contentId}>
+          <CardContent className="p-2" id={contentId}>
             {children}
           </CardContent>
         </>

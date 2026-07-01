@@ -190,7 +190,8 @@ function createServiceIntegrationCardColumns() {
 }
 
 const compactServiceIntegrationFieldClassName =
-  "h-9 w-full min-w-0 rounded-xl border-border/85 bg-background/72 px-3 text-sm sm:w-52";
+  "h-8 w-full min-w-0 rounded-md border-border/85 bg-background/72 px-2.5 py-1 text-sm shadow-xs sm:w-52";
+const serviceIntegrationActionButtonClassName = "h-7 rounded-md px-2.5 py-1 text-[11px]";
 
 const selectClassName = `${compactServiceIntegrationFieldClassName} border text-foreground shadow-[inset_0_1px_0_hsl(0_0%_100%/0.05)] outline-none transition-[background-color,border-color,box-shadow] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] focus-visible:border-primary/78 focus-visible:ring-2 focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm`;
 
@@ -279,12 +280,12 @@ export function ServicesSettings() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:items-start">
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2 xl:items-start">
         {serviceIntegrationCardColumns.map((column) => (
-          <div className="contents min-w-0 xl:block xl:space-y-4" key={column.key}>
+          <div className="contents min-w-0 xl:block xl:space-y-3" key={column.key}>
             {column.items.map(({ card, mobileOrder }) => (
-              <div className="min-w-0 space-y-3" key={card.kind} style={{ order: mobileOrder }}>
+              <div className="min-w-0 space-y-2" key={card.kind} style={{ order: mobileOrder }}>
                 {createServiceItems(card, configsByKind.get(card.kind) ?? [], drafts).map(
                   (item) => (
                     <ServiceIntegrationCard
@@ -316,12 +317,12 @@ export function ServicesSettings() {
 
 function ServicesSettingsSkeleton() {
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <Skeleton className="h-18 rounded-2xl" />
-        <Skeleton className="h-18 rounded-2xl" />
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+        <Skeleton className="h-14 rounded-xl" />
+        <Skeleton className="h-14 rounded-xl" />
       </div>
-      <Skeleton className="h-16 rounded-2xl" />
+      <Skeleton className="h-12 rounded-xl" />
     </div>
   );
 }
@@ -804,7 +805,7 @@ function ServiceIntegrationCardView({
         title={title}
         toggleLabel={`${isExpanded ? "Collapse" : "Expand"} ${title} service settings`}
       >
-        <form className="space-y-4" onSubmit={handleSave}>
+        <form className="space-y-3" onSubmit={handleSave}>
           <ServiceIntegrationFormFields
             apiKeyDescription={apiKeyDescription}
             card={card}
@@ -848,12 +849,12 @@ function ServiceIntegrationCardActions({
   title: string;
 }) {
   return (
-    <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+    <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
       <Badge variant={statusBadge.variant}>{statusBadge.label}</Badge>
       {canDelete ? (
         <Button
           aria-label={`Remove ${title}`}
-          className="size-9 rounded-xl"
+          className="size-7 rounded-md"
           disabled={isBusy}
           onClick={onDeleteRequest}
           size="icon"
@@ -887,7 +888,7 @@ function ServiceIntegrationFormFields({
   updateForm: FormUpdate;
 }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card/40">
+    <div className="overflow-hidden rounded-lg border border-border bg-card/40">
       <SettingsRow controlId={`${itemKey}-display-name`} density="compact" label="Service name">
         <Input
           className={compactServiceIntegrationFieldClassName}
@@ -910,7 +911,7 @@ function ServiceIntegrationFormFields({
       </SettingsRow>
       <SettingsRow controlId={`${itemKey}-port`} density="compact" label="Port">
         <Input
-          className="h-9 w-28 rounded-xl px-3 text-sm"
+          className="h-8 w-24 rounded-md border-border/85 bg-background/72 px-2.5 py-1 text-sm shadow-xs"
           disabled={isBusy}
           id={`${itemKey}-port`}
           inputMode="numeric"
@@ -1102,6 +1103,7 @@ function ServiceIntegrationFormFooter({
       <p className="min-h-5 text-sm text-muted-foreground">{viewModel.summary}</p>
       <div className="flex flex-wrap items-center gap-2">
         <Button
+          className={serviceIntegrationActionButtonClassName}
           disabled={viewModel.testButton.disabled}
           onClick={viewModel.testButton.onClick}
           type="button"
@@ -1109,7 +1111,11 @@ function ServiceIntegrationFormFooter({
         >
           {viewModel.testButton.label}
         </Button>
-        <Button disabled={viewModel.saveButton.disabled} type="submit">
+        <Button
+          className={serviceIntegrationActionButtonClassName}
+          disabled={viewModel.saveButton.disabled}
+          type="submit"
+        >
           {viewModel.saveButton.label}
         </Button>
       </div>
@@ -1186,22 +1192,19 @@ function AddServicePill({ onClick }: { onClick: () => void }) {
   return (
     <button
       className={cn(
-        "flex w-full min-w-0 items-center justify-between gap-3 rounded-2xl border border-dashed border-border bg-card/35 p-3 text-left transition-colors duration-200",
+        "flex w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-dashed border-border bg-card/35 p-2 text-left transition-colors duration-200",
         "hover:border-primary/50 hover:bg-card/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
       )}
       onClick={onClick}
       type="button"
     >
-      <span className="flex min-w-0 items-center gap-3">
-        <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-border bg-secondary text-secondary-foreground">
+      <span className="flex min-w-0 items-center gap-2">
+        <span className="grid size-8 shrink-0 place-items-center rounded-md border border-border bg-secondary text-secondary-foreground">
           <PlusIcon className="size-4" />
         </span>
         <span className="min-w-0">
-          <span className="block truncate text-sm font-semibold text-foreground sm:text-base">
+          <span className="block truncate text-sm font-semibold text-foreground">
             Add another service
-          </span>
-          <span className="block text-sm text-muted-foreground">
-            Create another service instance.
           </span>
         </span>
       </span>
@@ -1234,14 +1237,14 @@ function AddServiceDialog({
 
             return (
               <Button
-                className="h-auto justify-start rounded-2xl border-border bg-card/60 p-3 text-left"
+                className="h-auto justify-start rounded-lg border-border bg-card/60 p-2.5 text-left"
                 disabled={isAtLimit}
                 key={card.kind}
                 onClick={() => onAddService(card.kind)}
                 type="button"
                 variant="outline"
               >
-                <img alt="" className="h-8 w-auto shrink-0" src={card.logoPath} />
+                <img alt="" className="h-6 w-auto shrink-0" src={card.logoPath} />
                 <span className="min-w-0">
                   <span className="block truncate font-medium">{card.title}</span>
                   <span className="block text-xs text-muted-foreground">
@@ -1383,7 +1386,7 @@ function ChoiceButton({
 }
 
 function ServiceLogo({ card }: { card: ServiceIntegrationCardDefinition }) {
-  return <img alt="" className="h-8 w-auto shrink-0" src={card.logoPath} />;
+  return <img alt="" className="h-7 w-auto shrink-0" src={card.logoPath} />;
 }
 
 function readStatusBadge(

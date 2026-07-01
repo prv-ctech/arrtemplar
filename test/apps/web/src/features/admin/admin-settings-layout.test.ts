@@ -91,9 +91,14 @@ describe("app settings layout", () => {
     expect(source).toContain('password: ""');
     expect(source).toContain('if (form.authMode === "none")');
     expect(source).toContain("serviceIntegrationCardColumns");
-    expect(source).toContain("contents min-w-0 xl:block xl:space-y-4");
+    expect(source).toContain("contents min-w-0 xl:block xl:space-y-3");
     expect(source).toContain("xl:items-start");
     expect(source).toContain("style={{ order: mobileOrder }}");
+    expect(source).toContain("serviceIntegrationActionButtonClassName");
+    expect(source).toContain("h-8 w-full min-w-0 rounded-md");
+    expect(source).toContain("h-7 rounded-md px-2.5 py-1 text-[11px]");
+    expect(source).not.toContain("h-9 w-full min-w-0 rounded-xl");
+    expect(source).not.toContain("h-9 w-28 rounded-xl");
     expect(source).not.toContain("ServiceEnabledToggle");
     expect(source).not.toContain("Enable service integration");
     expect(source).not.toContain("This settings section is scaffolded");
