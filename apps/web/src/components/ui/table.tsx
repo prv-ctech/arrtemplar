@@ -9,7 +9,7 @@ export function Table({ className, containerClassName, ...props }: TableProps) {
   return (
     <div
       className={cn(
-        "relative w-full overflow-x-auto rounded-3xl border border-border bg-card/60 pb-4 sm:pb-0",
+        "relative w-full overflow-x-auto rounded-2xl border border-border bg-card/72 pb-4 shadow-[inset_0_1px_0_hsl(0_0%_100%/0.03)] sm:pb-0",
         containerClassName,
       )}
     >
@@ -50,7 +50,7 @@ export function TableRow({ className, ...props }: ComponentProps<"tr">) {
   return (
     <tr
       className={cn(
-        "border-border border-b transition-colors hover:bg-muted/35 data-[state=selected]:bg-muted",
+        "border-border/85 border-b transition-colors hover:bg-muted/35 data-[state=selected]:bg-muted",
         className,
       )}
       data-slot="table-row"

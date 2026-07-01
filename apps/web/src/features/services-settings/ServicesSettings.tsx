@@ -81,7 +81,7 @@ type ServiceIntegrationCardColumnItem = {
 
 type StatusBadge = {
   label: string;
-  variant: "default" | "destructive" | "outline" | "secondary";
+  variant: "destructive" | "outline" | "secondary" | "success";
 };
 type FormUpdate = (next: Partial<ServiceIntegrationFormState>) => void;
 type SaveMutation = ReturnType<typeof useUpsertServiceIntegrationMutation>;
@@ -190,9 +190,9 @@ function createServiceIntegrationCardColumns() {
 }
 
 const compactServiceIntegrationFieldClassName =
-  "h-9 w-full min-w-0 rounded-xl px-3 text-sm sm:w-52";
+  "h-9 w-full min-w-0 rounded-xl border-border/85 bg-background/72 px-3 text-sm sm:w-52";
 
-const selectClassName = `${compactServiceIntegrationFieldClassName} border border-input bg-background/50 text-foreground shadow-[inset_0_1px_0_hsl(0_0%_100%/0.04)] outline-none transition-[border-color,box-shadow] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] focus-visible:border-primary/70 focus-visible:ring-2 focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm`;
+const selectClassName = `${compactServiceIntegrationFieldClassName} border text-foreground shadow-[inset_0_1px_0_hsl(0_0%_100%/0.05)] outline-none transition-[background-color,border-color,box-shadow] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] focus-visible:border-primary/78 focus-visible:ring-2 focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm`;
 
 export function ServicesSettings() {
   const actor = useAuthenticatedRouteUser();
@@ -1105,7 +1105,7 @@ function ServiceIntegrationFormFooter({
           disabled={viewModel.testButton.disabled}
           onClick={viewModel.testButton.onClick}
           type="button"
-          variant="outline"
+          variant="infoOutline"
         >
           {viewModel.testButton.label}
         </Button>
@@ -1405,7 +1405,7 @@ function readStatusBadge(
 
   switch (status.outcome) {
     case "success":
-      return { label: "Connected", variant: "default" };
+      return { label: "Connected", variant: "success" };
     case "disabled":
       return { label: "Disabled", variant: "secondary" };
     case "not_configured":

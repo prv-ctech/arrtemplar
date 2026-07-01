@@ -6,6 +6,8 @@ export const badgeVariants = cva(
     variants: {
       variant: {
         default: "border-primary/20 bg-primary/15 text-primary",
+        success:
+          "border-[color:var(--status-success-border)] bg-[color:var(--status-success-bg)] text-[color:var(--status-success-foreground)]",
         secondary: "border-border bg-secondary text-secondary-foreground",
         destructive: "border-destructive/30 bg-destructive/15 text-destructive",
         outline: "border-border bg-transparent text-foreground",

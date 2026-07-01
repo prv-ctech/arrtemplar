@@ -17,7 +17,7 @@ export function AdminDesktopTable({
 }) {
   return (
     <div className="hidden md:block">
-      <Table containerClassName="rounded-lg border-border/80 bg-card/50 pb-0">
+      <Table containerClassName="rounded-lg border-border/90 bg-card/72 pb-0">
         <TableHeader>
           <TableRow className="hover:bg-transparent">
             {columns.map((column) => (
@@ -39,12 +39,10 @@ export function AdminDesktopTable({
 export function ExpandableTableTitleButton({
   children,
   expanded,
-  leadingVisual,
   onToggle,
 }: {
   children: ReactNode;
   expanded: boolean;
-  leadingVisual?: ReactNode;
   onToggle: () => void;
 }) {
   return (
@@ -64,7 +62,6 @@ export function ExpandableTableTitleButton({
           expanded && "rotate-90",
         )}
       />
-      {leadingVisual}
       {children}
     </button>
   );

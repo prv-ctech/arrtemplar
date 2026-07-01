@@ -83,13 +83,20 @@
 :root {
   color-scheme: light;
   --radius: 1rem;
+  --semantic-danger-base: #ef6b7b;
+  --semantic-info-base: #4b9cff;
+  --semantic-success-base: #70c247;
 
   --background: var(--catppuccin-color-base);
   --foreground: var(--catppuccin-color-text);
   --muted: color-mix(in srgb, var(--catppuccin-color-surface0) 82%, var(--catppuccin-color-base));
   --muted-foreground: var(--catppuccin-color-subtext0);
-  --border: color-mix(in srgb, var(--catppuccin-color-overlay0) 66%, transparent);
-  --input: color-mix(in srgb, var(--catppuccin-color-surface1) 72%, transparent);
+  --border: color-mix(in srgb, var(--catppuccin-color-overlay1) 52%, transparent);
+  --input: color-mix(
+    in srgb,
+    var(--catppuccin-color-overlay1) 42%,
+    var(--catppuccin-color-surface1)
+  );
   --ring: var(--catppuccin-color-lavender);
   --card: var(--catppuccin-color-surface0);
   --card-foreground: var(--catppuccin-color-text);
@@ -103,6 +110,21 @@
   --primary-foreground: var(--catppuccin-color-base);
   --destructive: var(--catppuccin-color-red);
   --destructive-foreground: var(--catppuccin-color-base);
+  --status-success: var(--semantic-success-base);
+  --status-success-border: color-mix(in srgb, var(--status-success) 42%, transparent);
+  --status-success-bg: color-mix(in srgb, var(--status-success) 16%, transparent);
+  --status-success-foreground: color-mix(in srgb, var(--status-success) 78%, var(--foreground));
+  --action-info: var(--semantic-info-base);
+  --action-info-border: color-mix(in srgb, var(--action-info) 44%, transparent);
+  --action-info-border-hover: color-mix(in srgb, var(--action-info) 58%, transparent);
+  --action-info-bg: color-mix(in srgb, var(--action-info) 12%, transparent);
+  --action-info-bg-hover: color-mix(in srgb, var(--action-info) 18%, transparent);
+  --action-info-foreground: color-mix(in srgb, var(--action-info) 76%, var(--foreground));
+  --action-danger-border: color-mix(in srgb, var(--destructive) 44%, transparent);
+  --action-danger-border-hover: color-mix(in srgb, var(--destructive) 58%, transparent);
+  --action-danger-bg: color-mix(in srgb, var(--destructive) 12%, transparent);
+  --action-danger-bg-hover: color-mix(in srgb, var(--destructive) 18%, transparent);
+  --action-danger-foreground: color-mix(in srgb, var(--destructive) 76%, var(--foreground));
   --selected: color-mix(in srgb, var(--catppuccin-color-mauve) 10%, var(--catppuccin-color-base));
   --selected-border: color-mix(
     in srgb,
@@ -607,7 +629,7 @@
     var(--color-hunt-base)
   );
   --catppuccin-color-yellow: color-mix(in srgb, var(--color-hunt-accent) 54%, wheat);
-  --catppuccin-color-red: color-mix(in srgb, var(--color-hunt-accent) 70%, crimson);
+  --catppuccin-color-red: var(--semantic-danger-base);
   --catppuccin-color-green: color-mix(in srgb, var(--color-hunt-muted) 56%, mediumseagreen);
   --catppuccin-color-teal: color-mix(in srgb, var(--color-hunt-muted) 70%, teal);
   --catppuccin-color-pink: var(--color-hunt-accent);
@@ -700,7 +722,7 @@
     var(--theme-park-base)
   );
   --catppuccin-color-yellow: color-mix(in srgb, var(--theme-park-accent) 54%, wheat);
-  --catppuccin-color-red: color-mix(in srgb, var(--theme-park-accent) 68%, crimson);
+  --catppuccin-color-red: var(--semantic-danger-base);
   --catppuccin-color-green: color-mix(in srgb, var(--theme-park-accent) 48%, mediumseagreen);
   --catppuccin-color-teal: color-mix(in srgb, var(--theme-park-muted) 72%, teal);
   --catppuccin-color-pink: var(--theme-park-accent);
@@ -771,7 +793,7 @@
     var(--arrbit-accent-muted)
   );
   --catppuccin-color-yellow: color-mix(in srgb, var(--arrbit-accent) 72%, wheat);
-  --catppuccin-color-red: color-mix(in srgb, var(--arrbit-accent-muted) 58%, crimson);
+  --catppuccin-color-red: var(--semantic-danger-base);
   --catppuccin-color-green: var(--arrbit-accent);
   --catppuccin-color-teal: color-mix(in srgb, var(--arrbit-accent) 54%, teal);
   --catppuccin-color-pink: color-mix(in srgb, var(--arrbit-accent) 76%, white);
@@ -794,7 +816,7 @@
   --catppuccin-color-sky: var(--arrbit-accent);
   --catppuccin-color-peach: color-mix(in srgb, var(--arrbit-secondary) 74%, var(--arrbit-accent));
   --catppuccin-color-yellow: color-mix(in srgb, var(--arrbit-accent) 62%, wheat);
-  --catppuccin-color-red: color-mix(in srgb, var(--arrbit-secondary) 72%, crimson);
+  --catppuccin-color-red: var(--semantic-danger-base);
   --catppuccin-color-green: color-mix(in srgb, var(--arrbit-accent) 64%, mediumseagreen);
   --catppuccin-color-teal: var(--arrbit-accent);
   --catppuccin-color-pink: var(--arrbit-secondary);

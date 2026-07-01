@@ -738,7 +738,7 @@ function startOidcLinkFlow() {
 
 function LinkedIdentityBadge({ count }: { count: number }) {
   return (
-    <Badge variant={count > 0 ? "default" : "secondary"}>
+    <Badge variant={count > 0 ? "success" : "secondary"}>
       {count > 0 ? "Connected" : "Not linked"}
     </Badge>
   );

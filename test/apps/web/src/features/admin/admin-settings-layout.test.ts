@@ -148,7 +148,7 @@ describe("app settings layout", () => {
     expect(usersSource).toContain("UserCirclePlusIcon");
     expect(usersSource).toContain("New user");
     expect(usersSource).toContain(
-      'containerClassName="rounded-lg border-border/80 bg-card/50 pb-0"',
+      'containerClassName="rounded-lg border-border/90 bg-card/72 pb-0"',
     );
     expect(usersSource).toContain("AdminUsersMobileList");
     expect(usersSource).toContain("AdminUserMobileCard");
@@ -239,8 +239,9 @@ describe("app settings layout", () => {
     expect(apiKeysSource).toContain("ProxyProfileInlineForm");
     expect(apiKeysSource).toContain("PROXY_DESKTOP_COLUMN_COUNT");
     expect(apiKeysSource).toContain("compactProxyInputClassName");
-    expect(apiKeysSource).toContain("border-sky-500/35");
-    expect(apiKeysSource).toContain("border-destructive/40");
+    expect(apiKeysSource).toContain('variant="infoOutline"');
+    expect(apiKeysSource).toContain('variant="destructiveOutline"');
+    expect(apiKeysSource).toContain('variant="success"');
     expect(apiKeysSource).toContain("aria-expanded");
     expect(apiKeysSource).toContain("Switch");
     expect(apiKeysSource).toContain("SelectTrigger");
@@ -277,7 +278,8 @@ describe("app settings layout", () => {
     expect(proxySource).not.toContain('{ align: "right", label: "Actions" }');
     expect(proxySource).not.toContain('label="Target"');
     expect(proxySource).not.toContain("readTargetValue");
-    expect(tableSource).toContain("pb-4 sm:pb-0");
+    expect(tableSource).toContain("pb-4");
+    expect(tableSource).toContain("sm:pb-0");
     expect(apiKeysSource).not.toContain("Refresh key");
     expect(apiKeysSource).not.toContain("useRefreshApiKeyMutation");
     expect(apiKeysSource).not.toContain('containerClassName="max-w-full bg-card pt-12"');
@@ -319,9 +321,9 @@ describe("app settings layout", () => {
     expect(source).toContain("ProviderEnabledSwitch");
     expect(source).toContain("OidcAccountLinking");
     expect(source).toContain("Account linking");
-    expect(source).toContain("sm:gap-6");
+    expect(source).toContain("sm:grid-cols-[minmax(0,1fr)_auto]");
     expect(source).toContain('<Separator className="my-3" />');
-    expect(source).toContain("This admin account has linked OAuth accounts.");
+    expect(source).toContain("Connected");
     expect(source).toContain("LinkedIdentityBadge");
     expect(source).toContain("LinkedIdentityList");
     expect(source).toContain("Connected");
@@ -331,7 +333,7 @@ describe("app settings layout", () => {
     expect(source).toContain("auth.provider.saved");
     expect(source).toContain("auth.provider.save.failed");
     expect(source).toContain("OAuth settings saved.");
-    expect(source).toContain("Link Accounts");
+    expect(source).toContain("Link account");
     expect(source).toContain("Unlink all");
     expect(source).toContain("identity.displayName");
     expect(source).toContain("AUTH_PROVIDER_EDITABLE_KIND_VALUES");

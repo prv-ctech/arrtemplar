@@ -537,14 +537,7 @@ function ApiKeyActionMenu({
 
 function ApiKeyStatusBadge({ status }: { status: ApiKeySummary["status"] }) {
   if (status === "active") {
-    return (
-      <Badge
-        variant="outline"
-        className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-      >
-        Active
-      </Badge>
-    );
+    return <Badge variant="success">Active</Badge>;
   }
 
   return (

@@ -71,7 +71,7 @@ type ProxyProfileFormState = {
 type StatusBadge = {
   className?: string;
   label: string;
-  variant: "default" | "destructive" | "outline" | "secondary";
+  variant: "destructive" | "outline" | "secondary" | "success";
 };
 
 const proxyRows: readonly ProxyRowDefinition[] = [
@@ -101,7 +101,8 @@ const proxyTableColumns = [
 ] as const;
 
 const PROXY_DESKTOP_COLUMN_COUNT = proxyTableColumns.length;
-const compactProxyInputClassName = "h-8 rounded-md bg-transparent px-2.5 py-1 text-sm shadow-xs";
+const compactProxyInputClassName =
+  "h-8 rounded-md border-border/85 bg-background/72 px-2.5 py-1 text-sm shadow-xs";
 const proxyInlineActionButtonClassName = "h-7 rounded-md px-2.5 py-1 text-[11px]";
 
 export function ProxySettings() {
@@ -388,18 +389,11 @@ function ProxyTitleButton({
   profile: ProxyProfileSummary | undefined;
   row: ProxyRowDefinition;
 }) {
-  const leadingVisual = (
-    <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-border bg-secondary/35">
-      <img alt="" className="h-4 w-auto" src={row.logoPath} />
-    </span>
-  );
-
   return (
-    <ExpandableTableTitleButton
-      expanded={expanded}
-      leadingVisual={leadingVisual}
-      onToggle={onToggle}
-    >
+    <ExpandableTableTitleButton expanded={expanded} onToggle={onToggle}>
+      <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-border bg-secondary/35">
+        <img alt="" className="h-4 w-auto" src={row.logoPath} />
+      </span>
       <span className="grid min-w-0 gap-0.5">
         <span className="truncate text-sm font-medium text-foreground group-hover:text-primary">
           {profile?.name ?? row.defaultName}
@@ -548,26 +542,20 @@ function ProxyProfileInlineForm({
           {saving ? "Saving" : "Save"}
         </Button>
         <Button
-          className={cn(
-            proxyInlineActionButtonClassName,
-            "border-sky-500/35 bg-sky-500/10 text-sky-700 hover:border-sky-500/50 hover:bg-sky-500/15 dark:text-sky-300",
-          )}
+          className={proxyInlineActionButtonClassName}
           disabled={!profile || saving || testing}
           onClick={onTest}
           type="button"
-          variant="outline"
+          variant="infoOutline"
         >
           {testing ? "Testing" : "Test"}
         </Button>
         <Button
-          className={cn(
-            proxyInlineActionButtonClassName,
-            "border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/15",
-          )}
+          className={proxyInlineActionButtonClassName}
           disabled={!profile || saving}
           onClick={onClear}
           type="button"
-          variant="outline"
+          variant="destructiveOutline"
         >
           Clear
         </Button>
@@ -633,7 +621,7 @@ function CommonProxyFields({
       </Field>
       <Field>
         <Label htmlFor={`${idPrefix}-enabled`}>Enabled</Label>
-        <div className="flex h-8 items-center gap-2 rounded-md border border-input px-2.5">
+        <div className="flex h-8 items-center gap-2 rounded-md border border-input bg-background/72 px-2.5 shadow-xs">
           <Switch
             checked={form.enabled}
             id={`${idPrefix}-enabled`}
@@ -797,7 +785,7 @@ function HttpProxyFields({
       {hasPassword ? (
         <Field className="sm:col-span-2">
           <Label htmlFor={`${idPrefix}-clear-password`}>Clear saved password</Label>
-          <div className="flex h-8 items-center gap-2 rounded-md border border-input px-2.5">
+          <div className="flex h-8 items-center gap-2 rounded-md border border-input bg-background/72 px-2.5 shadow-xs">
             <Switch
               checked={form.clearPassword}
               id={`${idPrefix}-clear-password`}
@@ -1012,11 +1000,7 @@ function readStatusBadge(profile: ProxyProfileSummary | undefined): StatusBadge 
 
   switch (profile.lastTestOutcome) {
     case "success":
-      return {
-        label: "Connected",
-        variant: "outline",
-        className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-      };
+      return { label: "Connected", variant: "success" };
     case "failed":
       return { label: "Failed", variant: "destructive" };
     case "skipped":

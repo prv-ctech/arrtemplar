@@ -232,6 +232,29 @@ describe("Catppuccin stylesheet", () => {
     expect(source).toContain("--color-selected-border: var(--selected-border);");
   });
 
+  it("keeps border and status semantics visible across custom palettes", async () => {
+    const source = await Bun.file(stylesSourcePath).text();
+
+    expect(source).toContain("--semantic-danger-base: #ef6b7b;");
+    expect(source).toContain("--semantic-info-base: #4b9cff;");
+    expect(source).toContain("--semantic-success-base: #70c247;");
+    expect(source).toContain(
+      "--border: color-mix(in srgb, var(--catppuccin-color-overlay1) 52%, transparent);",
+    );
+    expect(source).toContain("--input: color-mix(");
+    expect(source).toContain("var(--catppuccin-color-overlay1) 42%,");
+    expect(source).toContain("var(--catppuccin-color-surface1)");
+    expect(source).toContain("--status-success: var(--semantic-success-base);");
+    expect(source).toContain(
+      "--status-success-foreground: color-mix(in srgb, var(--status-success) 78%, var(--foreground));",
+    );
+    expect(source).toContain("--action-info: var(--semantic-info-base);");
+    expect(source).toContain(
+      "--action-danger-foreground: color-mix(in srgb, var(--destructive) 76%, var(--foreground));",
+    );
+    expect(source).toContain("--catppuccin-color-red: var(--semantic-danger-base);");
+  });
+
   it("defines a stronger selected surface for dark Catppuccin flavors", async () => {
     const source = await Bun.file(stylesSourcePath).text();
 
