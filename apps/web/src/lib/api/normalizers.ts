@@ -11,6 +11,8 @@ import type {
   AuthProviderSlug,
   AuthProviderSummary,
   AuthUnlinkAllIdentitiesResponse,
+  ChallengeSolverVariant,
+  DeleteProxyProfileResponse,
   DeleteServiceIntegrationResponse,
   HelpTicketDetail,
   HelpTicketDetailResponse,
@@ -22,6 +24,10 @@ import type {
   NotificationHistoryItem,
   NotificationHistoryListResponse,
   NotificationPreferences,
+  ProxyProfileListResponse,
+  ProxyProfileResponse,
+  ProxyProfileSummary,
+  ProxyProfileTestResponse,
   PublicUser,
   ServiceIntegrationKind,
   ServiceIntegrationListResponse,
@@ -39,9 +45,13 @@ import {
   DEFAULT_PROFILE_BANNER_ID,
   HELP_TICKET_ACCEPTED_UPLOAD_MIME_TYPES,
   HELP_TICKET_STATUS_VALUES,
+  isChallengeSolverVariant,
   isHelpTicketId,
+  isHttpProxyScheme,
   isProfileAvatarId,
   isProfileBannerId,
+  isProxyProfileKind,
+  isProxyProfileTestOutcome,
   isServiceIntegrationAuthMode,
   isServiceIntegrationKind,
   isServiceIntegrationProbeOutcome,
@@ -363,6 +373,81 @@ export function normalizeServiceIntegrationResponse(value: unknown): ServiceInte
   };
 }
 
+export function normalizeProxyProfileListResponse(value: unknown): ProxyProfileListResponse {
+  if (!isRecord(value) || !Array.isArray(value.profiles)) {
+    throwInvalidProxyProfileResponse();
+  }
+
+  return { profiles: value.profiles.map(normalizeProxyProfileSummary) };
+}
+
+export function normalizeProxyProfileResponse(value: unknown): ProxyProfileResponse {
+  if (!isRecord(value) || !isRecord(value.profile)) {
+    throwInvalidProxyProfileResponse();
+  }
+
+  return { profile: normalizeProxyProfileSummary(value.profile) };
+}
+
+export function normalizeDeleteProxyProfileResponse(
+  value: unknown,
+  expectedKind?: ProxyProfileSummary["kind"],
+  expectedId?: string,
+): DeleteProxyProfileResponse {
+  if (
+    !isRecord(value) ||
+    value.status !== "ok" ||
+    typeof value.deletedId !== "string" ||
+    !isProxyProfileKind(value.deletedKind) ||
+    (expectedKind && value.deletedKind !== expectedKind) ||
+    (expectedId && value.deletedId !== expectedId)
+  ) {
+    throwInvalidProxyProfileResponse();
+  }
+
+  return {
+    status: "ok",
+    deletedId: value.deletedId,
+    deletedKind: value.deletedKind,
+  };
+}
+
+export function normalizeProxyProfileTestResponse(
+  value: unknown,
+  expectedId?: string,
+): ProxyProfileTestResponse {
+  if (!isRecord(value) || !isRecord(value.result)) {
+    throwInvalidProxyProfileResponse();
+  }
+
+  const result = value.result;
+
+  if (
+    typeof result.profileId !== "string" ||
+    (expectedId && result.profileId !== expectedId) ||
+    !isProxyProfileKind(result.kind) ||
+    !isProxyProfileTestOutcome(result.outcome) ||
+    typeof result.message !== "string" ||
+    !isDateTime(result.testedAt) ||
+    !(typeof result.statusCode === "number" || result.statusCode === null) ||
+    !(typeof result.responseTimeMs === "number" || result.responseTimeMs === null)
+  ) {
+    throwInvalidProxyProfileResponse();
+  }
+
+  return {
+    result: {
+      profileId: result.profileId,
+      kind: result.kind,
+      outcome: result.outcome,
+      message: result.message,
+      testedAt: normalizeDateTime(result.testedAt),
+      statusCode: result.statusCode,
+      responseTimeMs: result.responseTimeMs,
+    },
+  };
+}
+
 export function normalizeServiceIntegrationProbeResponse(
   value: unknown,
   expectedKind?: ServiceIntegrationKind,
@@ -578,6 +663,35 @@ function normalizeServiceIntegrationSavedConfig(value: unknown): ServiceIntegrat
   };
 }
 
+function normalizeProxyProfileSummary(value: unknown): ProxyProfileSummary {
+  if (!isProxyProfileSummaryResponse(value)) {
+    throwInvalidProxyProfileResponse();
+  }
+
+  return {
+    id: value.id,
+    kind: value.kind,
+    variant: value.variant,
+    name: value.name,
+    description: value.description,
+    enabled: value.enabled,
+    scheme: value.scheme,
+    host: value.host,
+    port: value.port,
+    path: value.path,
+    requestTimeoutMs: value.requestTimeoutMs,
+    sessionName: value.sessionName,
+    sessionTtlMinutes: value.sessionTtlMinutes,
+    username: value.username,
+    hasPassword: value.hasPassword,
+    lastTestedAt: normalizeNullableDateTime(value.lastTestedAt),
+    lastTestOutcome: value.lastTestOutcome,
+    lastTestMessage: value.lastTestMessage,
+    createdAt: normalizeDateTime(value.createdAt),
+    updatedAt: normalizeDateTime(value.updatedAt),
+  };
+}
+
 type ServiceIntegrationSavedConfigResponse = {
   authMode: ServiceIntegrationSavedConfig["authMode"];
   createdAt: string | Date;
@@ -662,6 +776,74 @@ function isApiKeyCreatedBy(value: unknown): value is ApiKeySummary["createdBy"] 
   );
 }
 
+type ProxyProfileSummaryResponse = {
+  [K in Exclude<
+    keyof ProxyProfileSummary,
+    "createdAt" | "lastTestedAt" | "updatedAt"
+  >]: ProxyProfileSummary[K];
+} & {
+  lastTestedAt: string | Date | null;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+};
+
+function isProxyProfileSummaryResponse(value: unknown): value is ProxyProfileSummaryResponse {
+  return (
+    isRecord(value) &&
+    hasProxyProfileIdentityFields(value) &&
+    hasProxyProfileConnectionFields(value) &&
+    hasProxyProfileSecretFields(value) &&
+    hasProxyProfileTestFields(value) &&
+    isDateTime(value.createdAt) &&
+    isDateTime(value.updatedAt)
+  );
+}
+
+function hasProxyProfileIdentityFields(value: Record<string, unknown>): boolean {
+  return (
+    typeof value.id === "string" &&
+    isProxyProfileKind(value.kind) &&
+    isNullableChallengeSolverVariant(value.variant) &&
+    typeof value.name === "string" &&
+    isNullableString(value.description) &&
+    typeof value.enabled === "boolean"
+  );
+}
+
+function hasProxyProfileConnectionFields(value: Record<string, unknown>): boolean {
+  return (
+    isHttpProxyScheme(value.scheme) &&
+    typeof value.host === "string" &&
+    typeof value.port === "number" &&
+    isNullableString(value.path) &&
+    typeof value.requestTimeoutMs === "number" &&
+    isNullableString(value.sessionName) &&
+    !(value.sessionTtlMinutes !== null && typeof value.sessionTtlMinutes !== "number")
+  );
+}
+
+function hasProxyProfileSecretFields(value: Record<string, unknown>): boolean {
+  return isNullableString(value.username) && typeof value.hasPassword === "boolean";
+}
+
+function hasProxyProfileTestFields(value: Record<string, unknown>): boolean {
+  return (
+    isNullableDateTime(value.lastTestedAt) &&
+    isNullableProxyProfileTestOutcome(value.lastTestOutcome) &&
+    isNullableString(value.lastTestMessage)
+  );
+}
+
+function isNullableChallengeSolverVariant(value: unknown): value is ChallengeSolverVariant | null {
+  return value === null || isChallengeSolverVariant(value);
+}
+
+function isNullableProxyProfileTestOutcome(
+  value: unknown,
+): value is ProxyProfileSummary["lastTestOutcome"] {
+  return value === null || isProxyProfileTestOutcome(value);
+}
+
 function isNullableServiceIntegrationProbeOutcome(
   value: unknown,
 ): value is ServiceIntegrationSavedConfig["lastTestOutcome"] {
@@ -721,6 +903,14 @@ function throwInvalidServiceIntegrationResponse(): never {
     "Service integration response was invalid.",
     0,
     "INVALID_SERVICE_INTEGRATION_RESPONSE",
+  );
+}
+
+function throwInvalidProxyProfileResponse(): never {
+  throw new ApiClientError(
+    "Proxy profile response was invalid.",
+    0,
+    "INVALID_PROXY_PROFILE_RESPONSE",
   );
 }
 

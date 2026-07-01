@@ -1,7 +1,6 @@
 import type { ApiKeyReveal, ApiKeySummary, NotificationPreferences } from "@arrtemplar/shared";
 import {
   ArrowsClockwiseIcon,
-  CaretRightIcon,
   DotsThreeVerticalIcon,
   KeyIcon,
   PlusIcon,
@@ -31,9 +30,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { notify } from "@/features/notifications/notification-gateway";
 import { SettingsStatus } from "@/features/settings/SettingsPrimitives";
-import { cn } from "@/lib/utils";
 import { useAuthenticatedRouteUser } from "@/routes/authenticated-route-user";
-import { AdminDesktopTable } from "../admin-table-primitives";
+import { AdminDesktopTable, ExpandableTableTitleButton } from "../admin-table-primitives";
 import {
   useApiKeysQuery,
   useCreateApiKeyMutation,
@@ -308,7 +306,11 @@ function ApiKeysTable(props: ApiKeysTableProps) {
 
             return (
               <Fragment key={apiKey.id}>
-                <TableRow data-state={isExpanded ? "selected" : undefined}>
+                <TableRow
+                  className="cursor-pointer"
+                  data-state={isExpanded ? "selected" : undefined}
+                  onClick={() => onToggleExpand(isExpanded ? null : apiKey.id)}
+                >
                   <TableCell className="max-w-136 px-3 py-2">
                     <ApiKeyTitleButton
                       apiKey={apiKey}
@@ -325,7 +327,10 @@ function ApiKeysTable(props: ApiKeysTableProps) {
                   <TableCell className="px-3 py-2 text-sm text-muted-foreground">
                     {formatDate(apiKey.createdAt)}
                   </TableCell>
-                  <TableCell className="px-3 py-2 text-right">
+                  <TableCell
+                    className="px-3 py-2 text-right"
+                    onClick={(event) => event.stopPropagation()}
+                  >
                     <ApiKeyActionMenu
                       apiKey={apiKey}
                       disabled={isMutating}
@@ -443,19 +448,7 @@ function ApiKeyTitleButton({
   onToggle: () => void;
 }) {
   return (
-    <button
-      aria-expanded={expanded}
-      className="group flex min-w-0 items-center gap-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      onClick={onToggle}
-      type="button"
-    >
-      <CaretRightIcon
-        aria-hidden="true"
-        className={cn(
-          "size-3.5 shrink-0 text-muted-foreground transition-transform",
-          expanded && "rotate-90",
-        )}
-      />
+    <ExpandableTableTitleButton expanded={expanded} onToggle={onToggle}>
       <span className="grid min-w-0">
         <span className="block truncate text-sm font-medium text-foreground group-hover:text-primary">
           {apiKey.name}
@@ -465,7 +458,7 @@ function ApiKeyTitleButton({
           <span className="ml-1">#{apiKey.fingerprint}</span>
         </span>
       </span>
-    </button>
+    </ExpandableTableTitleButton>
   );
 }
 

@@ -10,6 +10,7 @@ const oauthGcmIvBytes = 12;
 const OAUTH_CLIENT_SECRET_PURPOSE = "arrtemplar/oauth-client-secret/v1" as const;
 const LEGACY_DOWNLOAD_CLIENT_SECRET_PURPOSE = "arrtemplar/download-client-secret/v1" as const;
 const SERVICE_INTEGRATION_SECRET_PURPOSE = "arrtemplar/service-integration-secret/v1" as const;
+const PROXY_PROFILE_SECRET_PURPOSE = "arrtemplar/proxy-profile-secret/v1" as const;
 const OAUTH_ID_TOKEN_PURPOSE = "arrtemplar/oauth-id-token/v1" as const;
 export const OAUTH_STATE_PURPOSE = "arrtemplar/oauth-state/v1" as const;
 
@@ -17,6 +18,7 @@ export type OAuthKeyPurpose =
   | typeof OAUTH_CLIENT_SECRET_PURPOSE
   | typeof LEGACY_DOWNLOAD_CLIENT_SECRET_PURPOSE
   | typeof SERVICE_INTEGRATION_SECRET_PURPOSE
+  | typeof PROXY_PROFILE_SECRET_PURPOSE
   | typeof OAUTH_ID_TOKEN_PURPOSE
   | typeof OAUTH_STATE_PURPOSE;
 
@@ -31,6 +33,11 @@ export type EncryptedOAuthIdToken = {
 };
 
 export type EncryptedServiceIntegrationSecret = {
+  encrypted: string;
+  masterKeyId: string;
+};
+
+export type EncryptedProxyProfileSecret = {
   encrypted: string;
   masterKeyId: string;
 };
@@ -102,6 +109,17 @@ export async function encryptServiceIntegrationSecret(
   return await encryptWithPurpose(plaintext, masterKey, SERVICE_INTEGRATION_SECRET_PURPOSE);
 }
 
+export async function encryptProxyProfileSecret(
+  plaintext: string,
+  masterKey: string,
+): Promise<EncryptedProxyProfileSecret> {
+  if (!plaintext) {
+    throw new Error("Proxy profile secret must not be empty.");
+  }
+
+  return await encryptWithPurpose(plaintext, masterKey, PROXY_PROFILE_SECRET_PURPOSE);
+}
+
 export async function decryptOAuthClientSecret(
   encrypted: string,
   masterKey: string,
@@ -128,6 +146,23 @@ export async function decryptServiceIntegrationSecret(
 ): Promise<string> {
   try {
     const derivedKey = await deriveAesGcmKey(masterKey, SERVICE_INTEGRATION_SECRET_PURPOSE);
+    return await decryptAesGcm(encrypted, derivedKey);
+  } catch (error) {
+    if (error instanceof OauthCryptoError) {
+      throw error;
+    }
+
+    const legacyKey = await deriveAesGcmKey(masterKey, LEGACY_DOWNLOAD_CLIENT_SECRET_PURPOSE);
+    return await decryptAesGcm(encrypted, legacyKey);
+  }
+}
+
+export async function decryptProxyProfileSecret(
+  encrypted: string,
+  masterKey: string,
+): Promise<string> {
+  try {
+    const derivedKey = await deriveAesGcmKey(masterKey, PROXY_PROFILE_SECRET_PURPOSE);
     return await decryptAesGcm(encrypted, derivedKey);
   } catch (error) {
     if (error instanceof OauthCryptoError) {

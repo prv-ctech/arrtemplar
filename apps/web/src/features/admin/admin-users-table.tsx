@@ -1,10 +1,9 @@
 import type { AdminUserSummary, PublicUser } from "@arrtemplar/shared";
-import { CaretRightIcon } from "@phosphor-icons/react";
 import { Fragment, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { AdminDesktopTable } from "./admin-table-primitives";
+import { AdminDesktopTable, ExpandableTableTitleButton } from "./admin-table-primitives";
 import { UserPermissionSummary } from "./user-permission-summary";
 import { type UserRowActionCapabilities, UserRowActions } from "./user-row-actions";
 
@@ -50,7 +49,11 @@ export function AdminUsersTable({
 
             return (
               <Fragment key={user.id}>
-                <TableRow data-state={isExpanded ? "selected" : undefined}>
+                <TableRow
+                  className="cursor-pointer"
+                  data-state={isExpanded ? "selected" : undefined}
+                  onClick={() => onToggleExpand(isExpanded ? null : user.id)}
+                >
                   <TableCell className="max-w-136 px-3 py-2">
                     <UserTitleButton
                       expanded={isExpanded}
@@ -67,7 +70,10 @@ export function AdminUsersTable({
                   <TableCell className="px-3 py-2 text-sm text-muted-foreground">
                     {formatUserDate(user.updatedAt)}
                   </TableCell>
-                  <TableCell className="px-3 py-2 text-right">
+                  <TableCell
+                    className="px-3 py-2 text-right"
+                    onClick={(event) => event.stopPropagation()}
+                  >
                     <UserRowActions
                       actor={actor}
                       capabilities={capabilities}
@@ -165,19 +171,7 @@ function UserTitleButton({
   user: AdminUserSummary;
 }) {
   return (
-    <button
-      aria-expanded={expanded}
-      className="group flex min-w-0 items-center gap-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      onClick={onToggle}
-      type="button"
-    >
-      <CaretRightIcon
-        aria-hidden="true"
-        className={cn(
-          "size-3.5 shrink-0 text-muted-foreground transition-transform",
-          expanded && "rotate-90",
-        )}
-      />
+    <ExpandableTableTitleButton expanded={expanded} onToggle={onToggle}>
       <span className="grid min-w-0">
         <span className="block truncate text-sm font-medium text-foreground group-hover:text-primary">
           {user.username}
@@ -186,7 +180,7 @@ function UserTitleButton({
           {user.id}
         </span>
       </span>
-    </button>
+    </ExpandableTableTitleButton>
   );
 }
 

@@ -51,7 +51,7 @@ describe("service integration outbound request policy", () => {
   });
 
   it("rejects metadata and link-local IP literals", () => {
-    for (const host of ["169.254.169.254", "[fe80::1]"]) {
+    for (const host of ["169.254.169.254", "[fe80::1]", "[::ffff:a9fe:a9fe]"]) {
       const result = buildServiceIntegrationBaseUrl({
         serviceLabel: "qBittorrent",
         useSsl: false,

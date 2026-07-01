@@ -4,5 +4,6 @@ export * from "./api/client";
 export * from "./api/help";
 export * from "./api/normalizers";
 export * from "./api/profile";
+export * from "./api/proxy-settings";
 export * from "./api/service-integrations";
 export * from "./api/users";

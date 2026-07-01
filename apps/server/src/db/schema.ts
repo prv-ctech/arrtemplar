@@ -2,13 +2,18 @@ import {
   AUTH_METHOD_VALUES,
   AUTH_PROVIDER_KIND_VALUES,
   AUTH_PROVIDER_SLUGS,
+  CHALLENGE_SOLVER_VARIANT_VALUES,
   DEFAULT_PROFILE_AVATAR_ID,
   DEFAULT_PROFILE_BANNER_ID,
+  DEFAULT_PROXY_REQUEST_TIMEOUT_MS,
   HELP_TICKET_MEDIA_KIND_VALUES,
   HELP_TICKET_STATUS_VALUES,
+  HTTP_PROXY_SCHEME_VALUES,
   NOTIFICATION_FREQUENCY_VALUES,
   OIDC_PROFILE_SIGNING_ALGORITHM_VALUES,
   OIDC_SIGNING_ALGORITHM_VALUES,
+  PROXY_PROFILE_KIND_VALUES,
+  PROXY_PROFILE_TEST_OUTCOME_VALUES,
   SERVICE_INTEGRATION_AUTH_MODE_VALUES,
   SERVICE_INTEGRATION_KIND_VALUES,
   SERVICE_INTEGRATION_PROBE_OUTCOME_VALUES,
@@ -57,6 +62,10 @@ const helpTicketMediaKindEnum = nonEmptyEnum(HELP_TICKET_MEDIA_KIND_VALUES);
 const serviceIntegrationKindEnum = nonEmptyEnum(SERVICE_INTEGRATION_KIND_VALUES);
 const serviceIntegrationAuthModeEnum = nonEmptyEnum(SERVICE_INTEGRATION_AUTH_MODE_VALUES);
 const serviceIntegrationProbeOutcomeEnum = nonEmptyEnum(SERVICE_INTEGRATION_PROBE_OUTCOME_VALUES);
+const proxyProfileKindEnum = nonEmptyEnum(PROXY_PROFILE_KIND_VALUES);
+const challengeSolverVariantEnum = nonEmptyEnum(CHALLENGE_SOLVER_VARIANT_VALUES);
+const httpProxySchemeEnum = nonEmptyEnum(HTTP_PROXY_SCHEME_VALUES);
+const proxyProfileTestOutcomeEnum = nonEmptyEnum(PROXY_PROFILE_TEST_OUTCOME_VALUES);
 const toastNotificationIdEnum = nonEmptyEnum(TOAST_NOTIFICATION_EVENT_IDS);
 const toastNotificationSeverityEnum = nonEmptyEnum(TOAST_NOTIFICATION_SEVERITY_VALUES);
 const toastNotificationImportanceEnum = nonEmptyEnum(TOAST_NOTIFICATION_IMPORTANCE_VALUES);
@@ -353,6 +362,35 @@ export const serviceIntegrations = sqliteTable(
   ],
 );
 
+export const proxyProfiles = sqliteTable(
+  "proxy_profiles",
+  {
+    id: text("id").primaryKey(),
+    kind: text("kind", { enum: proxyProfileKindEnum }).notNull(),
+    variant: text("variant", { enum: challengeSolverVariantEnum }),
+    name: text("name").notNull(),
+    description: text("description"),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    scheme: text("scheme", { enum: httpProxySchemeEnum }).notNull(),
+    host: text("host").notNull(),
+    port: integer("port").notNull(),
+    path: text("path"),
+    requestTimeoutMs: integer("request_timeout_ms")
+      .notNull()
+      .default(DEFAULT_PROXY_REQUEST_TIMEOUT_MS),
+    sessionName: text("session_name"),
+    sessionTtlMinutes: integer("session_ttl_minutes"),
+    username: text("username"),
+    passwordEncrypted: text("password_encrypted"),
+    masterKeyId: text("master_key_id"),
+    lastTestedAt: text("last_tested_at"),
+    lastTestOutcome: text("last_test_outcome", { enum: proxyProfileTestOutcomeEnum }),
+    lastTestMessage: text("last_test_message"),
+    ...timestampColumns(),
+  },
+  (table) => [uniqueIndex("proxy_profiles_kind_unique").on(table.kind)],
+);
+
 export const auditLogs = sqliteTable(
   "audit_logs",
   {
@@ -393,5 +431,7 @@ export type HelpTicketAttachment = InferSelectModel<typeof helpTicketAttachments
 export type NewHelpTicketAttachment = InferInsertModel<typeof helpTicketAttachments>;
 export type ServiceIntegration = InferSelectModel<typeof serviceIntegrations>;
 export type NewServiceIntegration = InferInsertModel<typeof serviceIntegrations>;
+export type ProxyProfile = InferSelectModel<typeof proxyProfiles>;
+export type NewProxyProfile = InferInsertModel<typeof proxyProfiles>;
 export type AuditLog = InferSelectModel<typeof auditLogs>;
 export type NewAuditLog = InferInsertModel<typeof auditLogs>;

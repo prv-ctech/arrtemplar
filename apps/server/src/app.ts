@@ -11,6 +11,7 @@ import { createAuthRoutes } from "./auth/routes";
 import { env } from "./config/env";
 import { createDatabase, type DatabaseClient } from "./db/client";
 import { createHelpRoutes } from "./help/routes";
+import { createProxySettingsRoutes } from "./proxy-settings/routes";
 import {
   corsAllowedHeaders,
   corsAllowedMethods,
@@ -159,6 +160,12 @@ export function createApp(options: CreateAppOptions = {}) {
     )
     .use(
       createServiceIntegrationRoutes({
+        database,
+        secretEncryptionKey: authRoutesOptions.oauthClientSecretEncryptionKey,
+      }),
+    )
+    .use(
+      createProxySettingsRoutes({
         database,
         secretEncryptionKey: authRoutesOptions.oauthClientSecretEncryptionKey,
       }),

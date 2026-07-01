@@ -3,6 +3,7 @@ import { readWorkspaceSource, readWorkspaceSources } from "./admin-settings-test
 
 const settingsSourcePath = "apps/web/src/features/admin/AdminSettings.tsx";
 const apiKeysSettingsSourcePath = "apps/web/src/features/admin/api-keys/ApiKeysSettings.tsx";
+const proxySettingsSourcePath = "apps/web/src/features/admin/proxies/ProxySettings.tsx";
 const adminTablePrimitivesSourcePath = "apps/web/src/features/admin/admin-table-primitives.tsx";
 const authSettingsSourcePath = "apps/web/src/features/auth-settings/AuthSettings.tsx";
 const servicesSettingsSourcePath = "apps/web/src/features/services-settings/ServicesSettings.tsx";
@@ -151,6 +152,8 @@ describe("app settings layout", () => {
     );
     expect(usersSource).toContain("AdminUsersMobileList");
     expect(usersSource).toContain("AdminUserMobileCard");
+    expect(usersSource).toContain("onClick={() => onToggleExpand(isExpanded ? null : user.id)}");
+    expect(usersSource).toContain('className="cursor-pointer"');
     expect(usersTableSource).not.toContain("({userId})");
     expect(usersSource).toContain('className="hidden md:block"');
     expect(usersSource).toContain("DotsThreeVerticalIcon");
@@ -205,15 +208,42 @@ describe("app settings layout", () => {
     const settingsSource = await readWorkspaceSource(settingsSourcePath);
     const apiKeysSource = await readWorkspaceSources([
       apiKeysSettingsSourcePath,
+      proxySettingsSourcePath,
       adminTablePrimitivesSourcePath,
     ]);
+    const proxySource = await readWorkspaceSource(proxySettingsSourcePath);
     const tableSource = await readWorkspaceSource(tableSourcePath);
 
     expect(settingsSource).toContain("ApiKeysSettings");
+    expect(settingsSource).toContain("ProxySettings");
+    expect(settingsSource).toContain('<Separator className="my-5" />');
     expect(settingsSource).toContain('case "general":');
-    expect(settingsSource).not.toContain('title="General"');
+    expect(settingsSource).toContain("return <GeneralSettings />;");
     expect(settingsSource).not.toContain("Application settings and display preferences.");
     expect(apiKeysSource).toContain("API Keys");
+    expect(apiKeysSource).toContain("Proxies");
+    expect(apiKeysSource).toContain("Challenge solver");
+    expect(apiKeysSource).toContain("HTTP(S) proxy");
+    expect(apiKeysSource).toContain("Bypass challenges from Cloudflare and others.");
+    expect(apiKeysSource).toContain("HTTP(S) proxy.");
+    expect(apiKeysSource).toContain("/services/flaresolverr.svg");
+    expect(apiKeysSource).toContain("/services/http.svg");
+    expect(apiKeysSource).toContain("proxyInlineActionButtonClassName");
+    expect(apiKeysSource).toContain("border-t border-border/60 pt-2");
+    expect(apiKeysSource).toContain("onClick={() => state.toggleExpandedKind(row.kind)}");
+    expect(apiKeysSource).toContain(
+      "onClick={() => onToggleExpand(isExpanded ? null : apiKey.id)}",
+    );
+    expect(apiKeysSource).toContain("Saved secret stays hidden.");
+    expect(apiKeysSource).toContain("ProxyTitleButton");
+    expect(apiKeysSource).toContain("ProxyProfileInlineForm");
+    expect(apiKeysSource).toContain("PROXY_DESKTOP_COLUMN_COUNT");
+    expect(apiKeysSource).toContain("compactProxyInputClassName");
+    expect(apiKeysSource).toContain("border-sky-500/35");
+    expect(apiKeysSource).toContain("border-destructive/40");
+    expect(apiKeysSource).toContain("aria-expanded");
+    expect(apiKeysSource).toContain("Switch");
+    expect(apiKeysSource).toContain("SelectTrigger");
     expect(apiKeysSource).toContain("New key");
     expect(apiKeysSource).toContain("KeyIcon");
     expect(apiKeysSource).toContain("PlusIcon");
@@ -234,6 +264,19 @@ describe("app settings layout", () => {
     expect(apiKeysSource).toContain("ApiKeysMobileList");
     expect(apiKeysSource).toContain("ApiKeyMobileCard");
     expect(apiKeysSource).toContain('className="hidden md:block"');
+    expect(apiKeysSource).not.toContain("function ProxyProfileDialog(");
+    expect(apiKeysSource).not.toContain("proxy-profile-form");
+    expect(apiKeysSource).not.toContain('{configured ? "Edit" : "Configure"}');
+    expect(apiKeysSource).not.toContain("Trawl recommended. FlareSolverr and Byparr compatible.");
+    expect(apiKeysSource).not.toContain("Gluetun works. Use any HTTP(S) proxy.");
+    expect(apiKeysSource).not.toContain("SOCKS5/Shadowsocks deferred.");
+    expect(proxySource).not.toContain(
+      '<p className="truncate text-xs text-muted-foreground">{row.description}</p>',
+    );
+    expect(proxySource).not.toContain('{ label: "Target" }');
+    expect(proxySource).not.toContain('{ align: "right", label: "Actions" }');
+    expect(proxySource).not.toContain('label="Target"');
+    expect(proxySource).not.toContain("readTargetValue");
     expect(tableSource).toContain("pb-4 sm:pb-0");
     expect(apiKeysSource).not.toContain("Refresh key");
     expect(apiKeysSource).not.toContain("useRefreshApiKeyMutation");

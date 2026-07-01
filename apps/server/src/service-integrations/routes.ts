@@ -1,5 +1,4 @@
 import {
-  type ApiErrorResponse,
   type PublicUser,
   SERVICE_INTEGRATION_AUTH_MODE_VALUES,
   SERVICE_INTEGRATION_KIND_VALUES,
@@ -8,33 +7,27 @@ import {
   type UpsertServiceIntegrationRequest,
 } from "@arrtemplar/shared";
 import { Elysia, t } from "elysia";
+import { apiErrorResponseSchema } from "../api/api-error-schema";
 import { ApiKeyService } from "../auth/api-key.service";
 import { AuthService } from "../auth/auth.service";
-import { resolveRoutePrincipal } from "../auth/route-principal";
-import { createRequestContext } from "../auth/routes";
 import { SESSION_COOKIE_NAME } from "../auth/session-token";
+import {
+  type MaybePromise,
+  type RouteRequestContext,
+  readRouteSessionCookie,
+  type ServiceResponse,
+  type SettingsRouteContext,
+  type StatusHandler,
+  withSettingsPermissionResult,
+} from "../auth/settings-route-auth";
 import type { DatabaseClient } from "../db/client";
 import { ServiceIntegrationService } from "./service-integration.service";
-
-// biome-ignore lint/suspicious/noExplicitAny: Elysia SelectiveStatus callback types vary per route and are impractical to model precisely in these shared helpers.
-type StatusHandler = (...args: any[]) => any;
 
 type ServiceIntegrationRoutesOptions = {
   database: DatabaseClient;
   secretEncryptionKey: string | null;
 };
-type RequestContextServer = Parameters<typeof createRequestContext>[1];
-type ServiceResponse<T> =
-  | { ok: true; body: T }
-  | { ok: false; status: number; body: ApiErrorResponse };
-type MaybePromise<T> = T | Promise<T>;
-type RouteRequestContext = ReturnType<typeof createRequestContext>;
-type BaseRouteContext = {
-  cookie: Record<string, { value?: unknown } | undefined>;
-  request: Request;
-  server: RequestContextServer;
-  status: unknown;
-};
+type BaseRouteContext = SettingsRouteContext;
 type KindBodyRouteContext = BaseRouteContext & {
   body: unknown;
   params: { kind: unknown };
@@ -75,21 +68,6 @@ const serviceIntegrationInstanceParamsSchema = t.Object({
   integrationId: t.String({ minLength: 1 }),
 });
 const sessionCookieSchema = t.Cookie({ [SESSION_COOKIE_NAME]: t.Optional(t.String()) });
-const apiErrorResponseSchema = t.Object({
-  error: t.Object({
-    code: t.String(),
-    message: t.String(),
-    fieldErrors: t.Optional(
-      t.Array(
-        t.Object({
-          field: t.String(),
-          code: t.String(),
-          message: t.String(),
-        }),
-      ),
-    ),
-  }),
-});
 const serviceIntegrationSavedConfigSchema = t.Object({
   id: t.String({ minLength: 1 }),
   kind: serviceIntegrationKindSchema,
@@ -224,13 +202,10 @@ function createKindBodyRouteHandler<T>(
   ) => MaybePromise<ServiceResponse<T>>,
 ) {
   return async ({ body, cookie, params, request, server, status }: KindBodyRouteContext) =>
-    await withSettingsRequestResultAsync(
+    await withServiceSettingsRouteResult(
       apiKeyService,
       authService,
-      readRouteSessionCookie(cookie),
-      request,
-      server,
-      status as StatusHandler,
+      { cookie, request, server, status },
       (actor, context) =>
         action(
           params.kind as ServiceIntegrationKind,
@@ -252,13 +227,10 @@ function createInstanceBodyRouteHandler<T>(
   ) => MaybePromise<ServiceResponse<T>>,
 ) {
   return async ({ body, cookie, params, request, server, status }: InstanceBodyRouteContext) =>
-    await withSettingsRequestResultAsync(
+    await withServiceSettingsRouteResult(
       apiKeyService,
       authService,
-      readRouteSessionCookie(cookie),
-      request,
-      server,
-      status as StatusHandler,
+      { cookie, request, server, status },
       (actor, context) =>
         action(
           params.integrationId as string,
@@ -279,13 +251,10 @@ function createKindRequestRouteHandler<T>(
   ) => MaybePromise<ServiceResponse<T>>,
 ) {
   return async ({ cookie, params, request, server, status }: KindRequestRouteContext) =>
-    await withSettingsRequestResultAsync(
+    await withServiceSettingsRouteResult(
       apiKeyService,
       authService,
-      readRouteSessionCookie(cookie),
-      request,
-      server,
-      status as StatusHandler,
+      { cookie, request, server, status },
       (actor, context) => action(params.kind as ServiceIntegrationKind, actor, context),
     );
 }
@@ -300,13 +269,10 @@ function createInstanceRequestRouteHandler<T>(
   ) => MaybePromise<ServiceResponse<T>>,
 ) {
   return async ({ cookie, params, request, server, status }: InstanceRequestRouteContext) =>
-    await withSettingsRequestResultAsync(
+    await withServiceSettingsRouteResult(
       apiKeyService,
       authService,
-      readRouteSessionCookie(cookie),
-      request,
-      server,
-      status as StatusHandler,
+      { cookie, request, server, status },
       (actor, context) => action(params.integrationId as string, actor, context),
     );
 }
@@ -317,13 +283,10 @@ function createKindStatusRouteHandler<T>(
   action: (kind: ServiceIntegrationKind) => MaybePromise<ServiceResponse<T>>,
 ) {
   return async ({ cookie, params, request, server, status }: KindStatusRouteContext) =>
-    await withSettingsRequestResultAsync(
+    await withServiceSettingsRouteResult(
       apiKeyService,
       authService,
-      readRouteSessionCookie(cookie),
-      request,
-      server,
-      status as StatusHandler,
+      { cookie, request, server, status },
       async () => await action(params.kind as ServiceIntegrationKind),
     );
 }
@@ -334,19 +297,33 @@ function createInstanceStatusRouteHandler<T>(
   action: (id: string) => MaybePromise<ServiceResponse<T>>,
 ) {
   return async ({ cookie, params, request, server, status }: InstanceStatusRouteContext) =>
-    await withSettingsRequestResultAsync(
+    await withServiceSettingsRouteResult(
       apiKeyService,
       authService,
-      readRouteSessionCookie(cookie),
-      request,
-      server,
-      status as StatusHandler,
+      { cookie, request, server, status },
       async () => await action(params.integrationId as string),
     );
 }
 
-function readRouteSessionCookie(cookie: Record<string, { value?: unknown } | undefined>): unknown {
-  return cookie[SESSION_COOKIE_NAME]?.value;
+function withServiceSettingsRouteResult<T>(
+  apiKeyService: ApiKeyService,
+  authService: AuthService,
+  route: BaseRouteContext,
+  onAllowed: (
+    actor: PublicUser | undefined,
+    context: RouteRequestContext,
+  ) => MaybePromise<ServiceResponse<T>>,
+) {
+  return withSettingsPermissionResult({
+    apiKeyService,
+    authService,
+    sessionCookieValue: readRouteSessionCookie(route.cookie, SESSION_COOKIE_NAME),
+    request: route.request,
+    server: route.server,
+    status: route.status as StatusHandler,
+    requiredPermission: "settings:services",
+    onAllowed,
+  });
 }
 
 export function createServiceIntegrationRoutes(options: ServiceIntegrationRoutesOptions) {
@@ -404,13 +381,10 @@ export function createServiceIntegrationRoutes(options: ServiceIntegrationRoutes
     .get(
       "/settings/services",
       async ({ cookie, request, server, status }) =>
-        await withSettingsRequestResultAsync(
+        await withServiceSettingsRouteResult(
           apiKeyService,
           authService,
-          readRouteSessionCookie(cookie),
-          request,
-          server,
-          status as StatusHandler,
+          { cookie, request, server, status },
           async () => ({ ok: true, body: serviceIntegrationService.listConfigs() }),
         ),
       {
@@ -426,13 +400,10 @@ export function createServiceIntegrationRoutes(options: ServiceIntegrationRoutes
     .get(
       "/settings/services/:kind",
       async ({ cookie, params, request, server, status }) =>
-        await withSettingsRequestResultAsync(
+        await withServiceSettingsRouteResult(
           apiKeyService,
           authService,
-          readRouteSessionCookie(cookie),
-          request,
-          server,
-          status as StatusHandler,
+          { cookie, request, server, status },
           async () => ({
             ok: true,
             body: serviceIntegrationService.getConfig(params.kind as ServiceIntegrationKind),
@@ -549,52 +520,6 @@ export function createServiceIntegrationRoutes(options: ServiceIntegrationRoutes
         tags: ["Settings"],
       },
     });
-}
-
-async function withSettingsRequestResultAsync<T>(
-  apiKeyService: ApiKeyService,
-  authService: AuthService,
-  sessionCookieValue: unknown,
-  request: Request,
-  server: RequestContextServer,
-  status: StatusHandler,
-  onAllowed: (
-    actor: PublicUser | undefined,
-    context: ReturnType<typeof createRequestContext>,
-  ) => MaybePromise<ServiceResponse<T>>,
-): Promise<T | ReturnType<StatusHandler>> {
-  const context = createRequestContext(request, server);
-  const principalResult = resolveRoutePrincipal({
-    apiKeyService,
-    authService,
-    context,
-    request,
-    requiredPermission: "settings:services",
-    sessionToken: readSessionToken(sessionCookieValue),
-  });
-
-  if (!principalResult.ok) {
-    return status(principalResult.status, principalResult.body);
-  }
-
-  return responseOrStatus(
-    await onAllowed(
-      principalResult.principal.kind === "session" ? principalResult.principal.user : undefined,
-      context,
-    ),
-    status,
-  );
-}
-
-function responseOrStatus<T>(
-  result: { ok: true; body: T } | { ok: false; status: number; body: ApiErrorResponse },
-  status: StatusHandler,
-): T | ReturnType<StatusHandler> {
-  return result.ok ? result.body : status(result.status, result.body);
-}
-
-function readSessionToken(value: unknown): string | null {
-  return typeof value === "string" && value.length > 0 ? value : null;
 }
 
 function normalizeUpsertServiceIntegrationInput(

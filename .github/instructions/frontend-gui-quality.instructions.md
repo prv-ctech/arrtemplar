@@ -20,3 +20,11 @@ applyTo: "apps/web/src/**"
 - Omit descriptions entirely unless they are strictly necessary. When a short label is enough, stop there.
 - Keep button labels short and direct. No marketing language.
 - If text comes from users or APIs, clamp/truncate it so it never breaks the layout.
+
+## components, blocks, buttons, and more
+
+- the size of the components, blocks, buttons, and other GUI elements must be consistent with the rest of the app. Do not create oversized elements, everything must be compact and minimal. Use the same padding, margins, and font sizes as existing components.
+- try to not have a popup or dialog window when pressing a button, instead use a dropdown or a small inline panel. Only use a popup or dialog when absolutely necessary.
+- always use the all the space available in the component, block, or panel. Do not leave empty space when adding text or other elemts. Use the full width and height of the component, block, or panel to display the content.
+- Make sure the outlines of the fill-in boxes, dropdown menus or other input fields are visible accross the themes, we need clear outlines of the input fields to make it easy for the user to see where to click or type. Use the same outline color and thickness as existing components when possible
+- When adding icons or logos do not wrap them in a circle or square, use the original shape of the icon or logo. Only wrap them in a circle or square when it is necessary to match the design of the rest of the app or when user request it.

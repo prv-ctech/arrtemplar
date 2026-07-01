@@ -4,6 +4,7 @@ export * from "./api/health";
 export * from "./api/help";
 export * from "./api/permissions";
 export * from "./api/profile-media";
+export * from "./api/proxy-settings";
 export * from "./api/security";
 export * from "./api/service-integrations";
 export * from "./constants/app";

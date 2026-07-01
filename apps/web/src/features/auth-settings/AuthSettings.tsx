@@ -8,11 +8,11 @@ import {
   TOKEN_ENDPOINT_AUTH_METHOD_VALUES,
 } from "@arrtemplar/shared";
 import { FingerprintIcon } from "@phosphor-icons/react";
-import { type FormEvent, useId, useState } from "react";
+import { type FormEvent, type ReactNode, useId, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -31,7 +31,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { notify } from "@/features/notifications/notification-gateway";
-import { SettingsRow, SettingsStatus } from "@/features/settings/SettingsPrimitives";
+import { SettingsStatus } from "@/features/settings/SettingsPrimitives";
 import { cn } from "@/lib/utils";
 import { useAuthenticatedRouteUser } from "@/routes/authenticated-route-user";
 import {
@@ -95,6 +95,10 @@ const defaultProviderFormState: AuthProviderFormState = {
   mobileRedirectEnabled: false,
   mobileRedirectUri: "",
 };
+
+const compactAuthInputClassName =
+  "h-8 w-full rounded-md bg-transparent px-2.5 py-1 text-sm shadow-xs";
+const compactAuthActionButtonClassName = "h-7 rounded-md px-2.5 py-1 text-[11px]";
 
 export function AuthSettings() {
   const providersQuery = useAuthProvidersQuery();
@@ -264,43 +268,43 @@ function AuthMethodGrid({ controls }: { controls: AuthSettingsController }) {
 
 function OidcMethodCard({ controls }: { controls: AuthSettingsController }) {
   return (
-    <Card className="w-full min-w-0 overflow-hidden rounded-2xl bg-card/50 shadow-none">
-      <CardContent className="p-3 sm:p-4">
-        <OidcAccountLinking
-          identities={controls.identities}
-          isProviderEnabled={Boolean(controls.provider?.enabled)}
-          onUnlinkAll={controls.handleUnlinkAll}
-        />
-        <Separator className="my-3" />
-        <AuthProviderForm controls={controls} />
-      </CardContent>
-    </Card>
+    <div className="w-full min-w-0 overflow-hidden rounded-lg border border-border/80 bg-card/50 p-3">
+      <OidcAccountLinking
+        identities={controls.identities}
+        isProviderEnabled={Boolean(controls.provider?.enabled)}
+        onUnlinkAll={controls.handleUnlinkAll}
+      />
+      <Separator className="my-3" />
+      <AuthProviderForm controls={controls} />
+    </div>
   );
 }
 
 function AuthProviderForm({ controls }: { controls: AuthSettingsController }) {
   return (
-    <form className="space-y-3" onSubmit={controls.handleSubmit}>
+    <form className="grid gap-3" onSubmit={controls.handleSubmit}>
       <AuthProviderFields controls={controls} />
-      <SettingsStatus
-        errorMessage={controls.errorMessage}
-        statusId={controls.statusId}
-        statusMessage={controls.statusMessage}
-      />
-      <AuthProviderSaveButton controls={controls} />
+      <div className="flex flex-col gap-2 border-t border-border/60 pt-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <SettingsStatus
+            errorMessage={controls.errorMessage}
+            statusId={controls.statusId}
+            statusMessage={controls.statusMessage}
+          />
+        </div>
+        <AuthProviderSaveButton controls={controls} />
+      </div>
     </form>
   );
 }
 
 function AuthProviderFields({ controls }: { controls: AuthSettingsController }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card/50">
-      <ProviderConfigRows
-        disabled={controls.isSaving}
-        form={controls.form}
-        onChange={controls.updateForm}
-      />
-    </div>
+    <ProviderConfigRows
+      disabled={controls.isSaving}
+      form={controls.form}
+      onChange={controls.updateForm}
+    />
   );
 }
 
@@ -308,26 +312,26 @@ type OidcSelectItem = { label: string; value: string };
 
 function OidcSelectField({
   ariaLabel,
+  className,
   disabled,
   id,
   items,
   onValueChange,
-  triggerClassName,
   value,
 }: {
   ariaLabel: string;
+  className?: string;
   disabled: boolean;
   id: string;
   items: readonly OidcSelectItem[];
   onValueChange: (value: string) => void;
-  triggerClassName: string;
   value: string;
 }) {
   return (
     <Select disabled={disabled} onValueChange={onValueChange} value={value}>
       <SelectTrigger
         aria-label={ariaLabel}
-        className={cn("h-9 rounded-xl", triggerClassName)}
+        className={cn(compactAuthInputClassName, "justify-between", className)}
         id={id}
         size="sm"
       >
@@ -347,8 +351,13 @@ function OidcSelectField({
 function AuthProviderSaveButton({ controls }: { controls: AuthSettingsController }) {
   return (
     <div className="flex justify-end">
-      <Button className="rounded-xl" disabled={controls.isSaving} size="sm" type="submit">
-        {controls.isSaving ? "Saving" : "Save OAuth"}
+      <Button
+        className={compactAuthActionButtonClassName}
+        disabled={controls.isSaving}
+        size="sm"
+        type="submit"
+      >
+        {controls.isSaving ? "Saving" : "Save"}
       </Button>
     </div>
   );
@@ -368,7 +377,7 @@ function ProviderEnabledSwitch({
   return (
     <label
       className={cn(
-        "inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-border bg-card/65 px-2.5 py-1.5 text-xs font-medium",
+        "inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-md border border-border bg-card/65 px-2 py-1 text-[11px] font-medium",
         disabled && "cursor-not-allowed opacity-60",
       )}
       htmlFor="auth-provider-enabled"
@@ -380,6 +389,7 @@ function ProviderEnabledSwitch({
         disabled={disabled}
         id="auth-provider-enabled"
         onCheckedChange={onChange}
+        size="sm"
       />
       <span className="text-foreground">{enabled ? "On" : "Off"}</span>
     </label>
@@ -395,13 +405,9 @@ function ProviderConfigRows({
   form: AuthProviderFormState;
   onChange: (next: Partial<AuthProviderFormState>) => void;
 }) {
-  const wideFieldClassName = "w-full sm:w-52";
-  const compactFieldClassName = "w-full sm:w-44";
-  const fieldClassName = cn("h-9 rounded-xl px-3 text-sm", wideFieldClassName);
-
   return (
-    <>
-      <SettingsRow controlId="auth-provider-kind" density="compact" label="Provider">
+    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      <AuthFormField controlId="auth-provider-kind" label="Provider">
         <OidcSelectField
           ariaLabel="OIDC provider kind"
           disabled={disabled}
@@ -417,43 +423,42 @@ function ProviderConfigRows({
               onChange({ providerKind });
             }
           }}
-          triggerClassName={wideFieldClassName}
           value={form.providerKind}
         />
-      </SettingsRow>
-      <SettingsRow controlId="auth-provider-button-text" density="compact" label="Button text">
+      </AuthFormField>
+      <AuthFormField controlId="auth-provider-button-text" label="Button text">
         <Input
-          className={fieldClassName}
+          className={compactAuthInputClassName}
           disabled={disabled}
           id="auth-provider-button-text"
           onChange={(event) => onChange({ buttonText: event.currentTarget.value })}
           placeholder="Continue with SSO"
           value={form.buttonText}
         />
-      </SettingsRow>
-      <SettingsRow controlId="auth-provider-issuer" density="compact" label="Issuer">
+      </AuthFormField>
+      <AuthFormField controlId="auth-provider-issuer" label="Issuer">
         <Input
-          className={fieldClassName}
+          className={compactAuthInputClassName}
           disabled={disabled}
           id="auth-provider-issuer"
           onChange={(event) => onChange({ issuer: event.currentTarget.value })}
           placeholder="Issuer URL from your provider"
           value={form.issuer}
         />
-      </SettingsRow>
-      <SettingsRow controlId="auth-provider-client-id" density="compact" label="Client ID">
+      </AuthFormField>
+      <AuthFormField controlId="auth-provider-client-id" label="Client ID">
         <Input
-          className={fieldClassName}
+          className={compactAuthInputClassName}
           disabled={disabled}
           id="auth-provider-client-id"
           onChange={(event) => onChange({ clientId: event.currentTarget.value })}
           value={form.clientId}
         />
-      </SettingsRow>
-      <SettingsRow controlId="auth-provider-client-secret" density="compact" label="Client secret">
+      </AuthFormField>
+      <AuthFormField controlId="auth-provider-client-secret" label="Client secret">
         <Input
           autoComplete="off"
-          className={fieldClassName}
+          className={compactAuthInputClassName}
           disabled={disabled}
           id="auth-provider-client-secret"
           onChange={(event) => onChange({ clientSecret: event.currentTarget.value })}
@@ -461,12 +466,8 @@ function ProviderConfigRows({
           type="password"
           value={form.clientSecret}
         />
-      </SettingsRow>
-      <SettingsRow
-        controlId="auth-provider-token-auth-method"
-        density="compact"
-        label="Token auth method"
-      >
+      </AuthFormField>
+      <AuthFormField controlId="auth-provider-token-auth-method" label="Token auth method">
         <OidcSelectField
           ariaLabel="OIDC token auth method"
           disabled={disabled}
@@ -479,33 +480,36 @@ function ProviderConfigRows({
               onChange({ tokenEndpointAuthMethod });
             }
           }}
-          triggerClassName={wideFieldClassName}
           value={form.tokenEndpointAuthMethod}
         />
-      </SettingsRow>
-      <SettingsRow controlId="auth-provider-scopes" density="compact" label="Scopes">
+      </AuthFormField>
+      <AuthFormField controlId="auth-provider-scopes" label="Scopes">
         <Input
-          className={fieldClassName}
+          className={compactAuthInputClassName}
           disabled={disabled}
           id="auth-provider-scopes"
           onChange={(event) => onChange({ scopes: event.currentTarget.value })}
           placeholder="Scopes from your provider"
           value={form.scopes}
         />
-      </SettingsRow>
-      <SettingsRow controlId="auth-provider-redirect-uris" density="compact" label="Redirect URIs">
+      </AuthFormField>
+      <AuthFormField
+        className="sm:col-span-2 lg:col-span-1"
+        controlId="auth-provider-redirect-uris"
+        label="Redirect URIs"
+      >
         <Input
-          className={fieldClassName}
+          className={compactAuthInputClassName}
           disabled={disabled}
           id="auth-provider-redirect-uris"
           onChange={(event) => onChange({ redirectUris: event.currentTarget.value })}
           placeholder="Redirect URIs registered in your provider"
           value={form.redirectUris}
         />
-      </SettingsRow>
-      <SettingsRow controlId="auth-provider-timeout" density="compact" label="Timeout (ms)">
+      </AuthFormField>
+      <AuthFormField controlId="auth-provider-timeout" label="Timeout (ms)">
         <Input
-          className={fieldClassName}
+          className={compactAuthInputClassName}
           disabled={disabled}
           id="auth-provider-timeout"
           min={1}
@@ -513,22 +517,18 @@ function ProviderConfigRows({
           type="number"
           value={form.timeoutMs}
         />
-      </SettingsRow>
-      <SettingsRow controlId="auth-provider-prompt" density="compact" label="Prompt">
+      </AuthFormField>
+      <AuthFormField controlId="auth-provider-prompt" label="Prompt">
         <Input
-          className={fieldClassName}
+          className={compactAuthInputClassName}
           disabled={disabled}
           id="auth-provider-prompt"
           onChange={(event) => onChange({ prompt: event.currentTarget.value })}
           placeholder="Optional OIDC prompt"
           value={form.prompt}
         />
-      </SettingsRow>
-      <SettingsRow
-        controlId="auth-provider-id-token-algorithm"
-        density="compact"
-        label="ID token algorithm"
-      >
+      </AuthFormField>
+      <AuthFormField controlId="auth-provider-id-token-algorithm" label="ID token algorithm">
         <OidcSelectField
           ariaLabel="OIDC ID token signing algorithm"
           disabled={disabled}
@@ -541,63 +541,103 @@ function ProviderConfigRows({
               onChange({ idTokenSigningAlgorithm });
             }
           }}
-          triggerClassName={compactFieldClassName}
           value={form.idTokenSigningAlgorithm}
         />
-      </SettingsRow>
-      <SettingsRow controlId="auth-provider-end-session" density="compact" label="End session URL">
+      </AuthFormField>
+      <AuthFormField controlId="auth-provider-end-session" label="End session URL">
         <Input
-          className={fieldClassName}
+          className={compactAuthInputClassName}
           disabled={disabled}
           id="auth-provider-end-session"
           onChange={(event) => onChange({ endSessionEndpoint: event.currentTarget.value })}
           placeholder="Optional provider logout endpoint"
           value={form.endSessionEndpoint}
         />
-      </SettingsRow>
-      <SettingsRow controlId="auth-provider-auto-register" density="compact" label="Auto register">
-        <input
-          aria-label="Enable automatic OAuth registration"
+      </AuthFormField>
+      <AuthFormField controlId="auth-provider-auto-register" label="Auto register">
+        <AuthToggleControl
           checked={form.autoRegister}
-          className="size-4 rounded border-border accent-primary"
           disabled={disabled}
           id="auth-provider-auto-register"
-          onChange={(event) => onChange({ autoRegister: event.currentTarget.checked })}
-          type="checkbox"
+          label="Enable automatic OAuth registration"
+          onChange={(autoRegister) => onChange({ autoRegister })}
         />
-      </SettingsRow>
-      <SettingsRow
-        controlId="auth-provider-mobile-redirect"
-        density="compact"
-        label="Mobile redirect"
-      >
-        <input
-          aria-label="Enable mobile OAuth redirect"
+      </AuthFormField>
+      <AuthFormField controlId="auth-provider-mobile-redirect" label="Mobile redirect">
+        <AuthToggleControl
           checked={form.mobileRedirectEnabled}
-          className="size-4 rounded border-border accent-primary"
           disabled={disabled}
           id="auth-provider-mobile-redirect"
-          onChange={(event) => onChange({ mobileRedirectEnabled: event.currentTarget.checked })}
-          type="checkbox"
+          label="Enable mobile OAuth redirect"
+          onChange={(mobileRedirectEnabled) => onChange({ mobileRedirectEnabled })}
         />
-      </SettingsRow>
+      </AuthFormField>
       {form.mobileRedirectEnabled ? (
-        <SettingsRow
+        <AuthFormField
           controlId="auth-provider-mobile-redirect-uri"
-          density="compact"
+          className="sm:col-span-2 lg:col-span-1"
           label="Mobile redirect URI"
         >
           <Input
-            className={fieldClassName}
+            className={compactAuthInputClassName}
             disabled={disabled}
             id="auth-provider-mobile-redirect-uri"
             onChange={(event) => onChange({ mobileRedirectUri: event.currentTarget.value })}
             placeholder="Optional mobile redirect URI"
             value={form.mobileRedirectUri}
           />
-        </SettingsRow>
+        </AuthFormField>
       ) : null}
-    </>
+    </div>
+  );
+}
+
+function AuthFormField({
+  children,
+  className,
+  controlId,
+  label,
+}: {
+  children: ReactNode;
+  className?: string;
+  controlId: string;
+  label: string;
+}) {
+  return (
+    <div className={cn("grid min-w-0 gap-1", className)}>
+      <Label className="text-xs font-medium text-muted-foreground" htmlFor={controlId}>
+        {label}
+      </Label>
+      {children}
+    </div>
+  );
+}
+
+function AuthToggleControl({
+  checked,
+  disabled,
+  id,
+  label,
+  onChange,
+}: {
+  checked: boolean;
+  disabled: boolean;
+  id: string;
+  label: string;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="flex h-8 items-center gap-2 rounded-md border border-input px-2.5">
+      <Switch
+        aria-label={label}
+        checked={checked}
+        disabled={disabled}
+        id={id}
+        onCheckedChange={onChange}
+        size="sm"
+      />
+      <span className="text-sm text-foreground">{checked ? "On" : "Off"}</span>
+    </div>
   );
 }
 
@@ -664,35 +704,28 @@ function OidcAccountLinking({
   isProviderEnabled: boolean;
   onUnlinkAll: () => void;
 }) {
-  const isConnected = identities.length > 0;
-
   return (
     <section
       aria-label="OAuth account linking"
-      className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-6"
+      className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
     >
       <div className="min-w-0">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <h4 className="text-sm font-medium text-foreground">Account linking</h4>
+          <h3 className="text-sm font-medium text-foreground">Account linking</h3>
           <LinkedIdentityBadge count={identities.length} />
         </div>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          {isConnected
-            ? "This admin account has linked OAuth accounts."
-            : "Link this admin account to an OAuth identity."}
-        </p>
         <LinkedIdentityList identities={identities} onUnlinkAll={onUnlinkAll} />
       </div>
       <div className="flex flex-wrap items-center gap-2 sm:justify-end">
         <Button
-          className="h-8 rounded-lg px-2.5 text-xs"
+          className={compactAuthActionButtonClassName}
           disabled={!isProviderEnabled}
           onClick={startOidcLinkFlow}
           size="sm"
           type="button"
           variant="secondary"
         >
-          Link Accounts
+          Link account
         </Button>
       </div>
     </section>

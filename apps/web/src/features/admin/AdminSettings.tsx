@@ -12,8 +12,10 @@ import {
 import { useNavigate } from "@tanstack/react-router";
 import type { ReactElement } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import { ThemeSettings } from "@/features/account/AccountSettings";
 import { ApiKeysSettings } from "@/features/admin/api-keys/ApiKeysSettings";
+import { ProxySettings } from "@/features/admin/proxies/ProxySettings";
 import { canManageUsers, hasRequiredPermission } from "@/features/auth/auth-state";
 import { AuthSettings } from "@/features/auth-settings/AuthSettings";
 import { ServicesSettings } from "@/features/services-settings/ServicesSettings";
@@ -149,7 +151,7 @@ function ActiveSettingsPage({ activePage }: { activePage: AdminSettingsPage }) {
     case "theme":
       return <ThemeSettings />;
     case "general":
-      return <ApiKeysSettings />;
+      return <GeneralSettings />;
     case "library":
       return (
         <SettingsPlaceholder description="Metadata import and library curation." title="Library" />
@@ -175,6 +177,16 @@ function ActiveSettingsPage({ activePage }: { activePage: AdminSettingsPage }) {
         />
       );
   }
+}
+
+function GeneralSettings() {
+  return (
+    <div>
+      <ApiKeysSettings />
+      <Separator className="my-5" />
+      <ProxySettings />
+    </div>
+  );
 }
 
 export function AdminSettings({ activePage }: { activePage: AdminSettingsPage }) {

@@ -14,10 +14,11 @@ import {
 } from "@arrtemplar/shared";
 import { getLogger } from "@logtape/logtape";
 import { and, asc, desc, eq } from "drizzle-orm";
+import { readAuditActorUserId } from "../audit/audit-actor";
 import { type AuditLogInput, writeAuditLog } from "../audit/audit-log";
 import type { AuthRequestContext } from "../auth/auth.service";
 import type { DatabaseClient } from "../db/client";
-import { type ServiceIntegration, serviceIntegrations, users } from "../db/schema";
+import { type ServiceIntegration, serviceIntegrations } from "../db/schema";
 import {
   decryptServiceIntegrationSecret,
   encryptServiceIntegrationSecret,
@@ -904,7 +905,7 @@ export class ServiceIntegrationService {
     metadata: Record<string, unknown>;
     targetId: string;
   }): AuditLogInput | null {
-    const actorUserId = this.readAuditActorUserId(input.actor);
+    const actorUserId = readAuditActorUserId(this.database, input.actor);
 
     if (!actorUserId || !input.context) {
       return null;
@@ -918,20 +919,6 @@ export class ServiceIntegrationService {
       metadata: input.metadata,
       ipAddress: input.context.ipAddress,
     };
-  }
-
-  private readAuditActorUserId(actor: PublicUser | undefined): string | null {
-    if (!actor) {
-      return null;
-    }
-
-    return (
-      this.database.db
-        .select({ id: users.id })
-        .from(users)
-        .where(eq(users.publicId, actor.id))
-        .get()?.id ?? null
-    );
   }
 
   private logProbeResult(
