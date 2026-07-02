@@ -13,13 +13,13 @@ describe("login route layout", () => {
     expect(source).not.toContain("Sign in to manage requests, automation, and your watch queue.");
   });
 
-  it("keeps the auth form panel scrollable instead of clipping tall first-run or error states", async () => {
+  it("uses a simple centered auth shell instead of the removed split-panel layout", async () => {
     const source = await Bun.file(loginRouteSourcePath).text();
-    const authPanelClass = source.match(/<div className="(?<className>[^"]*?)">\s*<LoginForm \/>/s)
-      ?.groups?.className;
 
-    expect(authPanelClass).toContain("overflow-y-auto");
-    expect(authPanelClass).not.toContain("overflow-hidden");
+    expect(source).toContain("max-w-sm");
+    expect(source).toContain("<LoginForm />");
+    expect(source).not.toContain("md:grid-cols");
+    expect(source).not.toContain("LoginArtworkPanel");
   });
 
   it("shows an explicit OIDC sign-in action when the provider is enabled", async () => {
@@ -43,5 +43,16 @@ describe("login route layout", () => {
     expect(loginRouteSource).not.toContain('useSearch({ from: "/login" })');
     expect(loginRouteSource).not.toContain("signedOut");
     expect(loginRouteSource).not.toContain("prompt=login");
+  });
+
+  it("keeps Particles as a background without restoring remote artwork", async () => {
+    const loginRouteSource = await Bun.file(loginRouteSourcePath).text();
+
+    expect(loginRouteSource).toContain('lazy(() => import("@/components/Particles"))');
+    expect(loginRouteSource).toContain("function LoginBackground()");
+    expect(loginRouteSource).toContain("particleCount={840}");
+    expect(loginRouteSource).not.toContain("LiquidEther");
+    expect(loginRouteSource).not.toContain("picsum.photos");
+    expect(loginRouteSource).not.toContain("login-backdrop/1800/1200");
   });
 });

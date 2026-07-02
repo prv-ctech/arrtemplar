@@ -1,8 +1,9 @@
-import { APP_NAME, type CreateAdminRequest } from "@arrtemplar/shared";
+import type { CreateAdminRequest } from "@arrtemplar/shared";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { type ComponentProps, type FormEvent, useId, useState } from "react";
+import { type ComponentProps, type FormEvent, type ReactNode, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { type AuthMode, resolveAuthMode } from "@/features/auth/auth-mode";
@@ -19,41 +20,26 @@ export function LoginForm() {
 
   if (form.mode === null) {
     return (
-      <div className="w-full max-w-sm [@media(max-height:640px)]:max-w-xs">
-        <AuthFormHeader
-          description="Checking whether this server needs its first admin account."
-          title="Checking setup"
-        />
+      <AuthCard title="Checking setup">
         {form.errorMessage ? (
-          <div className="mt-7 [@media(max-height:640px)]:mt-5">
-            <AuthErrorMessage message={form.errorMessage} />
-          </div>
+          <AuthErrorMessage message={form.errorMessage} />
         ) : (
-          <div
-            aria-live="polite"
-            className="mt-7 rounded-2xl border border-border bg-secondary/45 px-4 py-3 text-center text-sm leading-6 text-muted-foreground [@media(max-height:640px)]:mt-5 [@media(max-height:640px)]:py-2"
-          >
-            Checking setup status…
-          </div>
+          <AuthStatusMessage />
         )}
-      </div>
+      </AuthCard>
     );
   }
 
   const copy = getAuthFormCopy(form.mode);
 
   return (
-    <div className="w-full max-w-sm [@media(max-height:640px)]:max-w-xs">
-      <AuthFormHeader description={copy.description} title={copy.title} />
-      <form
-        className="mt-7 flex flex-col gap-4 [@media(max-height:640px)]:mt-5 [@media(max-height:640px)]:gap-3"
-        onSubmit={form.handleSubmit}
-      >
+    <AuthCard title={copy.title}>
+      <form className="grid gap-4" onSubmit={form.handleSubmit}>
         <AuthFields form={form} />
         <AuthErrorMessage message={form.errorMessage} />
         <AuthSubmitButton form={form} />
       </form>
-    </div>
+    </AuthCard>
   );
 }
 
@@ -159,25 +145,21 @@ function submitSetupForm(input: {
   });
 }
 
-function AuthFormHeader({ title, description }: { title: string; description: string | null }) {
+function AuthCard({ children, title }: { children: ReactNode; title: string }) {
   return (
-    <div className="flex flex-col items-center text-center">
-      <div className="flex size-18 items-center justify-center rounded-[1.25rem] border border-border bg-foreground p-3 text-background shadow-(--shadow-soft) [@media(max-height:640px)]:size-14 [@media(max-height:640px)]:rounded-2xl [@media(max-height:640px)]:p-2.5">
-        <span
-          className="text-xl font-black tracking-[-0.12em] [@media(max-height:640px)]:text-base"
-          aria-hidden="true"
-        >
+    <div className="flex flex-col gap-6">
+      <div className="flex items-center justify-center gap-2 text-foreground">
+        <span className="text-sm font-black tracking-[-0.14em]" aria-hidden="true">
           AW
         </span>
+        <span className="text-base font-semibold tracking-tight">Arrtemplar</span>
       </div>
-      <h1 className="mt-7 text-balance text-3xl font-semibold leading-none tracking-[-0.045em] text-foreground [@media(max-height:640px)]:mt-4 [@media(max-height:640px)]:text-2xl">
-        {title}
-      </h1>
-      {description ? (
-        <p className="mt-3 max-w-xs text-pretty text-sm leading-6 text-muted-foreground">
-          {description}
-        </p>
-      ) : null}
+      <Card className="rounded-lg border-border bg-card/92 shadow-none backdrop-blur-xl">
+        <CardHeader className="p-6 pb-4 text-center">
+          <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
+        </CardHeader>
+        <CardContent className="p-6 pt-0">{children}</CardContent>
+      </Card>
     </div>
   );
 }
@@ -253,10 +235,15 @@ function AuthTextField({
 }: ComponentProps<typeof Input> & { label: string }) {
   return (
     <div className="flex flex-col gap-2">
-      <Label className="text-muted-foreground" htmlFor={props.id}>
-        {label}
-      </Label>
-      <Input className={cn("[@media(max-height:640px)]:h-10", className)} required {...props} />
+      <Label htmlFor={props.id}>{label}</Label>
+      <Input
+        className={cn(
+          "h-10 rounded-md border-border bg-background px-3 text-sm shadow-none focus-visible:bg-background",
+          className,
+        )}
+        required
+        {...props}
+      />
     </div>
   );
 }
@@ -264,7 +251,7 @@ function AuthTextField({
 function AuthErrorMessage({ message }: { message: string | null }) {
   return message ? (
     <div
-      className="rounded-2xl border border-destructive/35 bg-destructive/10 px-4 py-3 text-sm leading-6 text-destructive [@media(max-height:640px)]:py-2"
+      className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm leading-5 text-destructive"
       role="alert"
     >
       {message}
@@ -278,7 +265,7 @@ function AuthSubmitButton({ form }: { form: AuthFormController }) {
 
   return (
     <Button
-      className="h-11 w-full rounded-2xl font-semibold [@media(max-height:640px)]:h-10"
+      className="h-10 w-full rounded-md font-medium"
       disabled={form.isFormDisabled}
       type="submit"
     >
@@ -287,16 +274,25 @@ function AuthSubmitButton({ form }: { form: AuthFormController }) {
   );
 }
 
-function getAuthFormCopy(mode: AuthMode): { title: string; description: string | null } {
+function getAuthFormCopy(mode: AuthMode): { title: string } {
   return mode === "setup"
     ? {
         title: "Create admin",
-        description: null,
       }
     : {
-        title: APP_NAME,
-        description: null,
+        title: "Sign in",
       };
+}
+
+function AuthStatusMessage() {
+  return (
+    <div
+      aria-live="polite"
+      className="rounded-md border border-border bg-secondary/45 px-3 py-2 text-center text-sm leading-5 text-muted-foreground"
+    >
+      Checking setup…
+    </div>
+  );
 }
 
 function getMutationErrorMessage(error: Error | null, mode: AuthMode): string | null {

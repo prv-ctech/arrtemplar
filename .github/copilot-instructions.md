@@ -1,5 +1,5 @@
 <contextstream>
-<!-- contextstream-rules-hash: 4dd7baa952de9e35 -->
+<!-- contextstream-rules-hash: 42788b1b1d3d78de -->
 # Workspace: Arrbit
 # Project: arrtemplar
 # Workspace ID: d350ca2a-deee-4a7b-9a14-4740a2328436
@@ -213,7 +213,7 @@ These should be followed exactly as they contain real-time context.
 
 1. Check project index: `project(action="index_status")`
 2. If indexed (fresh/recent/aging/stale): run `search(mode="auto", query="...")` immediately before local tools. Do not wait for an instantly fresh index.
-3. If index coverage is missing or first indexing is still starting: allow background refresh up to ~20s, then search and/or use local fallback
+3. If index coverage is missing or first indexing is still starting: retry `search(mode="auto", ...)` after a short wait — keyword search returns committed results as the index builds, so retry rather than jumping to local tools
 4. If search returns results with a stale-index advisory, treat those results as usable for existing indexed code; refresh in background and retry only before concluding a newly edited/created symbol is absent
 5. If search returns 0 results after a targeted retry, or you are inspecting known-new local edits, local tools are allowed
 
@@ -418,7 +418,7 @@ project(action="index_status")
 
 ### Search Protocol:
 - **IF indexed (fresh/recent/aging/stale):** run `search(mode="auto", query="...")` immediately before local tools. Do not wait for an instantly fresh index.
-- **IF no usable index exists yet:** allow background indexing up to ~20s, then retry `search(mode="auto", ...)` and/or use local fallback
+- **IF no usable index exists yet:** retry `search(mode="auto", ...)` after a short wait — keyword search returns committed results as the index builds; do not jump straight to local tools
 - **IF search returns results with a stale-index advisory:** use those results for existing indexed code; refresh in background and retry only before concluding a newly edited/created symbol is absent
 - **IF search returns 0 results after a targeted retry, or you are inspecting known-new local edits:** local tools are allowed
 
@@ -444,11 +444,12 @@ project(action="index_status")
   - all occurrences: `search(mode="exhaustive", query="symbol_or_text")`
 - Then use local Read/Grep only on paths returned by ContextStream.
 
-### When Local Tools Are OK:
-- No usable index exists after the initial grace window (~20s default, configurable)
-- ContextStream search still returns 0 results or errors after a targeted retry
-- You are inspecting known-new or recently edited files that the index may not contain yet
+### When Local Tools Are OK (reactive only — never preemptive):
+- ContextStream search itself returns 0 results or errors after a targeted retry
+- You are inspecting known-new or recently edited files the index may not contain yet
 - User explicitly requests local tools
+
+**Always run ContextStream search FIRST, even while the index is still building.** "The index isn't ready / might be thin" is NOT a reason to skip it — keyword search returns committed results immediately and the index fills in as you work.
 
 ---
 
